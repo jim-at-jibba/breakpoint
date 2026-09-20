@@ -1,0 +1,1402 @@
+{
+  "snapshot": {
+    "now": 1789879471695,
+    "zoom": 0.5,
+    "origins": {
+      "a": "http://127.0.0.1:4100",
+      "b": "http://localhost:4101"
+    },
+    "panes": [
+      {
+        "id": "p1",
+        "name": "Mobile S",
+        "preset": {
+          "id": "p1",
+          "name": "Mobile S",
+          "width": 360,
+          "height": 800,
+          "dpr": 3,
+          "mobile": true
+        },
+        "attached": true,
+        "attachError": null,
+        "detached": null,
+        "reattachedAt": null,
+        "devtoolsOpen": false,
+        "osPid": 9657,
+        "measured": {
+          "innerWidth": 360,
+          "innerHeight": 800,
+          "dpr": 3,
+          "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+          "touch": 5,
+          "coarse": true,
+          "href": "http://localhost:4101/index.html",
+          "scrollHeight": 800,
+          "widthMatch": true,
+          "dprMatch": true,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "declaredMatch": true
+        },
+        "measureError": null,
+        "counts": {
+          "consoleAPICalled": 62,
+          "exceptionThrown": 0,
+          "logEntryAdded": 0,
+          "network": 1
+        },
+        "heartbeatAgeMs": 425,
+        "heartbeatCount": 58,
+        "lastClick": null,
+        "clickSummary": {},
+        "cdpTimeouts": 0,
+        "lastCdpTimeout": null,
+        "lastCdpError": null,
+        "lastNav": {
+          "at": 1789879453272,
+          "url": "http://localhost:4101/index.html",
+          "pidBefore": 9326,
+          "pidAfter": 9657,
+          "processSwapped": true,
+          "cdpStillAttached": true,
+          "innerWidth": 360,
+          "declaredWidth": 360,
+          "dpr": 3,
+          "declaredDpr": 3,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "overridesSurvived": true
+        },
+        "navCount": 1
+      },
+      {
+        "id": "p2",
+        "name": "Mobile",
+        "preset": {
+          "id": "p2",
+          "name": "Mobile",
+          "width": 390,
+          "height": 844,
+          "dpr": 3,
+          "mobile": true
+        },
+        "attached": true,
+        "attachError": null,
+        "detached": null,
+        "reattachedAt": null,
+        "devtoolsOpen": false,
+        "osPid": 9677,
+        "measured": {
+          "innerWidth": 390,
+          "innerHeight": 844,
+          "dpr": 3,
+          "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+          "touch": 5,
+          "coarse": true,
+          "href": "https://example.com/",
+          "scrollHeight": 844,
+          "widthMatch": true,
+          "dprMatch": true,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "declaredMatch": true
+        },
+        "measureError": null,
+        "counts": {
+          "consoleAPICalled": 51,
+          "exceptionThrown": 0,
+          "logEntryAdded": 0,
+          "network": 2
+        },
+        "heartbeatAgeMs": 12425,
+        "heartbeatCount": 46,
+        "lastClick": null,
+        "clickSummary": {},
+        "cdpTimeouts": 0,
+        "lastCdpTimeout": null,
+        "lastCdpError": null,
+        "lastNav": {
+          "at": 1789879459749,
+          "url": "https://example.com/",
+          "pidBefore": 9655,
+          "pidAfter": 9677,
+          "processSwapped": true,
+          "cdpStillAttached": true,
+          "innerWidth": 390,
+          "declaredWidth": 390,
+          "dpr": 3,
+          "declaredDpr": 3,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "overridesSurvived": true
+        },
+        "navCount": 2
+      },
+      {
+        "id": "p3",
+        "name": "Mobile L",
+        "preset": {
+          "id": "p3",
+          "name": "Mobile L",
+          "width": 430,
+          "height": 932,
+          "dpr": 3,
+          "mobile": true
+        },
+        "attached": true,
+        "attachError": null,
+        "detached": null,
+        "reattachedAt": null,
+        "devtoolsOpen": false,
+        "osPid": 9656,
+        "measured": {
+          "innerWidth": 430,
+          "innerHeight": 932,
+          "dpr": 3,
+          "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+          "touch": 5,
+          "coarse": true,
+          "href": "http://localhost:4101/index.html",
+          "scrollHeight": 932,
+          "widthMatch": true,
+          "dprMatch": true,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "declaredMatch": true
+        },
+        "measureError": null,
+        "counts": {
+          "consoleAPICalled": 62,
+          "exceptionThrown": 0,
+          "logEntryAdded": 0,
+          "network": 1
+        },
+        "heartbeatAgeMs": 425,
+        "heartbeatCount": 58,
+        "lastClick": null,
+        "clickSummary": {},
+        "cdpTimeouts": 0,
+        "lastCdpTimeout": null,
+        "lastCdpError": null,
+        "lastNav": {
+          "at": 1789879453272,
+          "url": "http://localhost:4101/index.html",
+          "pidBefore": 9330,
+          "pidAfter": 9656,
+          "processSwapped": true,
+          "cdpStillAttached": true,
+          "innerWidth": 430,
+          "declaredWidth": 430,
+          "dpr": 3,
+          "declaredDpr": 3,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "overridesSurvived": true
+        },
+        "navCount": 1
+      },
+      {
+        "id": "p4",
+        "name": "Tablet",
+        "preset": {
+          "id": "p4",
+          "name": "Tablet",
+          "width": 820,
+          "height": 1180,
+          "dpr": 2,
+          "mobile": true
+        },
+        "attached": true,
+        "attachError": null,
+        "detached": null,
+        "reattachedAt": null,
+        "devtoolsOpen": false,
+        "osPid": 9658,
+        "measured": {
+          "innerWidth": 820,
+          "innerHeight": 1180,
+          "dpr": 2,
+          "ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+          "touch": 5,
+          "coarse": true,
+          "href": "http://localhost:4101/index.html",
+          "scrollHeight": 1180,
+          "widthMatch": true,
+          "dprMatch": true,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "declaredMatch": true
+        },
+        "measureError": null,
+        "counts": {
+          "consoleAPICalled": 62,
+          "exceptionThrown": 0,
+          "logEntryAdded": 0,
+          "network": 1
+        },
+        "heartbeatAgeMs": 425,
+        "heartbeatCount": 58,
+        "lastClick": null,
+        "clickSummary": {},
+        "cdpTimeouts": 0,
+        "lastCdpTimeout": null,
+        "lastCdpError": null,
+        "lastNav": {
+          "at": 1789879453273,
+          "url": "http://localhost:4101/index.html",
+          "pidBefore": 9332,
+          "pidAfter": 9658,
+          "processSwapped": true,
+          "cdpStillAttached": true,
+          "innerWidth": 820,
+          "declaredWidth": 820,
+          "dpr": 2,
+          "declaredDpr": 2,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "overridesSurvived": true
+        },
+        "navCount": 1
+      },
+      {
+        "id": "p5",
+        "name": "Laptop",
+        "preset": {
+          "id": "p5",
+          "name": "Laptop",
+          "width": 1280,
+          "height": 800,
+          "dpr": 2,
+          "mobile": false
+        },
+        "attached": true,
+        "attachError": null,
+        "detached": null,
+        "reattachedAt": null,
+        "devtoolsOpen": false,
+        "osPid": 9659,
+        "measured": {
+          "innerWidth": 1280,
+          "innerHeight": 800,
+          "dpr": 2,
+          "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+          "touch": 0,
+          "coarse": false,
+          "href": "http://localhost:4101/index.html",
+          "scrollHeight": 800,
+          "widthMatch": true,
+          "dprMatch": true,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "declaredMatch": true
+        },
+        "measureError": null,
+        "counts": {
+          "consoleAPICalled": 61,
+          "exceptionThrown": 0,
+          "logEntryAdded": 0,
+          "network": 1
+        },
+        "heartbeatAgeMs": 290,
+        "heartbeatCount": 57,
+        "lastClick": null,
+        "clickSummary": {},
+        "cdpTimeouts": 0,
+        "lastCdpTimeout": null,
+        "lastCdpError": null,
+        "lastNav": {
+          "at": 1789879453272,
+          "url": "http://localhost:4101/index.html",
+          "pidBefore": 9334,
+          "pidAfter": 9659,
+          "processSwapped": true,
+          "cdpStillAttached": true,
+          "innerWidth": 1280,
+          "declaredWidth": 1280,
+          "dpr": 2,
+          "declaredDpr": 2,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "overridesSurvived": true
+        },
+        "navCount": 1
+      },
+      {
+        "id": "p6",
+        "name": "Desktop",
+        "preset": {
+          "id": "p6",
+          "name": "Desktop",
+          "width": 1440,
+          "height": 900,
+          "dpr": 1,
+          "mobile": false
+        },
+        "attached": true,
+        "attachError": null,
+        "detached": null,
+        "reattachedAt": null,
+        "devtoolsOpen": false,
+        "osPid": 9660,
+        "measured": {
+          "innerWidth": 1440,
+          "innerHeight": 900,
+          "dpr": 1,
+          "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+          "touch": 0,
+          "coarse": false,
+          "href": "http://localhost:4101/index.html",
+          "scrollHeight": 900,
+          "widthMatch": true,
+          "dprMatch": true,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "declaredMatch": true
+        },
+        "measureError": null,
+        "counts": {
+          "consoleAPICalled": 61,
+          "exceptionThrown": 0,
+          "logEntryAdded": 0,
+          "network": 1
+        },
+        "heartbeatAgeMs": 290,
+        "heartbeatCount": 57,
+        "lastClick": null,
+        "clickSummary": {},
+        "cdpTimeouts": 0,
+        "lastCdpTimeout": null,
+        "lastCdpError": null,
+        "lastNav": {
+          "at": 1789879453272,
+          "url": "http://localhost:4101/index.html",
+          "pidBefore": 9336,
+          "pidAfter": 9660,
+          "processSwapped": true,
+          "cdpStillAttached": true,
+          "innerWidth": 1440,
+          "declaredWidth": 1440,
+          "dpr": 1,
+          "declaredDpr": 1,
+          "uaOverridden": true,
+          "touchMatch": true,
+          "overridesSurvived": true
+        },
+        "navCount": 1
+      }
+    ],
+    "log": [
+      {
+        "at": 1789879470194,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "auto run complete: /Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+      },
+      {
+        "at": 1789879470193,
+        "paneId": null,
+        "kind": "dump",
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json"
+      },
+      {
+        "at": 1789879470192,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C3 sampled after reapply | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+      },
+      {
+        "at": 1789879468191,
+        "paneId": "all",
+        "kind": "reapply",
+        "detail": "overrides reapplied"
+      },
+      {
+        "at": 1789879468185,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C3 reapplying overrides (the PRD fallback) | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+      },
+      {
+        "at": 1789879467680,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C3 sampled after external navigation | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+      },
+      {
+        "at": 1789879459749,
+        "paneId": "p2",
+        "kind": "did-finish-load",
+        "detail": "pid 9655->9677 swap=true innerWidth=390/390 survived=true"
+      },
+      {
+        "at": 1789879459748,
+        "paneId": "p2",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879459739,
+        "paneId": "p2",
+        "kind": "frameNavigated",
+        "detail": "https://example.com/"
+      },
+      {
+        "at": 1789879459675,
+        "paneId": "p2",
+        "kind": "navigate",
+        "detail": "https://example.com/"
+      },
+      {
+        "at": 1789879459675,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C3 navigating pane 2 to https://example.com (external, guaranteed cross-site) | beats p2=46 p3=46 p1=46 p4=46 p5=45 p6=45"
+      },
+      {
+        "at": 1789879459170,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C3 sampled after cross-origin navigation, no reapply | beats p2=45 p3=45 p1=45 p4=45 p5=44 p6=44"
+      },
+      {
+        "at": 1789879453273,
+        "paneId": "p4",
+        "kind": "did-finish-load",
+        "detail": "pid 9332->9658 swap=true innerWidth=820/820 survived=true"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p6",
+        "kind": "did-finish-load",
+        "detail": "pid 9336->9660 swap=true innerWidth=1440/1440 survived=true"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p2",
+        "kind": "did-finish-load",
+        "detail": "pid 9328->9655 swap=true innerWidth=390/390 survived=true"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p6",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p2",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p3",
+        "kind": "did-finish-load",
+        "detail": "pid 9330->9656 swap=true innerWidth=430/430 survived=true"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p1",
+        "kind": "did-finish-load",
+        "detail": "pid 9326->9657 swap=true innerWidth=360/360 survived=true"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p1",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p3",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p4",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879453272,
+        "paneId": "p5",
+        "kind": "did-finish-load",
+        "detail": "pid 9334->9659 swap=true innerWidth=1280/1280 survived=true"
+      },
+      {
+        "at": 1789879453271,
+        "paneId": "p5",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789879453269,
+        "paneId": "p4",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789879453269,
+        "paneId": "p6",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789879453269,
+        "paneId": "p1",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789879453269,
+        "paneId": "p2",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789879453268,
+        "paneId": "p3",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789879453268,
+        "paneId": "p5",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789879453250,
+        "paneId": "p6",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453232,
+        "paneId": "p4",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453231,
+        "paneId": "p3",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453231,
+        "paneId": "p2",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453230,
+        "paneId": "p1",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453229,
+        "paneId": "p5",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453167,
+        "paneId": "p6",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453166,
+        "paneId": "p5",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453165,
+        "paneId": "p4",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453163,
+        "paneId": "p1",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453161,
+        "paneId": "p3",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453158,
+        "paneId": "p2",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789879453157,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C3 navigating all panes to origin B (different hostname) | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+      },
+      {
+        "at": 1789879453157,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 sampled after reattach | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+      },
+      {
+        "at": 1789879448156,
+        "paneId": "p2",
+        "kind": "reattach-failed",
+        "detail": "Debugger is already attached to the target"
+      },
+      {
+        "at": 1789879448155,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 attempting explicit reattach of pane 2 | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+      },
+      {
+        "at": 1789879448155,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 sampled after DevTools close | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+      },
+      {
+        "at": 1789879440150,
+        "paneId": "p2",
+        "kind": "devtools-closed",
+        "detail": ""
+      },
+      {
+        "at": 1789879440135,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 closing DevTools | beats p2=27 p3=27 p1=26 p4=26 p5=26 p6=26"
+      },
+      {
+        "at": 1789879439631,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 sampled with DevTools open | beats p2=26 p3=26 p1=26 p4=26 p5=26 p6=26"
+      },
+      {
+        "at": 1789879431787,
+        "paneId": "p2",
+        "kind": "devtools-opened",
+        "detail": ""
+      },
+      {
+        "at": 1789879431625,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 opening real DevTools on pane 2 | beats p2=18 p3=18 p1=18 p4=18 p5=18 p6=18"
+      },
+      {
+        "at": 1789879428624,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C2 baseline before DevTools | beats p2=15 p3=15 p1=15 p4=15 p5=15 p6=15"
+      },
+      {
+        "at": 1789879428624,
+        "paneId": "p6",
+        "kind": "pane-shot",
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p6-1789879428624.png"
+      },
+      {
+        "at": 1789879428422,
+        "paneId": "p4",
+        "kind": "pane-shot",
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p4-1789879428422.png"
+      },
+      {
+        "at": 1789879428356,
+        "paneId": "p1",
+        "kind": "pane-shot",
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p1-1789879428356.png"
+      },
+      {
+        "at": 1789879428300,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C1 per-pane CDP screenshots (render independent of canvas compositing) | beats p2=15 p3=15 p1=15 p4=15 p5=14 p6=14"
+      },
+      {
+        "at": 1789879427898,
+        "paneId": null,
+        "kind": "zoom",
+        "detail": "50%"
+      },
+      {
+        "at": 1789879427898,
+        "paneId": null,
+        "kind": "MARK",
+        "detail": "C1 end zoom 25% | beats p2=14 p3=14 p1=14 p4=14 p5=14 p6=14"
+      },
+      {
+        "at": 1789879427896,
+        "paneId": null,
+        "kind": "capture",
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom25-1789879427832.png"
+      }
+    ]
+  },
+  "fullLog": [
+    {
+      "at": 1789879413017,
+      "paneId": null,
+      "kind": "zoom",
+      "detail": "50%"
+    },
+    {
+      "at": 1789879413137,
+      "paneId": "p2",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789879413137,
+      "paneId": "p2",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879413138,
+      "paneId": "p3",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789879413138,
+      "paneId": "p3",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879413140,
+      "paneId": "p3",
+      "kind": "attached",
+      "detail": "wcId=4 pid=9330"
+    },
+    {
+      "at": 1789879413140,
+      "paneId": "p2",
+      "kind": "attached",
+      "detail": "wcId=3 pid=9328"
+    },
+    {
+      "at": 1789879413162,
+      "paneId": "p4",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789879413162,
+      "paneId": "p4",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879413162,
+      "paneId": "p1",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789879413162,
+      "paneId": "p1",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879413164,
+      "paneId": "p4",
+      "kind": "attached",
+      "detail": "wcId=5 pid=9332"
+    },
+    {
+      "at": 1789879413165,
+      "paneId": "p5",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789879413165,
+      "paneId": "p1",
+      "kind": "attached",
+      "detail": "wcId=2 pid=9326"
+    },
+    {
+      "at": 1789879413165,
+      "paneId": "p5",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879413165,
+      "paneId": "p6",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789879413165,
+      "paneId": "p6",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879413199,
+      "paneId": "p6",
+      "kind": "attached",
+      "detail": "wcId=7 pid=9336"
+    },
+    {
+      "at": 1789879413200,
+      "paneId": "p5",
+      "kind": "attached",
+      "detail": "wcId=6 pid=9334"
+    },
+    {
+      "at": 1789879415911,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 begin zoom 100% | beats p2=2 p3=2 p1=2 p4=2 p5=2 p6=2"
+    },
+    {
+      "at": 1789879415912,
+      "paneId": null,
+      "kind": "zoom",
+      "detail": "100%"
+    },
+    {
+      "at": 1789879416637,
+      "paneId": "p1",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(65,374) zoom=100%"
+    },
+    {
+      "at": 1789879416900,
+      "paneId": "p1",
+      "kind": "synth-dispatch",
+      "detail": "window(65,374) zoom=100%"
+    },
+    {
+      "at": 1789879417286,
+      "paneId": "p2",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(378,351) zoom=100%"
+    },
+    {
+      "at": 1789879417671,
+      "paneId": "p3",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(358,333) zoom=100%"
+    },
+    {
+      "at": 1789879418063,
+      "paneId": "p4",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(163,315) zoom=100%"
+    },
+    {
+      "at": 1789879419562,
+      "paneId": null,
+      "kind": "capture",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom100-1789879419499.png"
+    },
+    {
+      "at": 1789879419563,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 end zoom 100% | beats p2=6 p3=6 p1=6 p4=6 p5=6 p6=6"
+    },
+    {
+      "at": 1789879419565,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 begin zoom 50% | beats p2=6 p3=6 p1=6 p4=6 p5=6 p6=6"
+    },
+    {
+      "at": 1789879419566,
+      "paneId": null,
+      "kind": "zoom",
+      "detail": "50%"
+    },
+    {
+      "at": 1789879420295,
+      "paneId": "p1",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(33,210) zoom=50%"
+    },
+    {
+      "at": 1789879420558,
+      "paneId": "p1",
+      "kind": "synth-dispatch",
+      "detail": "window(33,210) zoom=50%"
+    },
+    {
+      "at": 1789879420947,
+      "paneId": "p2",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(234,210) zoom=50%"
+    },
+    {
+      "at": 1789879421334,
+      "paneId": "p3",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(450,201) zoom=50%"
+    },
+    {
+      "at": 1789879421717,
+      "paneId": "p4",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(352,192) zoom=50%"
+    },
+    {
+      "at": 1789879422105,
+      "paneId": "p5",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(237,192) zoom=50%"
+    },
+    {
+      "at": 1789879422492,
+      "paneId": "p6",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(362,192) zoom=50%"
+    },
+    {
+      "at": 1789879423726,
+      "paneId": null,
+      "kind": "capture",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom50-1789879423667.png"
+    },
+    {
+      "at": 1789879423726,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 end zoom 50% | beats p2=10 p3=10 p1=10 p4=10 p5=10 p6=10"
+    },
+    {
+      "at": 1789879423727,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 begin zoom 25% | beats p2=10 p3=10 p1=10 p4=10 p5=10 p6=10"
+    },
+    {
+      "at": 1789879423727,
+      "paneId": null,
+      "kind": "zoom",
+      "detail": "25%"
+    },
+    {
+      "at": 1789879424453,
+      "paneId": "p1",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(16,128) zoom=25%"
+    },
+    {
+      "at": 1789879424715,
+      "paneId": "p1",
+      "kind": "synth-dispatch",
+      "detail": "window(16,128) zoom=25%"
+    },
+    {
+      "at": 1789879425101,
+      "paneId": "p2",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(117,128) zoom=25%"
+    },
+    {
+      "at": 1789879425486,
+      "paneId": "p3",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(225,123) zoom=25%"
+    },
+    {
+      "at": 1789879425881,
+      "paneId": "p4",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(343,119) zoom=25%"
+    },
+    {
+      "at": 1789879426265,
+      "paneId": "p5",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(391,119) zoom=25%"
+    },
+    {
+      "at": 1789879426650,
+      "paneId": "p6",
+      "kind": "synth-dispatch-cdp",
+      "detail": "window(722,119) zoom=25%"
+    },
+    {
+      "at": 1789879427896,
+      "paneId": null,
+      "kind": "capture",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom25-1789879427832.png"
+    },
+    {
+      "at": 1789879427898,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 end zoom 25% | beats p2=14 p3=14 p1=14 p4=14 p5=14 p6=14"
+    },
+    {
+      "at": 1789879427898,
+      "paneId": null,
+      "kind": "zoom",
+      "detail": "50%"
+    },
+    {
+      "at": 1789879428300,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C1 per-pane CDP screenshots (render independent of canvas compositing) | beats p2=15 p3=15 p1=15 p4=15 p5=14 p6=14"
+    },
+    {
+      "at": 1789879428356,
+      "paneId": "p1",
+      "kind": "pane-shot",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p1-1789879428356.png"
+    },
+    {
+      "at": 1789879428422,
+      "paneId": "p4",
+      "kind": "pane-shot",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p4-1789879428422.png"
+    },
+    {
+      "at": 1789879428624,
+      "paneId": "p6",
+      "kind": "pane-shot",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p6-1789879428624.png"
+    },
+    {
+      "at": 1789879428624,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 baseline before DevTools | beats p2=15 p3=15 p1=15 p4=15 p5=15 p6=15"
+    },
+    {
+      "at": 1789879431625,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 opening real DevTools on pane 2 | beats p2=18 p3=18 p1=18 p4=18 p5=18 p6=18"
+    },
+    {
+      "at": 1789879431787,
+      "paneId": "p2",
+      "kind": "devtools-opened",
+      "detail": ""
+    },
+    {
+      "at": 1789879439631,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 sampled with DevTools open | beats p2=26 p3=26 p1=26 p4=26 p5=26 p6=26"
+    },
+    {
+      "at": 1789879440135,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 closing DevTools | beats p2=27 p3=27 p1=26 p4=26 p5=26 p6=26"
+    },
+    {
+      "at": 1789879440150,
+      "paneId": "p2",
+      "kind": "devtools-closed",
+      "detail": ""
+    },
+    {
+      "at": 1789879448155,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 sampled after DevTools close | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+    },
+    {
+      "at": 1789879448155,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 attempting explicit reattach of pane 2 | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+    },
+    {
+      "at": 1789879448156,
+      "paneId": "p2",
+      "kind": "reattach-failed",
+      "detail": "Debugger is already attached to the target"
+    },
+    {
+      "at": 1789879453157,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C2 sampled after reattach | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+    },
+    {
+      "at": 1789879453157,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C3 navigating all panes to origin B (different hostname) | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+    },
+    {
+      "at": 1789879453158,
+      "paneId": "p2",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453161,
+      "paneId": "p3",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453163,
+      "paneId": "p1",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453165,
+      "paneId": "p4",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453166,
+      "paneId": "p5",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453167,
+      "paneId": "p6",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453229,
+      "paneId": "p5",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453230,
+      "paneId": "p1",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453231,
+      "paneId": "p2",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453231,
+      "paneId": "p3",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453232,
+      "paneId": "p4",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453250,
+      "paneId": "p6",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789879453268,
+      "paneId": "p5",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789879453268,
+      "paneId": "p3",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789879453269,
+      "paneId": "p2",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789879453269,
+      "paneId": "p1",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789879453269,
+      "paneId": "p6",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789879453269,
+      "paneId": "p4",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789879453271,
+      "paneId": "p5",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p5",
+      "kind": "did-finish-load",
+      "detail": "pid 9334->9659 swap=true innerWidth=1280/1280 survived=true"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p4",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p3",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p1",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p1",
+      "kind": "did-finish-load",
+      "detail": "pid 9326->9657 swap=true innerWidth=360/360 survived=true"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p3",
+      "kind": "did-finish-load",
+      "detail": "pid 9330->9656 swap=true innerWidth=430/430 survived=true"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p2",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p6",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p2",
+      "kind": "did-finish-load",
+      "detail": "pid 9328->9655 swap=true innerWidth=390/390 survived=true"
+    },
+    {
+      "at": 1789879453272,
+      "paneId": "p6",
+      "kind": "did-finish-load",
+      "detail": "pid 9336->9660 swap=true innerWidth=1440/1440 survived=true"
+    },
+    {
+      "at": 1789879453273,
+      "paneId": "p4",
+      "kind": "did-finish-load",
+      "detail": "pid 9332->9658 swap=true innerWidth=820/820 survived=true"
+    },
+    {
+      "at": 1789879459170,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C3 sampled after cross-origin navigation, no reapply | beats p2=45 p3=45 p1=45 p4=45 p5=44 p6=44"
+    },
+    {
+      "at": 1789879459675,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C3 navigating pane 2 to https://example.com (external, guaranteed cross-site) | beats p2=46 p3=46 p1=46 p4=46 p5=45 p6=45"
+    },
+    {
+      "at": 1789879459675,
+      "paneId": "p2",
+      "kind": "navigate",
+      "detail": "https://example.com/"
+    },
+    {
+      "at": 1789879459739,
+      "paneId": "p2",
+      "kind": "frameNavigated",
+      "detail": "https://example.com/"
+    },
+    {
+      "at": 1789879459748,
+      "paneId": "p2",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789879459749,
+      "paneId": "p2",
+      "kind": "did-finish-load",
+      "detail": "pid 9655->9677 swap=true innerWidth=390/390 survived=true"
+    },
+    {
+      "at": 1789879467680,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C3 sampled after external navigation | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+    },
+    {
+      "at": 1789879468185,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C3 reapplying overrides (the PRD fallback) | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+    },
+    {
+      "at": 1789879468191,
+      "paneId": "all",
+      "kind": "reapply",
+      "detail": "overrides reapplied"
+    },
+    {
+      "at": 1789879470192,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "C3 sampled after reapply | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+    },
+    {
+      "at": 1789879470193,
+      "paneId": null,
+      "kind": "dump",
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json"
+    },
+    {
+      "at": 1789879470194,
+      "paneId": null,
+      "kind": "MARK",
+      "detail": "auto run complete: /Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+    }
+  ]
+}

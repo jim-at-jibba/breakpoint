@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>pane host spike</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+    font: 12px/1.4 -apple-system, "Helvetica Neue", Arial, sans-serif;
+    background: #14171b; color: #dfe4ea; user-select: none; }
+  button { font: 11px/1 inherit; padding: 6px 9px; border-radius: 5px; border: 1px solid #39414b;
+    background: #232830; color: #dfe4ea; cursor: pointer; }
+  button:hover { background: #2d333d; }
+  button.on { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .mono { font-family: ui-monospace, Menlo, monospace; }
+
+  #bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    padding: 8px; border-bottom: 1px solid #2a2f37; background: #181c21; }
+  #bar .sep { width: 1px; height: 20px; background: #2f353e; margin: 0 4px; }
+  #bar .label { color: #7c8797; text-transform: uppercase; letter-spacing: .06em; font-size: 10px; }
+
+  #body { display: flex; height: calc(100% - 45px); }
+  #viewport { flex: 1; overflow: auto; background: #0e1116; position: relative; }
+  #stage { position: relative; }
+  #canvas { position: absolute; top: 0; left: 0; transform-origin: 0 0; display: flex;
+    gap: 24px; padding: 24px; align-items: flex-start; }
+  .pane { background: #1b1f25; border: 1px solid #2f353e; border-radius: 6px; padding: 8px; }
+  .pane h2 { margin: 0 0 6px; font: 600 12px/1.3 inherit; color: #cfd6df;
+    display: flex; gap: 8px; align-items: baseline; }
+  .pane h2 .dim { color: #7c8797; font-weight: 400; font-family: ui-monospace, Menlo, monospace; }
+  webview { display: block; background: #fff; border: 0; }
+
+  #panel { width: 430px; flex: none; border-left: 1px solid #2a2f37; background: #181c21;
+    overflow: auto; padding: 10px; }
+  h3 { margin: 14px 0 6px; font: 600 11px/1 inherit; color: #7c8797;
+    text-transform: uppercase; letter-spacing: .07em; }
+  h3:first-child { margin-top: 0; }
+  .verdict { border: 1px solid #2f353e; border-radius: 6px; padding: 8px; margin-bottom: 6px; }
+  .verdict b { display: block; margin-bottom: 3px; }
+  .verdict .detail { font-family: ui-monospace, Menlo, monospace; font-size: 11px; color: #aab3bf;
+    white-space: pre-wrap; }
+  .ok { color: #4ade80; } .bad { color: #f87171; } .warn { color: #fbbf24; } .dim { color: #7c8797; }
+  table { width: 100%; border-collapse: collapse; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
+  td, th { padding: 3px 4px; border-bottom: 1px solid #23282f; text-align: left; vertical-align: top; }
+  th { color: #7c8797; font-weight: 500; }
+  #log { font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; line-height: 1.5;
+    max-height: 260px; overflow: auto; border: 1px solid #23282f; border-radius: 5px; padding: 6px;
+    user-select: text; }
+  #log div { white-space: pre-wrap; }
+  #hint { padding: 6px 8px; background: #1d2530; border: 1px solid #2c3a4d; border-radius: 5px;
+    color: #a9bad0; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <span class="label">zoom</span>
+  <button data-zoom="1">100%</button>
+  <button data-zoom="0.5">50%</button>
+  <button data-zoom="0.25">25%</button>
+  <button id="fit">fit</button>
+  <span class="sep"></span>
+  <span class="label">c1 hit test</span>
+  <button id="autoclick">auto-click all panes</button>
+  <button id="shot">screenshot</button>
+  <span class="sep"></span>
+  <span class="label">c2 devtools</span>
+  <button id="dtOpen">open on pane 2</button>
+  <button id="dtClose">close</button>
+  <button id="reattach">reattach pane 2</button>
+  <span class="sep"></span>
+  <span class="label">c3 navigation</span>
+  <button id="navB">all &rarr; origin B</button>
+  <button id="navA">all &rarr; origin A</button>
+  <button id="navExt">pane 2 &rarr; example.com</button>
+  <button id="reapply">reapply overrides</button>
+  <span class="sep"></span>
+  <button id="dump">dump json</button>
+</div>
+
+<div id="body">
+  <div id="viewport"><div id="stage"><div id="canvas"></div></div></div>
+  <div id="panel">
+    <div id="hint">
+      <b>Manual check (condition 1):</b> set zoom to 50%, then 25%, and click the blue
+      44&times;44 button in every pane. Each click is recorded below with its offset from
+      the target centre. Also judge by eye: is the 12px paragraph legible at 50%, and do
+      the 1px hairlines stay single and visible?
+    </div>
+    <h3>Verdicts</h3><div id="verdicts"></div>
+    <h3>Panes</h3><div id="panes"></div>
+    <h3>Event log</h3><div id="log"></div>
+  </div>
+</div>
+
+<script>
+const GAP = 24, PAD = 24;
+let presets = [], origins = {}, zoom = 0.5, natural = { w: 0, h: 0 };
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const el = sel => document.querySelector(sel);
+
+async function boot () {
+  const info = await window.spike.boot();
+  presets = info.presets; origins = info.origins;
+
+  const canvas = el('#canvas');
+  canvas.innerHTML = presets.map((p, i) => `
+    <div class="pane" data-pane="${p.id}">
+      <h2>${i + 1}. ${p.name}
+        <span class="dim">${p.width}&times;${p.height} @${p.dpr}x ${p.mobile ? 'mobile' : 'desktop'}</span>
+      </h2>
+      <webview src="${origins.a}/index.html" partition="persist:spike-${p.id}"
+               style="width:${p.width}px;height:${p.height}px"></webview>
+    </div>`).join('');
+
+  natural.w = presets.reduce((a, p) => a + p.width, 0) + GAP * (presets.length - 1) + PAD * 2;
+  natural.h = Math.max(...presets.map(p => p.height)) + PAD * 2 + 30;
+
+  canvas.querySelectorAll('webview').forEach(wv => {
+    const paneId = wv.closest('.pane').dataset.pane;
+    wv.addEventListener('dom-ready', () => window.spike.attach(paneId, wv.getWebContentsId()), { once: true });
+  });
+
+  setZoom(zoom);
+  window.spike.onState(render);
+}
+
+function setZoom (z) {
+  zoom = z;
+  el('#canvas').style.transform = `scale(${z})`;
+  el('#stage').style.width = natural.w * z + 'px';
+  el('#stage').style.height = natural.h * z + 'px';
+  document.querySelectorAll('[data-zoom]').forEach(b =>
+    b.classList.toggle('on', Number(b.dataset.zoom) === z));
+  window.spike.setZoom(z);
+}
+
+// ------------------------------------------------------------------ probes
+
+// Condition 1, automated: aim at the centre of each pane's 44x44 target,
+// converting page coordinates to host-window coordinates through the canvas
+// scale, and fire a real input event at the window.
+async function autoClickAll () {
+  for (const p of presets) {
+    const paneEl = document.querySelector(`[data-pane="${p.id}"]`);
+    paneEl.scrollIntoView({ block: 'nearest', inline: 'center' });
+    await sleep(120);
+    let rect;
+    try { rect = await window.spike.targetRect(p.id); }
+    catch (err) { continue; }
+    const box = paneEl.querySelector('webview').getBoundingClientRect();
+    const x = box.left + (rect.x + rect.w / 2) * zoom;
+    const y = box.top + (rect.y + rect.h / 2) * zoom;
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) continue; // off-screen, skip
+    await window.spike.synthClickCdp(p.id, x, y);
+    await sleep(260);
+    if (p.id === 'p1') { await window.spike.synthClick(p.id, x, y); await sleep(260); }
+  }
+}
+
+el('#bar').addEventListener('click', e => {
+  const z = e.target.dataset && e.target.dataset.zoom;
+  if (z) setZoom(Number(z));
+});
+el('#fit').onclick = () => setZoom(Math.min(1, el('#viewport').clientWidth / natural.w));
+el('#autoclick').onclick = autoClickAll;
+async function shoot (label) {
+  el('#viewport').scrollTo(0, 0);
+  await sleep(900);                       // let the guests re-present after the scroll
+  return window.spike.capture(label);
+}
+el('#shot').onclick = () => shoot('canvas');
+el('#dtOpen').onclick = () => window.spike.devtools('p2', true);
+el('#dtClose').onclick = () => window.spike.devtools('p2', false);
+el('#reattach').onclick = () => window.spike.reattach('p2');
+el('#navB').onclick = () => window.spike.navigate('all', origins.b + '/index.html');
+el('#navA').onclick = () => window.spike.navigate('all', origins.a + '/index.html');
+el('#navExt').onclick = () => window.spike.navigate('p2', 'https://example.com/');
+el('#reapply').onclick = () => window.spike.reapply('all');
+el('#dump').onclick = async () => alert('wrote ' + await window.spike.dump());
+
+// ------------------------------------------------------------------ render
+
+let latestState = null;
+function render (s) {
+  latestState = s;
+  el('#verdicts').innerHTML = verdicts(s);
+  el('#panes').innerHTML = `<table>
+    <tr><th>pane</th><th>cdp</th><th>beat</th><th>innerWidth</th><th>pid</th><th>clicks</th></tr>
+    ${s.panes.map(paneRow).join('')}</table>`;
+  el('#log').innerHTML = s.log.map(l =>
+    `<div><span class="dim">${new Date(l.at).toLocaleTimeString()}</span> ` +
+    `<span class="${l.kind.includes('fail') || l.kind === 'cdp-detach' ? 'bad' : 'dim'}">` +
+    `${l.paneId || '--'} ${l.kind}</span> ${escapeHtml(String(l.detail || ''))}</div>`).join('');
+}
+
+function paneRow (p) {
+  if (p.pending) return `<tr><td>${p.name}</td><td colspan="5" class="dim">attaching…</td></tr>`;
+  const beat = p.heartbeatAgeMs;
+  const beatCls = beat == null ? 'dim' : beat < 2500 ? 'ok' : 'bad';
+  const m = p.measured;
+  const widthOk = m && m.innerWidth === p.preset.width;
+  const clicks = Object.entries(p.clickSummary || {})
+    .map(([z, c]) => `${z} ${c.hits}/${c.hits + c.misses}${c.maxOffset ? ' ±' + c.maxOffset : ''}`)
+    .join('<br>') || '<span class="dim">none</span>';
+  return `<tr>
+    <td>${p.name}${p.devtoolsOpen ? '<br><span class="warn">devtools</span>' : ''}</td>
+    <td class="${p.attached ? 'ok' : 'bad'}">${p.attached ? 'on' : 'OFF'}${
+      p.detached ? '<br><span class="bad">' + escapeHtml(p.detached.reason) + '</span>' : ''}</td>
+    <td class="${beatCls}">${beat == null ? '—' : (beat / 1000).toFixed(1) + 's'}<br>
+      <span class="dim">${p.heartbeatCount}</span></td>
+    <td class="${widthOk ? 'ok' : 'bad'}">${m ? m.innerWidth : '?'}<span class="dim">/${p.preset.width}</span><br>
+      <span class="${m && m.dpr === p.preset.dpr ? 'ok' : 'bad'}">@${m ? m.dpr : '?'}x</span></td>
+    <td class="dim">${p.osPid || '—'}</td>
+    <td>${clicks}</td>
+  </tr>`;
+}
+
+function verdicts (s) {
+  // C1
+  const zooms = ['50%', '25%'];
+  const c1 = s.panes.map(p => {
+    const sum = p.clickSummary || {};
+    return zooms.map(z => sum[z] ? `${p.name} ${z}: ${sum[z].hits} hit / ${sum[z].misses} miss, max offset ${sum[z].maxOffset}px` : null)
+      .filter(Boolean);
+  }).flat();
+  const c1Any = c1.length > 0;
+  const c1Miss = s.panes.some(p => Object.values(p.clickSummary || {}).some(c => c.misses > 0));
+
+  // C2
+  const p2 = s.panes.find(x => x.id === 'p2') || {};
+  const others = s.panes.filter(x => x.id !== 'p2' && !x.pending);
+  const fresh = x => x.heartbeatAgeMs != null && x.heartbeatAgeMs < 2500;
+  const c2 = p2.devtoolsOpen
+    ? (fresh(p2)
+        ? `DevTools open on pane 2 — our CDP session STILL receiving (beat ${(p2.heartbeatAgeMs / 1000).toFixed(1)}s ago)`
+        : `DevTools open on pane 2 — our CDP session has STOPPED receiving (beat ${p2.heartbeatAgeMs == null ? 'never' : (p2.heartbeatAgeMs / 1000).toFixed(1) + 's'} ago)` +
+          (p2.detached ? `\ndetach event fired: reason="${p2.detached.reason}"` : '\nno detach event fired — silent stop'))
+    : (p2.detached ? `DevTools closed. Last detach reason: "${p2.detached.reason}". attached now: ${p2.attached}`
+                   : 'DevTools not open. Open it on pane 2 to run this probe.');
+  const c2Others = `neighbours fresh: ${others.filter(fresh).length}/${others.length}`;
+
+  // C3
+  const navs = s.panes.filter(p => p.lastNav).map(p =>
+    `${p.name}: ${p.lastNav.processSwapped ? 'PROCESS SWAPPED' : 'same process'} · ` +
+    `innerWidth ${p.lastNav.innerWidth}/${p.lastNav.declaredWidth} · ` +
+    `${p.lastNav.overridesSurvived ? 'overrides survived' : 'OVERRIDES LOST'} · ` +
+    `cdp ${p.lastNav.cdpStillAttached ? 'attached' : 'DETACHED'}`);
+
+  return `
+  <div class="verdict"><b>1 · hit test through canvas zoom</b>
+    <div class="detail ${c1Any ? (c1Miss ? 'bad' : 'ok') : 'dim'}">${
+      c1Any ? escapeHtml(c1.join('\n')) : 'No clicks at 50% or 25% yet.'}</div></div>
+  <div class="verdict"><b>2 · real DevTools alongside our CDP session</b>
+    <div class="detail">${escapeHtml(c2)}\n${c2Others}</div></div>
+  <div class="verdict"><b>3 · emulation across navigation</b>
+    <div class="detail ${navs.length && navs.some(n => n.includes('LOST')) ? 'bad' : ''}">${
+      navs.length ? escapeHtml(navs.join('\n')) : 'No navigations yet.'}</div></div>`;
+}
+
+function escapeHtml (s) {
+  return s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+
+// -------------------------------------------------------------- auto mode
+// `npm start -- --auto` drives every automatable probe and writes out/state-*.json.
+// The visual judgements (12px legibility, 1px hairlines) still need a human.
+
+async function waitFor (pred, timeout = 20000) {
+  const started = Date.now();
+  while (Date.now() - started < timeout) {
+    if (latestState && pred(latestState)) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
+async function runDiag () {
+  await waitFor(s => s.panes.every(p => !p.pending && p.attached));
+  await sleep(1500);
+  setZoom(0.5);
+  await sleep(1200);
+  await window.spike.diag();
+  await shoot('diag');
+  await sleep(500);
+  window.spike.quit();
+}
+
+async function runAuto () {
+  const mark = t => window.spike.mark(t);
+
+  await waitFor(s => s.panes.every(p => !p.pending && p.attached));
+  await sleep(2500); // let heartbeats establish
+
+  // --- condition 1
+  for (const z of [1, 0.5, 0.25]) {
+    await mark(`C1 begin zoom ${z * 100}%`);
+    setZoom(z);
+    await sleep(600);
+    await autoClickAll();
+    await shoot('c1');
+    await mark(`C1 end zoom ${z * 100}%`);
+  }
+  setZoom(0.5);
+  await sleep(400);
+  await mark('C1 per-pane CDP screenshots (render independent of canvas compositing)');
+  for (const id of ['p1', 'p4', 'p6']) {
+    try { await window.spike.paneShot(id); } catch (err) { await mark('paneShot ' + id + ' failed'); }
+  }
+
+  // --- condition 2
+  await mark('C2 baseline before DevTools');
+  await sleep(3000);
+  await mark('C2 opening real DevTools on pane 2');
+  await window.spike.devtools('p2', true);
+  await sleep(8000);
+  await mark('C2 sampled with DevTools open');
+  await window.spike.measure();
+  await sleep(500);
+  await mark('C2 closing DevTools');
+  await window.spike.devtools('p2', false);
+  await sleep(8000);
+  await mark('C2 sampled after DevTools close');
+  await mark('C2 attempting explicit reattach of pane 2');
+  await window.spike.reattach('p2');
+  await sleep(5000);
+  await mark('C2 sampled after reattach');
+
+  // --- condition 3
+  await mark('C3 navigating all panes to origin B (different hostname)');
+  await window.spike.navigate('all', origins.b + '/index.html');
+  await sleep(6000);
+  await mark('C3 sampled after cross-origin navigation, no reapply');
+  await window.spike.measure();
+  await sleep(500);
+
+  await mark('C3 navigating pane 2 to https://example.com (external, guaranteed cross-site)');
+  await window.spike.navigate('p2', 'https://example.com/');
+  await sleep(8000);
+  await mark('C3 sampled after external navigation');
+  await window.spike.measure();
+  await sleep(500);
+
+  await mark('C3 reapplying overrides (the PRD fallback)');
+  await window.spike.reapply('all');
+  await sleep(2000);
+  await mark('C3 sampled after reapply');
+
+  const file = await window.spike.dump();
+  await mark('auto run complete: ' + file);
+  await sleep(1500);
+  await window.spike.dump();
+  await sleep(500);
+  window.spike.quit();
+}
+
+const booted = boot();
+window.spike.onAuto(mode => booted.then(mode === 'diag' ? runDiag : runAuto));
+</script>
+</body>
+</html>

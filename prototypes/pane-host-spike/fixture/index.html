@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pane-host fixture</title>
+<style>
+  /* Deliberately minimal. Everything here exists to answer one of the three
+     conditions in docs/handoffs/phase-0-pane-host.md. Nothing else belongs. */
+  :root { --ink: #101418; --line: #101418; --accent: #1f6feb; }
+  html, body { margin: 0; }
+  body {
+    font: 12px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif;  /* condition 1: 12px legibility */
+    color: var(--ink);
+    background: #fff;
+    padding: 10px;
+  }
+  body.origin-b { --accent: #b7410e; background: #fffdf8; }
+  h1 { font: 600 13px/1.3 inherit; margin: 0 0 6px; }
+  .readout {
+    font: 600 20px/1.2 ui-monospace, Menlo, monospace;
+    color: var(--accent);
+  }
+  .readout small { font: 400 11px/1.4 ui-monospace, Menlo, monospace; color: #667; display: block; }
+
+  /* condition 1: 1px borders must not disappear or double under canvas zoom */
+  .hairlines { display: flex; gap: 6px; margin: 10px 0; }
+  .hairlines div {
+    width: 40px; height: 40px;
+    border: 1px solid var(--line);
+    background:
+      repeating-linear-gradient(to bottom, var(--line) 0 1px, transparent 1px 5px);
+  }
+  .rule { height: 1px; background: var(--line); margin: 10px 0; }
+
+  /* condition 1: the 44x44 CSS px hit target */
+  #target {
+    width: 44px; height: 44px;
+    padding: 0; margin: 0;
+    border: 1px solid var(--line);
+    background: var(--accent);
+    color: #fff;
+    font: 600 11px/1 inherit;
+    cursor: pointer;
+  }
+  #target.hit { outline: 3px solid #16a34a; outline-offset: 2px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 10px 0; }
+  input { font: 12px/1.4 inherit; padding: 4px 6px; border: 1px solid var(--line); width: 110px; }
+  a { color: var(--accent); }
+  p { margin: 8px 0; }
+  #last { font: 11px/1.4 ui-monospace, Menlo, monospace; color: #444; min-height: 2.8em; }
+</style>
+</head>
+<body>
+  <h1>pane-host fixture</h1>
+
+  <div class="readout">
+    <span id="iw">?</span> &times; <span id="ih">?</span>
+    <small>
+      dpr <span id="dpr">?</span> &middot; coarse <span id="coarse">?</span> &middot; touch <span id="touch">?</span><br>
+      <span id="origin">?</span>
+    </small>
+  </div>
+
+  <div class="rule"></div>
+
+  <p>This paragraph is 12px body text. Legibility at 50% canvas zoom is the pass
+    condition; hairlines below must stay exactly one device pixel.</p>
+
+  <div class="hairlines"><div></div><div></div><div></div></div>
+
+  <div class="row">
+    <button id="target" type="button">44</button>
+    <input id="field" type="text" placeholder="type here">
+  </div>
+
+  <p><a id="crosslink" href="#">Navigate cross-origin &rarr;</a></p>
+
+  <div id="last"></div>
+
+<script>
+  // Origin B gets a different accent so a real process/origin swap is visible.
+  var ORIGIN_A = '{{ORIGIN_A}}';
+  var ORIGIN_B = '{{ORIGIN_B}}';
+  var here = location.origin;
+  var there = (here === ORIGIN_A) ? ORIGIN_B : ORIGIN_A;
+  if (here === ORIGIN_B) document.body.classList.add('origin-b');
+  document.getElementById('crosslink').href = there + '/index.html';
+  document.getElementById('crosslink').textContent = 'Navigate cross-origin to ' + there + ' →';
+
+  function paint () {
+    document.getElementById('iw').textContent = window.innerWidth;
+    document.getElementById('ih').textContent = window.innerHeight;
+    document.getElementById('dpr').textContent = window.devicePixelRatio;
+    document.getElementById('coarse').textContent = matchMedia('(pointer: coarse)').matches;
+    document.getElementById('touch').textContent = navigator.maxTouchPoints;
+    document.getElementById('origin').textContent = location.origin;
+  }
+  paint();
+  addEventListener('resize', paint);
+
+  // Condition 2 evidence: a steady console beat. If the app's CDP session is
+  // evicted when DevTools attaches, Runtime.consoleAPICalled stops arriving and
+  // the pane's heartbeat age climbs while its neighbours stay fresh.
+  var beat = 0;
+  setInterval(function () { console.log('heartbeat', ++beat, location.origin); }, 1000);
+  console.error('fixture loaded at ' + location.origin);
+
+  // Condition 1 evidence: report where a click actually landed, relative to the
+  // centre of the 44x44 target. Reported over the CDP binding (PRD 8.7's channel).
+  addEventListener('click', function (e) {
+    var t = document.getElementById('target');
+    var r = t.getBoundingClientRect();
+    var cx = r.left + r.width / 2;
+    var cy = r.top + r.height / 2;
+    var hit = e.target === t || t.contains(e.target);
+    var payload = {
+      type: 'click',
+      hitId: e.target.id || e.target.tagName.toLowerCase(),
+      onTarget: hit,
+      dx: Math.round((e.clientX - cx) * 10) / 10,
+      dy: Math.round((e.clientY - cy) * 10) / 10,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      innerWidth: window.innerWidth,
+      origin: location.origin
+    };
+    if (hit) { t.classList.add('hit'); setTimeout(function () { t.classList.remove('hit'); }, 600); }
+    document.getElementById('last').textContent =
+      (hit ? 'HIT ' : 'miss ') + payload.hitId + '  offset ' + payload.dx + ',' + payload.dy;
+    if (typeof window.__spike === 'function') window.__spike(JSON.stringify(payload));
+  }, true);
+</script>
+</body>
+</html>
