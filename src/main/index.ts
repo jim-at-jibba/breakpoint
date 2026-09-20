@@ -6,10 +6,20 @@ import icon from '../../resources/icon.png?asset'
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1280,
+    height: 820,
+    minWidth: 720,
+    minHeight: 480,
     show: false,
     autoHideMenuBar: true,
+    // Matches --bp-chrome, so the window does not flash white before the
+    // renderer paints. Follows the theme once nativeTheme drives it (PRD 8.2).
+    backgroundColor: '#191b28',
+    // PRD 8.2: no title bar of our own. The toolbar is the drag region and the
+    // traffic lights sit inside it, centred in its 44px (--bp-toolbar-h).
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 16, y: 16 } }
+      : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
