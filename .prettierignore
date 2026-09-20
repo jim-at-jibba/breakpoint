@@ -1,0 +1,11 @@
+out
+dist
+pnpm-lock.yaml
+LICENSE.md
+tsconfig.json
+tsconfig.*.json
+prototypes
+docs
+src/renderer/src/components/ui
+src/renderer/src/lib/utils.ts
+src/renderer/src/index.css
