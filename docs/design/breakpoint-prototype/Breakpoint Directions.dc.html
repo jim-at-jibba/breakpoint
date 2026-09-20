@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="_ds/nocturne-aa61735d-b9e7-46c7-a3a3-9fc9d5b641b8/styles.css">
+<script src="_ds/nocturne-aa61735d-b9e7-46c7-a3a3-9fc9d5b641b8/_ds_bundle.js"></script>
+<link rel="stylesheet" href="globals.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  body { margin: 0; }
+  a { color: var(--bp-accent-ink); }
+  a:hover { color: var(--bp-accent); }
+</style>
+</helmet>
+
+<section class="{{ themeClass }}" style="background: var(--bp-chrome); color: var(--bp-ink); font-family: var(--bp-font-ui); padding: 32px clamp(16px, 3vw, 44px) 80px; min-height: 100vh;">
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 28px;">
+    <div style="max-width: 660px;">
+      <div style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--bp-accent-ink); margin-bottom: 10px;">Breakpoint · deliverable 2 of 3</div>
+      <h1 style="font-size: 30px; font-weight: 500; letter-spacing: -0.02em; margin: 0 0 10px;">Two directions for the chrome</h1>
+      <p style="font-size: 13px; line-height: 1.6; color: var(--bp-ink-muted); margin: 0; text-wrap: pretty;">Both answer the same question — how does a tool frame content it does not own — and answer it differently. Each is shown on the identical canvas: three panes, one white page, one dark page, one saturated page, at 100% and at 25%.</p>
+    </div>
+    <div style="display: flex; gap: 4px; padding: 3px; background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); border-radius: 5px; align-self: flex-start;">
+      <button type="button" onClick="{{ setDark }}" style="font: inherit; font-size: 11px; height: 24px; padding: 0 12px; border: 0; border-radius: 3px; cursor: pointer; color: var(--bp-ink); background: var(--bp-dark-btn);">Dark</button>
+      <button type="button" onClick="{{ setLight }}" style="font: inherit; font-size: 11px; height: 24px; padding: 0 12px; border: 0; border-radius: 3px; cursor: pointer; color: var(--bp-ink); background: var(--bp-light-btn);">Light</button>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start;">
+
+    <!-- ========================= 1a — GUTTER ========================= -->
+    <div id="1a" style="flex: 1 1 460px; min-width: 420px; border: 1px solid var(--bp-border); border-radius: 8px; background: var(--bp-chrome-raised); overflow: hidden;">
+      <div style="display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid var(--bp-border);">
+        <span style="display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 3px; font-family: var(--bp-font-mono); font-size: 10px; font-weight: 500; background: var(--bp-accent-wash); color: var(--bp-accent-ink);">1a</span>
+        <h2 style="font-size: 16px; font-weight: 500; margin: 0;">Gutter</h2>
+        <span style="font-size: 12px; color: var(--bp-ink-muted);">chrome never touches content</span>
+      </div>
+      <p style="font-size: 12.5px; line-height: 1.6; color: var(--bp-ink-muted); margin: 0; padding: 12px 16px 0; text-wrap: pretty;">The pane has no frame. It is a rectangle of somebody else's pixels sitting on our ground, separated by shadow alone. Every label, badge and state indicator lives <em>outside</em> the pane rectangle, in canvas gutters we control. Nothing is ever drawn on top of a page.</p>
+
+      <div style="padding: 16px;">
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin-bottom: 8px;">Canvas at 100%</div>
+        <div style="background: var(--bp-canvas); border-radius: 6px; padding: 22px 18px 18px; display: flex; gap: 22px; align-items: flex-start; overflow: hidden;">
+          <sc-for list="{{ panesA }}" as="p" hint-placeholder-count="3">
+            <div style="position: relative; flex: none;">
+              <div style="display: flex; align-items: center; gap: 5px; height: 16px; margin-bottom: 5px; padding-left: 1px;">
+                <span style="width: 6px; height: 6px; border-radius: 1px; flex: none; background: {{ p.v }};"></span>
+                <span style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink-muted); white-space: nowrap;">{{ p.head }}</span>
+              </div>
+              <div style="width: {{ p.w }}; height: 158px; border-radius: 3px; overflow: hidden; box-shadow: var(--bp-shadow-pane); background: {{ p.bg }};">
+                <div style="height: 12px; background: {{ p.c1 }};"></div>
+                <div style="margin: 9px 8px; height: 7px; width: 62%; border-radius: 1px; background: {{ p.c2 }};"></div>
+                <div style="margin: 0 8px 5px; height: 4px; width: 84%; border-radius: 1px; background: {{ p.c3 }};"></div>
+                <div style="margin: 0 8px 5px; height: 4px; width: 71%; border-radius: 1px; background: {{ p.c3 }};"></div>
+                <div style="margin: 10px 8px 0; height: 44px; border-radius: 2px; background: {{ p.c2 }};"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin: 18px 0 8px;">Same canvas at 25% — headers hold their screen size</div>
+        <div style="background: var(--bp-canvas); border-radius: 6px; padding: 20px 18px; display: flex; gap: 22px; align-items: flex-start; overflow: hidden;">
+          <sc-for list="{{ panesA }}" as="p" hint-placeholder-count="3">
+            <div style="position: relative; flex: none;">
+              <div style="display: flex; align-items: center; gap: 4px; height: 14px; margin-bottom: 4px;">
+                <span style="width: 6px; height: 6px; border-radius: 1px; flex: none; background: {{ p.v }};"></span>
+                <span style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink-muted); white-space: nowrap;">{{ p.headSmall }}</span>
+              </div>
+              <div style="width: {{ p.wSmall }}; height: 42px; border-radius: 2px; box-shadow: var(--bp-shadow-pane); background: {{ p.bg }}; overflow: hidden;">
+                <div style="height: 5px; background: {{ p.c1 }};"></div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="align-self: center; max-width: 150px; font-size: 10.5px; line-height: 1.5; color: var(--bp-error);">The mobile header is wider than its pane and runs into the neighbour. Detached labels lose their binding.</div>
+        </div>
+
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin: 18px 0 8px;">Error and inspect, expressed in the gutter</div>
+        <div style="background: var(--bp-canvas); border-radius: 6px; padding: 20px 18px; display: flex; gap: 26px; align-items: flex-start;">
+          <div style="display: flex; gap: 6px;">
+            <div style="width: 3px; height: 128px; border-radius: 2px; background: var(--bp-error); flex: none;"></div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 5px; height: 16px; margin-bottom: 5px;">
+                <span style="width: 6px; height: 6px; border-radius: 1px; background: var(--bp-pane-1);"></span>
+                <span style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink-muted);">Mobile 390×844</span>
+                <span style="display: inline-flex; align-items: center; height: 13px; padding: 0 4px; border-radius: 2px; font-family: var(--bp-font-mono); font-size: 9px; background: var(--bp-error); color: var(--bp-pane-ink);">3</span>
+              </div>
+              <div style="width: 98px; height: 128px; border-radius: 3px; background: #ffffff; box-shadow: var(--bp-shadow-pane); overflow: hidden;">
+                <div style="height: 10px; background: #e8e8ef;"></div>
+                <div style="margin: 8px; height: 6px; width: 60%; background: #d0d0dc;"></div>
+                <div style="margin: 0 8px; height: 40px; background: #eceef5;"></div>
+              </div>
+            </div>
+          </div>
+          <div style="max-width: 200px; font-size: 11.5px; line-height: 1.55; color: var(--bp-ink-muted);">The error spine sits in the gutter at canvas scale, so it thickens and thins with zoom like the pane it belongs to. The count badge rides the header, which does not scale. Inspect highlights get brackets at the pane rim rather than a box across the element.</div>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--bp-border);">
+        <sc-for list="{{ specA }}" as="s" hint-placeholder-count="5">
+          <div style="display: flex; gap: 14px; padding: 9px 16px; border-bottom: 1px solid var(--bp-border);">
+            <span style="width: 108px; flex: none; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bp-ink-faint); padding-top: 1px;">{{ s.k }}</span>
+            <span style="font-size: 12px; line-height: 1.5; color: var(--bp-ink); text-wrap: pretty;">{{ s.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+
+    <!-- ========================= 1b — BEZEL ========================== -->
+    <div id="1b" style="flex: 1 1 460px; min-width: 420px; border: 1px solid var(--bp-border); border-radius: 8px; background: var(--bp-chrome-raised); overflow: hidden;">
+      <div style="display: flex; align-items: baseline; gap: 10px; padding: 14px 16px 12px; border-bottom: 1px solid var(--bp-border);">
+        <span style="display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 3px; font-family: var(--bp-font-mono); font-size: 10px; font-weight: 500; background: var(--bp-accent-wash); color: var(--bp-accent-ink);">1b</span>
+        <h2 style="font-size: 16px; font-weight: 500; margin: 0;">Bezel</h2>
+        <span style="font-size: 12px; color: var(--bp-ink-muted);">chrome is an opaque plate welded to the pane</span>
+        <span style="margin-left: auto; display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 3px; font-size: 10px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; background: var(--bp-accent); color: var(--bp-pane-ink);">Recommended</span>
+      </div>
+      <p style="font-size: 12.5px; line-height: 1.6; color: var(--bp-ink-muted); margin: 0; padding: 12px 16px 0; text-wrap: pretty;">The pane is set into a solid frame of chrome — a 24px header welded to the top and a 1px shell all round, one rounded unit. Legibility is bought with opacity rather than distance: the plate is always <code style="font-family: var(--bp-font-mono);">--bp-chrome</code>, never translucent, so no page colour ever bleeds into a label. A 1px seam in <code style="font-family: var(--bp-font-mono);">--bp-border-seam</code> keeps the plate from ever sitting directly against the page's own pixels.</p>
+
+      <div style="padding: 16px;">
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin-bottom: 8px;">Canvas at 100%</div>
+        <div style="background: var(--bp-canvas); border-radius: 6px; padding: 22px 18px 18px; display: flex; gap: 14px; align-items: flex-start; overflow: hidden;">
+          <sc-for list="{{ panesA }}" as="p" hint-placeholder-count="3">
+            <div style="flex: none; border-radius: 4px; background: var(--bp-chrome); box-shadow: var(--bp-shadow-pane), inset 0 0 0 1px var(--bp-border-strong); padding: 0 1px 1px; overflow: hidden;">
+              <div style="display: flex; align-items: center; gap: 5px; height: 22px; padding: 0 6px 0 0;">
+                <span style="width: 3px; height: 11px; border-radius: 0 2px 2px 0; flex: none; background: {{ p.v }};"></span>
+                <span style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink); white-space: nowrap;">{{ p.head }}</span>
+              </div>
+              <div style="width: {{ p.w }}; height: 158px; border-radius: 3px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--bp-border-seam); background: {{ p.bg }};">
+                <div style="height: 12px; background: {{ p.c1 }};"></div>
+                <div style="margin: 9px 8px; height: 7px; width: 62%; border-radius: 1px; background: {{ p.c2 }};"></div>
+                <div style="margin: 0 8px 5px; height: 4px; width: 84%; border-radius: 1px; background: {{ p.c3 }};"></div>
+                <div style="margin: 0 8px 5px; height: 4px; width: 71%; border-radius: 1px; background: {{ p.c3 }};"></div>
+                <div style="margin: 10px 8px 0; height: 44px; border-radius: 2px; background: {{ p.c2 }};"></div>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin: 18px 0 8px;">Same canvas at 25% — headers hold their screen size and degrade</div>
+        <div style="background: var(--bp-canvas); border-radius: 6px; padding: 20px 18px; display: flex; gap: 14px; align-items: flex-start; overflow: hidden;">
+          <sc-for list="{{ panesA }}" as="p" hint-placeholder-count="3">
+            <div style="flex: none; border-radius: 3px; background: var(--bp-chrome); box-shadow: var(--bp-shadow-pane), inset 0 0 0 1px var(--bp-border-strong); padding: 0 1px 1px; overflow: hidden;">
+              <div style="display: flex; align-items: center; gap: 4px; height: 20px; padding-right: 5px; width: {{ p.wSmall }};">
+                <span style="width: 3px; height: 10px; border-radius: 0 2px 2px 0; flex: none; background: {{ p.v }};"></span>
+                <span style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink); white-space: nowrap; overflow: hidden;">{{ p.headSmall }}</span>
+              </div>
+              <div style="width: {{ p.wSmall }}; height: 42px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--bp-border-seam); background: {{ p.bg }}; overflow: hidden;">
+                <div style="height: 5px; background: {{ p.c1 }};"></div>
+              </div>
+            </div>
+          </sc-for>
+          <div style="align-self: center; max-width: 150px; font-size: 10.5px; line-height: 1.5; color: var(--bp-success);">The header is clipped by its own pane, so it can never claim width it doesn't have. Binding is structural.</div>
+        </div>
+
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin: 18px 0 8px;">Error on the rim; light pane inside a dark app</div>
+        <div style="background: var(--bp-canvas); border-radius: 6px; padding: 20px 18px; display: flex; gap: 18px; align-items: flex-start;">
+          <div style="border-radius: 4px; background: var(--bp-chrome); box-shadow: var(--bp-shadow-pane), inset 0 0 0 1.5px var(--bp-error); padding: 0 1px 1px;">
+            <div style="display: flex; align-items: center; gap: 5px; height: 22px; padding-right: 5px;">
+              <span style="width: 3px; height: 11px; border-radius: 0 2px 2px 0; background: var(--bp-pane-1);"></span>
+              <span style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink);">390 ☾</span>
+              <span style="margin-left: auto; display: inline-flex; align-items: center; height: 13px; padding: 0 4px; border-radius: 2px; font-family: var(--bp-font-mono); font-size: 9px; background: var(--bp-error); color: var(--bp-pane-ink);">3</span>
+            </div>
+            <div style="width: 98px; height: 128px; border-radius: 3px; background: #ffffff; box-shadow: inset 0 0 0 1px var(--bp-border-seam); overflow: hidden; position: relative;">
+              <div style="height: 10px; background: #e8e8ef;"></div>
+              <div style="margin: 8px; height: 6px; width: 60%; background: #d0d0dc;"></div>
+              <div style="margin: 0 8px; height: 40px; background: #eceef5; box-shadow: 0 0 0 1.5px var(--bp-accent);"></div>
+              <span style="position: absolute; left: 8px; top: 70px; font-family: var(--bp-font-mono); font-size: 8.5px; padding: 1px 3px; border-radius: 2px; background: var(--bp-accent); color: var(--bp-pane-ink);">328×40</span>
+            </div>
+          </div>
+          <div style="max-width: 210px; font-size: 11.5px; line-height: 1.55; color: var(--bp-ink-muted);">The shell ring goes <code style="font-family: var(--bp-font-mono);">--bp-error</code>; the count badge sits in the header. The one thing that does draw over content is the inspect box — 1.5 screen px, counter-scaled, with its dimension label in mono at a fixed size. The pane's own light scheme reads as light; the frame stays in the app's dark theme and the combination looks deliberate.</div>
+        </div>
+      </div>
+
+      <div style="border-top: 1px solid var(--bp-border);">
+        <sc-for list="{{ specB }}" as="s" hint-placeholder-count="5">
+          <div style="display: flex; gap: 14px; padding: 9px 16px; border-bottom: 1px solid var(--bp-border);">
+            <span style="width: 108px; flex: none; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bp-ink-faint); padding-top: 1px;">{{ s.k }}</span>
+            <span style="font-size: 12px; line-height: 1.5; color: var(--bp-ink); text-wrap: pretty;">{{ s.v }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================== RECOMMENDATION ====================== -->
+  <div style="margin-top: 28px; border: 1px solid var(--bp-border-strong); border-radius: 8px; background: var(--bp-chrome-raised); padding: 20px 22px; max-width: 980px;">
+    <h2 style="font-size: 15px; font-weight: 500; margin: 0 0 12px;">Recommendation — <a href="#1b">1b</a>, with <a href="#1a">1a</a>'s rule about overlays</h2>
+    <p style="font-size: 12.5px; line-height: 1.65; color: var(--bp-ink-muted); margin: 0 0 10px; max-width: 78ch; text-wrap: pretty;"><a href="#1a">1a</a> has the purer answer to the central tension — chrome only ever sits on ground we own, so legibility is guaranteed rather than defended. It breaks on the second spike constraint. At 25% a detached label has no structural tie to its pane, and with six panes and a 100px mobile the labels collide and the canvas becomes a guessing game about which name belongs to which rectangle. It also spends horizontal room on gutters, which is the one resource this app is always short of.</p>
+    <p style="font-size: 12.5px; line-height: 1.65; color: var(--bp-ink-muted); margin: 0 0 10px; max-width: 78ch; text-wrap: pretty;"><a href="#1b">1b</a> buys the same legibility with opacity instead of distance, which costs nothing, and gets binding for free: a header clipped by its own pane cannot be misread. The risk is that a welded frame starts to look like a device mockup, so the bezel stays at 1px, square-ish, with no bevel, no drop of colour beyond the 3px identity tab, and no rounding above 4px.</p>
+    <p style="font-size: 12.5px; line-height: 1.65; color: var(--bp-ink-muted); margin: 0; max-width: 78ch; text-wrap: pretty;">Take one rule from <a href="#1a">1a</a>: state is expressed on the frame, not across the page. Error, crash, agent presence, off-screen and scheme mismatch are all rim-and-header events. The only thing permitted to draw over a pane is the transient inspect highlight, because it has to be registered to an element box to mean anything.</p>
+  </div>
+
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1400,&quot;height&quot;:1000}}">
+class Component extends DCLogic {
+  state = { theme: 'dark' };
+  renderVals() {
+    const dark = this.state.theme === 'dark';
+    return {
+      themeClass: dark ? 'dark' : 'light',
+      setDark: () => this.setState({ theme: 'dark' }),
+      setLight: () => this.setState({ theme: 'light' }),
+      'bp-dark-btn': dark ? 'var(--bp-surface)' : 'transparent',
+      'bp-light-btn': dark ? 'transparent' : 'var(--bp-surface)',
+
+      panesA: [
+        { v: 'var(--bp-pane-1)', head: 'Mobile 390×844 @3x ☾', headSmall: '390 ☾',
+          w: '98px', wSmall: '52px', bg: '#ffffff', c1: '#e8e8ef', c2: '#dcdce6', c3: '#c3c3d1' },
+        { v: 'var(--bp-pane-2)', head: 'Tablet 820×1180 @2x', headSmall: '820',
+          w: '140px', wSmall: '74px', bg: '#101014', c1: '#22222c', c2: '#1b1b24', c3: '#33333f' },
+        { v: 'var(--bp-pane-3)', head: 'Desktop 1440×900 ☀', headSmall: '1440 ☀',
+          w: '200px', wSmall: '112px', bg: 'linear-gradient(140deg, #ff2d75, #7b2dff 55%, #00d5ff)',
+          c1: 'rgba(255,255,255,0.35)', c2: 'rgba(255,255,255,0.22)', c3: 'rgba(255,255,255,0.45)' },
+      ],
+
+      specA: [
+        { k: 'Recede vs legible', v: 'Solved by separation. Chrome never overlaps unknown pixels, so contrast is always chrome-on-canvas and always known.' },
+        { k: 'Overlay strokes', v: 'Scale with the canvas — they are gutter objects belonging to the pane, and at 25% a thin spine is acceptable because nothing depends on reading it precisely.' },
+        { k: 'Pane headers', v: 'Fixed screen size, floating in canvas space above the pane.' },
+        { k: 'Identity colour', v: '6px square before the label plus the gutter spine. Never a border — there is no border.' },
+        { k: 'Cost', v: 'Gutters eat horizontal canvas, and at low zoom labels detach from their panes and collide. Off-screen panes lose their labels entirely.' },
+      ],
+      specB: [
+        { k: 'Recede vs legible', v: 'Solved by opacity. The plate is a fixed chrome colour at all times — never a blur, never a tint of the page — so the label\'s contrast is a constant regardless of what loads.' },
+        { k: 'Overlay strokes', v: 'Counter-scale. Geometry scales with the canvas so the box still matches the element; stroke width and type are divided by zoom so they land at a constant 1.5 screen px.' },
+        { k: 'Pane headers', v: 'Fixed screen size, clipped to the pane width, degrading through five tiers.' },
+        { k: 'Identity colour', v: '3px tab at the header\'s left edge, plus the shell ring when the pane is selected. Same colour in console badges and baked screenshots.' },
+        { k: 'Cost', v: 'A constant 24px of vertical chrome per pane regardless of zoom, and a frame that has to be kept austere or it starts reading as decoration.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

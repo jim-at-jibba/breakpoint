@@ -1,0 +1,336 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/inter';
+
+@custom-variant dark (&:is(.dark *));
+
+/* Tailwind's generated utilities, aliased onto the token layer below.
+   Structure is shadcn CLI output; the radius ladder and the font families are
+   pointed at the design tokens rather than the preset's defaults. */
+@theme inline {
+    --font-sans: var(--bp-font-ui);
+    --font-mono: var(--bp-font-mono);
+    --font-heading: var(--font-sans);
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-xs: var(--bp-radius-xs);
+    --radius-sm: var(--bp-radius-sm);
+    --radius-md: var(--bp-radius-md);
+    --radius-lg: var(--bp-radius-lg);
+    --radius-xl: calc(var(--bp-radius-lg) * 1.5);
+    --radius-2xl: calc(var(--bp-radius-lg) * 2);
+    --radius-3xl: calc(var(--bp-radius-lg) * 2.5);
+    --radius-4xl: calc(var(--bp-radius-lg) * 3);
+}
+
+/* ============================================================================
+   Token layer. Mirrored from docs/design/breakpoint-prototype/globals.css,
+   which is the source of truth (AGENTS.md). Change it there first.
+   ========================================================================= */
+
+/* ============================================================================
+   Breakpoint — design tokens
+   Drop-in for a shadcn/ui `globals.css`. Two layers:
+     1. shadcn's required semantic names (--background, --border, …) so the
+        copied component source works unmodified.
+     2. --bp-* application tokens for the surfaces shadcn doesn't cover
+        (canvas, pane bezel, pane identity palette, console levels).
+   Derived from the Nocturne blue-grey ramp; accent is Nocturne's #9184d9.
+   ========================================================================= */
+
+:root {
+  /* ---- type ------------------------------------------------------------ */
+  --bp-font-ui: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --bp-font-mono: "Berkeley Mono", "SF Mono", ui-monospace, "JetBrains Mono", Menlo, monospace;
+
+  --bp-text-micro: 10px;   /* badge glyphs, DPR, pane header at tier 4+   */
+  --bp-text-sm: 11px;      /* secondary chrome, timestamps, tab labels    */
+  --bp-text-base: 12px;    /* default chrome                              */
+  --bp-text-lg: 13px;      /* address bar, console message, palette rows  */
+  --bp-text-xl: 15px;      /* command palette input only                  */
+
+  --bp-leading-tight: 1.1;
+  --bp-leading-row: 1.35;   /* console wrapped lines                      */
+
+  /* ---- density: 4px grid ------------------------------------------------ */
+  --bp-space-0: 0px;
+  --bp-space-1: 2px;        /* sub-grid; icon optical nudges only         */
+  --bp-space-2: 4px;
+  --bp-space-3: 8px;
+  --bp-space-4: 12px;
+  --bp-space-5: 16px;
+  --bp-space-6: 24px;
+  --bp-space-7: 32px;
+
+  --bp-row-sm: 22px;        /* console row, compact list                  */
+  --bp-row: 24px;           /* pane header, list rows, table rows         */
+  --bp-row-md: 26px;        /* toolbar controls, palette rows             */
+  --bp-row-lg: 28px;        /* address bar, primary inputs                */
+  --bp-toolbar-h: 44px;
+  --bp-tabbar-h: 30px;
+
+  /* ---- radii: tighter than Nocturne's 8px; this is a tool -------------- */
+  --bp-radius-xs: 2px;      /* badges, chips, inline marks                */
+  --bp-radius-sm: 4px;      /* buttons, inputs, pane shell                */
+  --bp-radius-md: 6px;      /* popovers, panels                           */
+  --bp-radius-lg: 8px;      /* command palette, dialogs                   */
+
+  /* ---- strokes ---------------------------------------------------------- */
+  --bp-stroke: 1px;
+  --bp-stroke-strong: 2px;
+  /* Overlay strokes counter-scale: set --bp-zoom on the canvas element and
+     any stroke drawn *over* a pane uses this, so it stays 1.5 screen px. */
+  --bp-zoom: 1;
+  --bp-stroke-overlay: calc(1.5px / var(--bp-zoom));
+  --bp-stroke-overlay-strong: calc(2.5px / var(--bp-zoom));
+
+  /* ---- motion: functional feedback only -------------------------------- */
+  --bp-dur-instant: 70ms;   /* hover, press                               */
+  --bp-dur-fast: 130ms;     /* popover in, tab change                     */
+  --bp-dur-flash: 600ms;    /* error-count flash decay                    */
+  --bp-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ============================ DARK (default) ============================= */
+:root,
+.dark {
+  color-scheme: dark;
+
+  /* raw ramp — Nocturne neutrals, blue-grey */
+  --bp-n-100: #f3f5fe;
+  --bp-n-200: #e4e7f5;
+  --bp-n-300: #cfd3e5;
+  --bp-n-400: #b2b6ca;
+  --bp-n-500: #9397ab;
+  --bp-n-600: #75798c;
+  --bp-n-700: #595d6c;
+  --bp-n-800: #3f424d;
+  --bp-n-900: #292b31;
+
+  /* semantic — chrome */
+  --bp-canvas: #0e0f1a;          /* the scrolling surface behind panes     */
+  --bp-canvas-grid: #181a28;     /* 8px ruler ticks on the canvas          */
+  --bp-chrome: #191b28;          /* toolbar, pane bezel, panel plate       */
+  --bp-chrome-raised: #21232f;   /* popovers, palette, dialogs             */
+  --bp-chrome-sunken: #131421;   /* input wells, inactive tab strip        */
+  --bp-surface: #232532;
+  --bp-hover: rgba(233, 233, 237, 0.06);
+  --bp-active: rgba(233, 233, 237, 0.11);
+  --bp-selected: rgba(145, 132, 217, 0.16);
+
+  --bp-border: #282b3a;          /* chrome-on-chrome divisions             */
+  --bp-border-strong: #3a3d4d;   /* control outlines, pane shell edge      */
+  --bp-border-seam: #4a4e60;     /* the hairline between bezel and content */
+
+  --bp-ink: #e9e9ed;
+  --bp-ink-muted: #9397ab;
+  --bp-ink-faint: #6e7286;
+  --bp-ink-disabled: #4d5163;
+
+  --bp-accent: #9184d9;
+  --bp-accent-hover: #a79cE3;
+  --bp-accent-press: #796cbf;
+  --bp-accent-wash: rgba(145, 132, 217, 0.14);
+  --bp-accent-ink: #d2cefd;      /* accent at paragraph size on this ground */
+
+  /* status */
+  --bp-error: #e0697a;
+  --bp-error-wash: rgba(224, 105, 122, 0.14);
+  --bp-warn: #d9a25c;
+  --bp-warn-wash: rgba(217, 162, 92, 0.14);
+  --bp-info: #6fa8d6;
+  --bp-info-wash: rgba(111, 168, 214, 0.14);
+  --bp-success: #6fbf95;
+  --bp-success-wash: rgba(111, 191, 149, 0.14);
+
+  /* elevation — on dark, an edge plus ambient darkness */
+  --bp-shadow-sm: 0 0 0 1px var(--bp-border-strong);
+  --bp-shadow-md: 0 0 0 1px var(--bp-border-strong), 0 4px 14px rgba(0, 0, 0, 0.5);
+  --bp-shadow-lg: 0 0 0 1px var(--bp-border-strong), 0 16px 44px rgba(0, 0, 0, 0.66);
+  /* the pane: separated from the canvas by darkness, not by a stroke */
+  --bp-shadow-pane: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.38);
+
+  /* ---- pane identity — 6 hues at one lightness and one low chroma.
+     Separation is carried by hue, so the set stays quiet over any page and
+     survives rasterising into a screenshot. ---------------------------- */
+  --bp-pane-1: oklch(0.760 0.105 218);   /* blue   */
+  --bp-pane-2: oklch(0.760 0.105 168);   /* teal   */
+  --bp-pane-3: oklch(0.760 0.105 128);   /* green  */
+  --bp-pane-4: oklch(0.760 0.105 82);    /* amber  */
+  --bp-pane-5: oklch(0.760 0.105 28);    /* rust   */
+  --bp-pane-6: oklch(0.760 0.105 332);   /* pink   */
+  --bp-pane-7: oklch(0.760 0.105 248);   /* indigo */
+  --bp-pane-8: oklch(0.760 0.105 196);   /* cyan   */
+  --bp-pane-9: oklch(0.760 0.105 52);    /* orange */
+  --bp-pane-10: oklch(0.760 0.105 302);  /* violet */
+  /* ink inside a filled pane badge */
+  --bp-pane-ink: #14151f;
+}
+
+/* ================================ LIGHT ================================== */
+.light {
+  color-scheme: light;
+
+  --bp-n-100: #292b31;
+  --bp-n-200: #3f424d;
+  --bp-n-300: #595d6c;
+  --bp-n-400: #75798c;
+  --bp-n-500: #9397ab;
+  --bp-n-600: #b2b6ca;
+  --bp-n-700: #cfd3e5;
+  --bp-n-800: #e4e7f5;
+  --bp-n-900: #f3f5fe;
+
+  /* the canvas is darker than the chrome in both themes, so a white pane
+     always has an edge without a stroke being drawn for it */
+  --bp-canvas: #c9ccd9;
+  --bp-canvas-grid: #bcc0d0;
+  --bp-chrome: #eceef5;
+  --bp-chrome-raised: #f7f8fc;
+  --bp-chrome-sunken: #e1e4ee;
+  --bp-surface: #f3f5fe;
+  --bp-hover: rgba(41, 43, 49, 0.06);
+  --bp-active: rgba(41, 43, 49, 0.11);
+  --bp-selected: rgba(93, 82, 148, 0.13);
+
+  --bp-border: #d6d9e5;
+  --bp-border-strong: #b6bacb;
+  --bp-border-seam: #9ba0b4;
+
+  --bp-ink: #1d1f28;
+  --bp-ink-muted: #5c6070;
+  --bp-ink-faint: #797e91;
+  --bp-ink-disabled: #a4a8b8;
+
+  --bp-accent: #5d5294;
+  --bp-accent-hover: #4d4480;
+  --bp-accent-press: #3d3566;
+  --bp-accent-wash: rgba(93, 82, 148, 0.12);
+  --bp-accent-ink: #4b4279;
+
+  --bp-error: #b23a4c;
+  --bp-error-wash: rgba(178, 58, 76, 0.12);
+  --bp-warn: #8a5c15;
+  --bp-warn-wash: rgba(138, 92, 21, 0.13);
+  --bp-info: #2f6c9c;
+  --bp-info-wash: rgba(47, 108, 156, 0.12);
+  --bp-success: #2d7a53;
+  --bp-success-wash: rgba(45, 122, 83, 0.12);
+
+  --bp-shadow-sm: 0 0 0 1px var(--bp-border);
+  --bp-shadow-md: 0 0 0 1px var(--bp-border), 0 4px 12px rgba(29, 31, 40, 0.13);
+  --bp-shadow-lg: 0 0 0 1px var(--bp-border), 0 16px 40px rgba(29, 31, 40, 0.2);
+  --bp-shadow-pane: 0 1px 2px rgba(29, 31, 40, 0.22), 0 6px 18px rgba(29, 31, 40, 0.14);
+
+  --bp-pane-1: oklch(0.550 0.115 218);
+  --bp-pane-2: oklch(0.550 0.115 168);
+  --bp-pane-3: oklch(0.550 0.115 128);
+  --bp-pane-4: oklch(0.550 0.115 82);
+  --bp-pane-5: oklch(0.550 0.115 28);
+  --bp-pane-6: oklch(0.550 0.115 332);
+  --bp-pane-7: oklch(0.550 0.115 248);
+  --bp-pane-8: oklch(0.550 0.115 196);
+  --bp-pane-9: oklch(0.550 0.115 52);
+  --bp-pane-10: oklch(0.550 0.115 302);
+  --bp-pane-ink: #f7f8fc;
+}
+
+/* =================== shadcn semantic layer, mapped ======================= */
+:root, .dark, .light {
+  --background: var(--bp-chrome);
+  --foreground: var(--bp-ink);
+  --card: var(--bp-chrome-raised);
+  --card-foreground: var(--bp-ink);
+  --popover: var(--bp-chrome-raised);
+  --popover-foreground: var(--bp-ink);
+  --primary: var(--bp-accent);
+  --primary-foreground: var(--bp-pane-ink);
+  --secondary: var(--bp-surface);
+  --secondary-foreground: var(--bp-ink);
+  --muted: var(--bp-chrome-sunken);
+  --muted-foreground: var(--bp-ink-muted);
+  --accent: var(--bp-hover);
+  --accent-foreground: var(--bp-ink);
+  --destructive: var(--bp-error);
+  --destructive-foreground: var(--bp-ink);
+  --border: var(--bp-border);
+  --input: var(--bp-border-strong);
+  --ring: var(--bp-accent);
+  --radius: var(--bp-radius-sm);
+}
+
+/* ============================== base ===================================== */
+html, body { background: var(--bp-chrome); color: var(--bp-ink); }
+body {
+  font-family: var(--bp-font-ui);
+  font-size: var(--bp-text-base);
+  line-height: var(--bp-leading-tight);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* All chrome is unselectable; selection is opted back in, not out. */
+body { user-select: none; -webkit-user-select: none; }
+[data-selectable], .bp-selectable { user-select: text; -webkit-user-select: text; cursor: auto; }
+
+::selection { background: var(--bp-accent-wash); }
+
+/* No focus ring on mouse click. */
+:focus { outline: none; }
+:focus-visible {
+  outline: var(--bp-stroke-strong) solid var(--bp-accent);
+  outline-offset: 1px;
+  border-radius: var(--bp-radius-xs);
+}
+
+/* The toolbar is the window drag region; controls inside it are not. */
+.bp-drag { -webkit-app-region: drag; }
+.bp-no-drag, button, input, [role="button"] { -webkit-app-region: no-drag; }
+
+a { color: var(--bp-accent-ink); text-underline-offset: 2px; }
+a:hover { color: var(--bp-accent); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
