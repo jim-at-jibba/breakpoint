@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-aa61735d-b9e7-46c7-a3a3-9fc9d5b641b8/styles.css">
+<script src="_ds/nocturne-aa61735d-b9e7-46c7-a3a3-9fc9d5b641b8/_ds_bundle.js"></script>
+<link rel="stylesheet" href="globals.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  body { margin: 0; }
+  a { color: var(--bp-accent-ink); }
+  a:hover { color: var(--bp-accent); }
+</style>
+</helmet>
+
+<div class="{{ themeClass }}" style="background: var(--bp-chrome); color: var(--bp-ink); font-family: var(--bp-font-ui); font-size: 12px; min-height: 100vh; padding: 32px clamp(16px, 4vw, 56px) 96px;">
+
+  <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; max-width: 1080px; margin: 0 0 8px;">
+    <div style="max-width: 640px;">
+      <div style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--bp-accent-ink); margin-bottom: 10px;">Breakpoint · deliverable 1 of 3</div>
+      <h1 style="font-size: 30px; font-weight: 500; letter-spacing: -0.02em; margin: 0 0 10px;">Token set</h1>
+      <p style="font-size: 13px; line-height: 1.55; color: var(--bp-ink-muted); margin: 0; text-wrap: pretty;">Every value below is a CSS custom property in <a href="globals.css">globals.css</a>, which drops into a shadcn <code style="font-family: var(--bp-font-mono);">globals.css</code> unmodified — it carries shadcn's required semantic names as aliases on top of the <code style="font-family: var(--bp-font-mono);">--bp-*</code> layer. Derived from the Nocturne blue-grey ramp at Breakpoint's density: 12px base, 24px rows, 4px grid, 4px radii.</p>
+    </div>
+    <div style="display: flex; gap: 4px; padding: 3px; background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); border-radius: 5px;">
+      <button type="button" onClick="{{ setDark }}" style="font: inherit; font-size: 11px; height: 24px; padding: 0 12px; border: 0; border-radius: 3px; cursor: pointer; color: var(--bp-ink); background: var(--bp-dark-btn);">Dark</button>
+      <button type="button" onClick="{{ setLight }}" style="font: inherit; font-size: 11px; height: 24px; padding: 0 12px; border: 0; border-radius: 3px; cursor: pointer; color: var(--bp-ink); background: var(--bp-light-btn);">Light</button>
+    </div>
+  </div>
+
+  <!-- ============================ COLOUR ============================ -->
+  <sc-for list="{{ colorGroups }}" as="g" hint-placeholder-count="4">
+    <div style="max-width: 1080px; margin-top: 40px;">
+      <div style="display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--bp-border);">
+        <h2 style="font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin: 0;">{{ g.name }}</h2>
+        <span style="font-size: 11px; color: var(--bp-ink-faint);">{{ g.note }}</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 0 20px;">
+        <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="6">
+          <div style="display: flex; align-items: center; gap: 10px; height: 30px; border-bottom: 1px solid var(--bp-border);">
+            <span style="width: 26px; height: 16px; flex: none; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--bp-border-seam); background: {{ r.v }};"></span>
+            <span style="font-family: var(--bp-font-mono); font-size: 11px; color: var(--bp-ink); white-space: nowrap;">{{ r.t }}</span>
+            <span style="margin-left: auto; font-size: 10.5px; color: var(--bp-ink-faint); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ r.d }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-for>
+
+  <!-- ========================= PANE PALETTE ========================= -->
+  <div style="max-width: 1080px; margin-top: 48px;">
+    <div style="display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--bp-border);">
+      <h2 style="font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin: 0;">Pane identity palette</h2>
+      <span style="font-size: 11px; color: var(--bp-ink-faint);">--bp-pane-1 … --bp-pane-10</span>
+    </div>
+    <p style="font-size: 12.5px; line-height: 1.6; color: var(--bp-ink-muted); max-width: 660px; margin: 12px 0 20px; text-wrap: pretty;">Ten hues on <em>one</em> OKLCH lightness and <em>one</em> chroma — 0.760/0.105 on dark, 0.550/0.115 on light. Separation is carried entirely by hue, so no pane shouts louder than another and none of them competes with page content. Fixed lightness is also what makes them survive rasterising: an agent reading a composite PNG discriminates hue reliably at equal value, and each colour clears 3:1 against both chrome grounds.</p>
+
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); gap: 12px;">
+      <sc-for list="{{ panes }}" as="p" hint-placeholder-count="10">
+        <div style="border: 1px solid var(--bp-border); border-radius: 4px; overflow: hidden; background: var(--bp-chrome-raised);">
+          <div style="height: 30px; background: {{ p.v }}; display: flex; align-items: center; padding: 0 8px; gap: 6px;">
+            <span style="font-family: var(--bp-font-mono); font-size: 10px; font-weight: 500; color: var(--bp-pane-ink);">{{ p.tok }}</span>
+            <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-pane-ink); opacity: 0.72;">{{ p.hue }}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 8px;">
+            <span style="display: inline-flex; align-items: center; height: 15px; padding: 0 5px; border-radius: 2px; font-family: var(--bp-font-mono); font-size: 9.5px; font-weight: 500; letter-spacing: 0.02em; background: {{ p.v }}; color: var(--bp-pane-ink);">{{ p.label }}</span>
+            <span style="display: inline-flex; align-items: center; height: 15px; padding: 0 5px; border-radius: 2px; font-family: var(--bp-font-mono); font-size: 9.5px; letter-spacing: 0.02em; color: {{ p.v }}; box-shadow: inset 0 0 0 1px {{ p.v }};">{{ p.label }}</span>
+            <span style="margin-left: auto; font-size: 10px; color: var(--bp-ink-faint);">{{ p.name }}</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; height: 34px; border-top: 1px solid var(--bp-border);">
+            <span style="background: #ffffff; box-shadow: inset 0 0 0 2px {{ p.v }};"></span>
+            <span style="background: #000000; box-shadow: inset 0 0 0 2px {{ p.v }};"></span>
+            <span style="background: linear-gradient(120deg, #ff0080, #00e0ff); box-shadow: inset 0 0 0 2px {{ p.v }};"></span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="font-size: 10.5px; color: var(--bp-ink-faint); margin-top: 8px;">Bottom strip: the colour as a 2px pane border over white, black and a saturated gradient — the three worst cases for content we do not own.</div>
+  </div>
+
+  <!-- ============================= TYPE ============================= -->
+  <div style="max-width: 1080px; margin-top: 48px;">
+    <div style="display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--bp-border);">
+      <h2 style="font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin: 0;">Type &amp; density</h2>
+      <span style="font-size: 11px; color: var(--bp-ink-faint);">Inter for chrome, mono for anything a machine wrote</span>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 32px;">
+      <div>
+        <sc-for list="{{ typeRows }}" as="t" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; gap: 12px; height: 34px; border-bottom: 1px solid var(--bp-border);">
+            <span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-faint); width: 118px; flex: none;">{{ t.tok }}</span>
+            <span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted); width: 34px; flex: none;">{{ t.px }}</span>
+            <span style="color: var(--bp-ink); font-size: {{ t.px }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.use }}</span>
+          </div>
+        </sc-for>
+      </div>
+      <div>
+        <sc-for list="{{ densityRows }}" as="t" hint-placeholder-count="8">
+          <div style="display: flex; align-items: center; gap: 12px; height: 34px; border-bottom: 1px solid var(--bp-border);">
+            <span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-faint); width: 118px; flex: none;">{{ t.tok }}</span>
+            <span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted); width: 34px; flex: none;">{{ t.px }}</span>
+            <span style="height: 10px; border-radius: 1px; background: var(--bp-accent-wash); box-shadow: inset 0 0 0 1px var(--bp-accent); width: {{ t.px }}; flex: none;"></span>
+            <span style="font-size: 10.5px; color: var(--bp-ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.use }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== RADII / STROKE / SHADOW ==================== -->
+  <div style="max-width: 1080px; margin-top: 48px;">
+    <div style="display: flex; align-items: baseline; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--bp-border);">
+      <h2 style="font-size: 12px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; margin: 0;">Radii, strokes, elevation</h2>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 24px; margin-top: 16px;">
+
+      <div>
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin-bottom: 10px;">Radii</div>
+        <div style="display: flex; gap: 10px;">
+          <sc-for list="{{ radii }}" as="r" hint-placeholder-count="4">
+            <div style="flex: 1;">
+              <div style="height: 46px; background: var(--bp-surface); box-shadow: inset 0 0 0 1px var(--bp-border-strong); border-radius: {{ r.px }};"></div>
+              <div style="font-family: var(--bp-font-mono); font-size: 9.5px; color: var(--bp-ink-faint); margin-top: 5px;">{{ r.tok }}</div>
+              <div style="font-size: 9.5px; color: var(--bp-ink-faint);">{{ r.use }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin-bottom: 10px;">Strokes</div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px; height: 26px;"><span style="width: 84px; height: 1px; background: var(--bp-border); flex: none;"></span><span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted);">--bp-border</span></div>
+          <div style="display: flex; align-items: center; gap: 10px; height: 26px;"><span style="width: 84px; height: 1px; background: var(--bp-border-strong); flex: none;"></span><span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted);">--bp-border-strong</span></div>
+          <div style="display: flex; align-items: center; gap: 10px; height: 26px;"><span style="width: 84px; height: 1px; background: var(--bp-border-seam); flex: none;"></span><span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted);">--bp-border-seam</span></div>
+          <div style="display: flex; align-items: center; gap: 10px; height: 26px;"><span style="width: 84px; height: 2px; background: var(--bp-error); flex: none;"></span><span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted);">--bp-stroke-overlay</span></div>
+          <div style="font-family: var(--bp-font-mono); font-size: 10.5px; line-height: 1.6; color: var(--bp-ink-faint); background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); border-radius: 4px; padding: 8px 10px;">--bp-zoom: 0.25;<br>--bp-stroke-overlay:<br>&nbsp;&nbsp;calc(1.5px / var(--bp-zoom));</div>
+          <div style="font-size: 11px; line-height: 1.55; color: var(--bp-ink-muted);">Set <code style="font-family: var(--bp-font-mono);">--bp-zoom</code> on the canvas; every stroke drawn over a pane counter-scales to a constant 1.5 screen px.</div>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--bp-ink-faint); margin-bottom: 10px;">Elevation</div>
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <sc-for list="{{ shadows }}" as="s" hint-placeholder-count="4">
+            <div style="height: 40px; border-radius: 4px; background: var(--bp-chrome-raised); box-shadow: {{ s.v }}; display: flex; align-items: center; padding: 0 10px;">
+              <span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted);">{{ s.tok }}</span>
+              <span style="margin-left: auto; font-size: 10px; color: var(--bp-ink-faint);">{{ s.use }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div style="max-width: 1080px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--bp-border); display: flex; gap: 20px; flex-wrap: wrap; font-size: 11.5px; color: var(--bp-ink-faint);">
+    <span>Next: <a href="Breakpoint Directions.dc.html">the two chrome directions</a></span>
+    <span>Then: <a href="Breakpoint Prototype.dc.html">the clickable prototype</a></span>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1240,&quot;height&quot;:900}}">
+const PANE_NAMES = ['blue','teal','green','amber','rust','pink','indigo','cyan','orange','violet'];
+const PANE_HUES = [218,168,128,82,28,332,248,196,52,302];
+const PANE_LABELS = ['MOB','TAB','DESK','WIDE','SE','IPAD','A7','4K','FOLD','TV'];
+
+class Component extends DCLogic {
+  state = { theme: 'dark' };
+
+  renderVals() {
+    const dark = this.state.theme === 'dark';
+    return {
+      themeClass: dark ? 'dark' : 'light',
+      setDark: () => this.setState({ theme: 'dark' }),
+      setLight: () => this.setState({ theme: 'light' }),
+      'bp-dark-btn': dark ? 'var(--bp-surface)' : 'transparent',
+      'bp-light-btn': dark ? 'transparent' : 'var(--bp-surface)',
+
+      panes: PANE_NAMES.map((name, i) => ({
+        name,
+        tok: '--bp-pane-' + (i + 1),
+        v: 'var(--bp-pane-' + (i + 1) + ')',
+        hue: 'h' + PANE_HUES[i],
+        label: PANE_LABELS[i],
+      })),
+
+      colorGroups: [
+        { name: 'Chrome', note: 'the frame — never a visual participant', rows: [
+          { t: '--bp-canvas', v: 'var(--bp-canvas)', d: 'scrolling surface behind panes' },
+          { t: '--bp-canvas-grid', v: 'var(--bp-canvas-grid)', d: 'ruler ticks' },
+          { t: '--bp-chrome', v: 'var(--bp-chrome)', d: 'toolbar, bezel, panel plate' },
+          { t: '--bp-chrome-raised', v: 'var(--bp-chrome-raised)', d: 'popovers, palette, dialogs' },
+          { t: '--bp-chrome-sunken', v: 'var(--bp-chrome-sunken)', d: 'input wells, inactive tabs' },
+          { t: '--bp-surface', v: 'var(--bp-surface)', d: 'selected / pressed plate' },
+          { t: '--bp-border', v: 'var(--bp-border)', d: 'chrome-on-chrome division' },
+          { t: '--bp-border-strong', v: 'var(--bp-border-strong)', d: 'control outline, pane shell' },
+          { t: '--bp-border-seam', v: 'var(--bp-border-seam)', d: 'bezel-to-content hairline' },
+        ]},
+        { name: 'Ink', note: 'four steps, no more', rows: [
+          { t: '--bp-ink', v: 'var(--bp-ink)', d: 'primary label' },
+          { t: '--bp-ink-muted', v: 'var(--bp-ink-muted)', d: 'secondary, timestamps' },
+          { t: '--bp-ink-faint', v: 'var(--bp-ink-faint)', d: 'units, placeholders' },
+          { t: '--bp-ink-disabled', v: 'var(--bp-ink-disabled)', d: 'unavailable control' },
+        ]},
+        { name: 'Accent', note: 'a line and a glow, never a flood', rows: [
+          { t: '--bp-accent', v: 'var(--bp-accent)', d: 'focus ring, active state' },
+          { t: '--bp-accent-hover', v: 'var(--bp-accent-hover)', d: 'hover' },
+          { t: '--bp-accent-press', v: 'var(--bp-accent-press)', d: 'pressed' },
+          { t: '--bp-accent-wash', v: 'var(--bp-accent-wash)', d: 'selected row tint' },
+          { t: '--bp-accent-ink', v: 'var(--bp-accent-ink)', d: 'accent at text size' },
+        ]},
+        { name: 'Status', note: 'console levels, toasts, error counts', rows: [
+          { t: '--bp-error', v: 'var(--bp-error)', d: 'console error, crash' },
+          { t: '--bp-error-wash', v: 'var(--bp-error-wash)', d: 'error row ground' },
+          { t: '--bp-warn', v: 'var(--bp-warn)', d: 'console warn, layout finding' },
+          { t: '--bp-warn-wash', v: 'var(--bp-warn-wash)', d: 'warn row ground' },
+          { t: '--bp-info', v: 'var(--bp-info)', d: 'console info, network 2xx' },
+          { t: '--bp-info-wash', v: 'var(--bp-info-wash)', d: 'info row ground' },
+          { t: '--bp-success', v: 'var(--bp-success)', d: 'process healthy, trust granted' },
+          { t: '--bp-success-wash', v: 'var(--bp-success-wash)', d: 'success row ground' },
+        ]},
+      ],
+
+      typeRows: [
+        { tok: '--bp-text-micro', px: '10px', use: 'DPR, badge glyphs, tier-4 header' },
+        { tok: '--bp-text-sm', px: '11px', use: 'timestamps, tab labels, units' },
+        { tok: '--bp-text-base', px: '12px', use: 'default chrome label' },
+        { tok: '--bp-text-lg', px: '13px', use: 'address bar, console message' },
+        { tok: '--bp-text-xl', px: '15px', use: 'command palette input only' },
+      ],
+      densityRows: [
+        { tok: '--bp-space-2', px: '4px', use: 'the grid unit' },
+        { tok: '--bp-space-3', px: '8px', use: 'inside a control' },
+        { tok: '--bp-space-4', px: '12px', use: 'between control groups' },
+        { tok: '--bp-space-5', px: '16px', use: 'panel gutter' },
+        { tok: '--bp-row-sm', px: '22px', use: 'console row' },
+        { tok: '--bp-row', px: '24px', use: 'pane header, list row' },
+        { tok: '--bp-row-md', px: '26px', use: 'toolbar control' },
+        { tok: '--bp-row-lg', px: '28px', use: 'address bar' },
+      ],
+      radii: [
+        { tok: '--bp-radius-xs', px: '2px', use: 'badges' },
+        { tok: '--bp-radius-sm', px: '4px', use: 'controls, pane' },
+        { tok: '--bp-radius-md', px: '6px', use: 'popovers' },
+        { tok: '--bp-radius-lg', px: '8px', use: 'palette' },
+      ],
+      shadows: [
+        { tok: '--bp-shadow-sm', v: 'var(--bp-shadow-sm)', use: 'inline popover' },
+        { tok: '--bp-shadow-md', v: 'var(--bp-shadow-md)', use: 'dropdown, toast' },
+        { tok: '--bp-shadow-lg', v: 'var(--bp-shadow-lg)', use: 'command palette' },
+        { tok: '--bp-shadow-pane', v: 'var(--bp-shadow-pane)', use: 'pane on canvas' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
