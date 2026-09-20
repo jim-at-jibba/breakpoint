@@ -6,8 +6,9 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  // prototypes/ is throwaway spike code kept as a primary source. Never linted.
-  { ignores: ['**/node_modules', '**/dist', '**/out', 'prototypes/**'] },
+  // prototypes/ is throwaway spike code kept as a primary source, and docs/ holds
+  // generated design artefacts. Neither is ours to lint.
+  { ignores: ['**/node_modules', '**/dist', '**/out', 'prototypes/**', 'docs/**'] },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],

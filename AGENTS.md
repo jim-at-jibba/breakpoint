@@ -20,13 +20,13 @@ Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/ag
 and layout.** Consult it before styling anything. The brief that produced it is
 `docs/design/initial-design-prompt.md`.
 
-| File | What it settles |
-|---|---|
-| `globals.css` | The tokens. A `--bp-*` application layer plus shadcn's semantic names mapped on top of it, so copied component source works unmodified |
-| `Breakpoint Directions.dc.html` | The two candidate answers to "how does a tool frame content it does not own", and why the framed one won |
-| `Breakpoint Prototype.dc.html` | The surfaces and their states |
-| `Breakpoint Tokens.dc.html` | The token reference, including the pane palette over its three worst-case backgrounds |
-| `_ds/nocturne-*/` | The design system it was derived from |
+| File                            | What it settles                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `globals.css`                   | The tokens. A `--bp-*` application layer plus shadcn's semantic names mapped on top of it, so copied component source works unmodified |
+| `Breakpoint Directions.dc.html` | The two candidate answers to "how does a tool frame content it does not own", and why the framed one won                               |
+| `Breakpoint Prototype.dc.html`  | The surfaces and their states                                                                                                          |
+| `Breakpoint Tokens.dc.html`     | The token reference, including the pane palette over its three worst-case backgrounds                                                  |
+| `_ds/nocturne-*/`               | The design system it was derived from                                                                                                  |
 
 Standing rules that came out of it:
 
@@ -52,8 +52,9 @@ Standing rules that came out of it:
 npx shadcn@latest add <component>
 ```
 
-The same goes for the theme token block in `src/renderer/src/index.css` — it is CLI
-output. Edit the values, never hand-author the structure.
+`src/renderer/src/index.css` is CLI output in structure — the imports, `@custom-variant`
+and `@theme inline` block. Its token values are mirrored from the design prototype's
+`globals.css`, which is the source of truth. Change them there first.
 
 Components land in `src/renderer/src/components/ui/`. Once generated they are ours to
 tighten to devtools density (PRD 8.2), edited in place rather than wrapped at each use
