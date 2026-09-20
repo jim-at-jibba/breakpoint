@@ -28,7 +28,11 @@
   .pane h2 { margin: 0 0 6px; font: 600 12px/1.3 inherit; color: #cfd6df;
     display: flex; gap: 8px; align-items: baseline; }
   .pane h2 .dim { color: #7c8797; font-weight: 400; font-family: ui-monospace, Menlo, monospace; }
-  webview { display: block; background: #fff; border: 0; }
+  /* Electron's <webview> uses display:flex internally so its child iframe fills
+     the container. Overriding it with display:block collapses the guest to the
+     default replaced-element height of 150px: width fills, height does not.
+     Only inline-flex is a safe substitute. */
+  webview { display: inline-flex; background: #fff; border: 0; }
 
   #panel { width: 430px; flex: none; border-left: 1px solid #2a2f37; background: #181c21;
     overflow: auto; padding: 10px; }
@@ -277,6 +281,58 @@ async function waitFor (pred, timeout = 20000) {
   return false;
 }
 
+function hostElementRects () {
+  return [...document.querySelectorAll('.pane')].map(el => {
+    const wv = el.querySelector('webview');
+    const r = wv.getBoundingClientRect();
+    const cs = getComputedStyle(wv);
+    return { pane: el.dataset.pane,
+             rect: { w: Math.round(r.width), h: Math.round(r.height) },
+             css: { display: cs.display, width: cs.width, height: cs.height },
+             attrs: wv.getAttribute('style') };
+  });
+}
+
+async function runIsolate () {
+  await waitFor(s => s.panes.every(p => !p.pending && p.attached));
+  await sleep(2000);
+  setZoom(1);
+  await sleep(800);
+  await window.spike.mark('ISOLATE baseline (emulation on, zoom 100%)');
+  await window.spike.paneShot('p2');
+  for (const kind of ['invalidate', 'metrics', 'dpr1', 'clear']) {
+    await window.spike.nudge('p2', kind);
+    await sleep(1200);
+    await window.spike.mark('ISOLATE after nudge: ' + kind);
+    await window.spike.paneShot('p2');
+  }
+  // Ground truth before any fix
+  const before = {};
+  for (const id of ['p1', 'p2', 'p6']) before[id] = await window.spike.trueSize(id);
+  await window.spike.mark('TRUE SIZE before fix ' + JSON.stringify(before));
+
+  // Candidate fix: nudge the element's own height so the guest re-syncs.
+  for (const id of ['p1', 'p2', 'p6']) {
+    const wv = document.querySelector('[data-pane="' + id + '"] webview');
+    const h = parseInt(wv.style.height, 10);
+    wv.style.height = (h + 1) + 'px';
+    await sleep(250);
+    wv.style.height = h + 'px';
+    await sleep(250);
+  }
+  await sleep(1000);
+  const after = {};
+  for (const id of ['p1', 'p2', 'p6']) after[id] = await window.spike.trueSize(id);
+  await window.spike.mark('TRUE SIZE after host resize nudge ' + JSON.stringify(after));
+  await sleep(600);
+  await window.spike.paneShot('p2');
+
+  await window.spike.mark('HOST ELEMENT RECTS ' + JSON.stringify(hostElementRects()));
+  await window.spike.diag();
+  await sleep(500);
+  window.spike.quit();
+}
+
 async function runDiag () {
   await waitFor(s => s.panes.every(p => !p.pending && p.attached));
   await sleep(1500);
@@ -357,7 +413,8 @@ async function runAuto () {
 }
 
 const booted = boot();
-window.spike.onAuto(mode => booted.then(mode === 'diag' ? runDiag : runAuto));
+const MODES = { diag: runDiag, isolate: runIsolate, auto: runAuto };
+window.spike.onAuto(mode => booted.then(MODES[mode] || runAuto));
 </script>
 </body>
 </html>

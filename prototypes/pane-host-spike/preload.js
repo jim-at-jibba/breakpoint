@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('spike', {
   synthClickCdp: (paneId, x, y) => ipcRenderer.invoke('probe:synthClickCdp', { paneId, x, y }),
   paneShot: paneId => ipcRenderer.invoke('probe:paneShot', paneId),
   diag: () => ipcRenderer.invoke('probe:diag'),
+  nudge: (paneId, kind) => ipcRenderer.invoke('probe:nudge', { paneId, kind }),
+  trueSize: paneId => ipcRenderer.invoke('probe:trueSize', paneId),
   devtools: (paneId, open) => ipcRenderer.invoke('probe:devtools', { paneId, open }),
   reattach: paneId => ipcRenderer.invoke('probe:reattach', paneId),
   navigate: (paneId, url) => ipcRenderer.invoke('probe:navigate', { paneId, url }),

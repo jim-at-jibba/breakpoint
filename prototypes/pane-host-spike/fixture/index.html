@@ -98,6 +98,9 @@
   }
   paint();
   addEventListener('resize', paint);
+  // Overrides land after load and some of them (touch, media) fire no resize,
+  // so the readout would otherwise show pre-emulation values forever.
+  setInterval(paint, 500);
 
   // Condition 2 evidence: a steady console beat. If the app's CDP session is
   // evicted when DevTools attaches, Runtime.consoleAPICalled stops arriving and

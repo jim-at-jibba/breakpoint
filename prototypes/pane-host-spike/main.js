@@ -465,6 +465,53 @@ ipcMain.handle('probe:diag', async () => {
   return out
 })
 
+// Isolation for the truncated-paint bug: capture a pane, nudge it in one
+// specific way, capture again. Whichever nudge restores the full page names
+// the cause. Captures reproduce the on-screen truncation faithfully, so they
+// are a valid proxy here.
+ipcMain.handle('probe:nudge', async (_e, { paneId, kind }) => {
+  const p = pane(paneId)
+  if (kind === 'metrics') {
+    await send(p, 'Emulation.setDeviceMetricsOverride', {
+      width: p.preset.width + 1, height: p.preset.height + 1,
+      deviceScaleFactor: p.preset.dpr, mobile: p.preset.mobile
+    })
+    await new Promise(r => setTimeout(r, 400))
+    await send(p, 'Emulation.setDeviceMetricsOverride', {
+      width: p.preset.width, height: p.preset.height,
+      deviceScaleFactor: p.preset.dpr, mobile: p.preset.mobile
+    })
+  } else if (kind === 'clear') {
+    await send(p, 'Emulation.clearDeviceMetricsOverride')
+  } else if (kind === 'dpr1') {
+    await send(p, 'Emulation.setDeviceMetricsOverride', {
+      width: p.preset.width, height: p.preset.height,
+      deviceScaleFactor: 1, mobile: p.preset.mobile
+    })
+  } else if (kind === 'invalidate') {
+    guest(p).invalidate()
+  }
+  note(paneId, 'nudge', kind)
+  return true
+})
+
+// Ground truth: with the override cleared, innerWidth/innerHeight report the
+// guest's REAL widget size. Everything else in this harness reports what the
+// override claims, which is not the same thing.
+ipcMain.handle('probe:trueSize', async (_e, paneId) => {
+  const p = pane(paneId)
+  await send(p, 'Emulation.clearDeviceMetricsOverride')
+  await new Promise(r => setTimeout(r, 500))
+  const { result } = await send(p, 'Runtime.evaluate', {
+    expression: 'JSON.stringify({w: innerWidth, h: innerHeight, dpr: devicePixelRatio})',
+    returnByValue: true
+  })
+  const real = JSON.parse(result.value)
+  await applyEmulation(p)
+  note(paneId, 'true-size', `${real.w}x${real.h} @${real.dpr}`)
+  return real
+})
+
 ipcMain.handle('probe:devtools', (_e, { paneId, open }) => {
   const wc = guest(pane(paneId))
   if (open) wc.openDevTools({ mode: 'detach' })
@@ -553,14 +600,15 @@ app.whenReady().then(async () => {
     }
   })
   win.loadFile('host.html')
-  if (process.argv.includes('--auto') || process.argv.includes('--diag')) {
-    const mode = process.argv.includes('--diag') ? 'diag' : 'auto'
+  if (process.argv.some(a => ['--auto', '--diag', '--isolate'].includes(a))) {
+    const mode = process.argv.includes('--diag') ? 'diag'
+      : process.argv.includes('--isolate') ? 'isolate' : 'auto'
     win.webContents.once('did-finish-load', () => win.webContents.send('auto:start', mode))
   }
   setInterval(() => {
     if (win && !win.isDestroyed()) win.webContents.send('state', snapshot())
   }, 300)
-  if (process.argv.includes('--auto') || process.argv.includes('--diag')) {
+  if (process.argv.some(a => ['--auto', '--diag', '--isolate'].includes(a))) {
     fs.mkdirSync(OUT_DIR, { recursive: true })
     setInterval(() => {
       fs.writeFileSync(path.join(OUT_DIR, 'live-state.json'),

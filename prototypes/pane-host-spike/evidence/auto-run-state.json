@@ -1,6 +1,6 @@
 {
   "snapshot": {
-    "now": 1789879471695,
+    "now": 1789880907406,
     "zoom": 0.5,
     "origins": {
       "a": "http://127.0.0.1:4100",
@@ -23,7 +23,7 @@
         "detached": null,
         "reattachedAt": null,
         "devtoolsOpen": false,
-        "osPid": 9657,
+        "osPid": 14704,
         "measured": {
           "innerWidth": 360,
           "innerHeight": 800,
@@ -41,23 +41,48 @@
         },
         "measureError": null,
         "counts": {
-          "consoleAPICalled": 62,
+          "consoleAPICalled": 64,
           "exceptionThrown": 0,
           "logEntryAdded": 0,
           "network": 1
         },
-        "heartbeatAgeMs": 425,
-        "heartbeatCount": 58,
-        "lastClick": null,
-        "clickSummary": {},
+        "heartbeatAgeMs": 968,
+        "heartbeatCount": 60,
+        "lastClick": {
+          "at": 1789880856850,
+          "zoom": 0.25,
+          "source": "cdpInput",
+          "onTarget": true,
+          "hitId": "target",
+          "dx": -1,
+          "dy": 1.2,
+          "innerWidth": 360
+        },
+        "clickSummary": {
+          "100%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 0.8
+          },
+          "50%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1
+          },
+          "25%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1.2
+          }
+        },
         "cdpTimeouts": 0,
         "lastCdpTimeout": null,
         "lastCdpError": null,
         "lastNav": {
-          "at": 1789879453272,
+          "at": 1789880885665,
           "url": "http://localhost:4101/index.html",
-          "pidBefore": 9326,
-          "pidAfter": 9657,
+          "pidBefore": 14682,
+          "pidAfter": 14704,
           "processSwapped": true,
           "cdpStillAttached": true,
           "innerWidth": 360,
@@ -86,7 +111,7 @@
         "detached": null,
         "reattachedAt": null,
         "devtoolsOpen": false,
-        "osPid": 9677,
+        "osPid": 14714,
         "measured": {
           "innerWidth": 390,
           "innerHeight": 844,
@@ -109,18 +134,43 @@
           "logEntryAdded": 0,
           "network": 2
         },
-        "heartbeatAgeMs": 12425,
+        "heartbeatAgeMs": 15743,
         "heartbeatCount": 46,
-        "lastClick": null,
-        "clickSummary": {},
+        "lastClick": {
+          "at": 1789880857498,
+          "zoom": 0.25,
+          "source": "cdpInput",
+          "onTarget": true,
+          "hitId": "target",
+          "dx": 1,
+          "dy": 1.2,
+          "innerWidth": 390
+        },
+        "clickSummary": {
+          "100%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 0.8
+          },
+          "50%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1
+          },
+          "25%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1.2
+          }
+        },
         "cdpTimeouts": 0,
         "lastCdpTimeout": null,
         "lastCdpError": null,
         "lastNav": {
-          "at": 1789879459749,
+          "at": 1789880892546,
           "url": "https://example.com/",
-          "pidBefore": 9655,
-          "pidAfter": 9677,
+          "pidBefore": 14703,
+          "pidAfter": 14714,
           "processSwapped": true,
           "cdpStillAttached": true,
           "innerWidth": 390,
@@ -149,7 +199,7 @@
         "detached": null,
         "reattachedAt": null,
         "devtoolsOpen": false,
-        "osPid": 9656,
+        "osPid": 14705,
         "measured": {
           "innerWidth": 430,
           "innerHeight": 932,
@@ -167,23 +217,48 @@
         },
         "measureError": null,
         "counts": {
-          "consoleAPICalled": 62,
+          "consoleAPICalled": 64,
           "exceptionThrown": 0,
           "logEntryAdded": 0,
           "network": 1
         },
-        "heartbeatAgeMs": 425,
-        "heartbeatCount": 58,
-        "lastClick": null,
-        "clickSummary": {},
+        "heartbeatAgeMs": 967,
+        "heartbeatCount": 60,
+        "lastClick": {
+          "at": 1789880857883,
+          "zoom": 0.25,
+          "source": "cdpInput",
+          "onTarget": true,
+          "hitId": "target",
+          "dx": 1,
+          "dy": -0.8,
+          "innerWidth": 430
+        },
+        "clickSummary": {
+          "100%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 0.8
+          },
+          "50%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1
+          },
+          "25%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1
+          }
+        },
         "cdpTimeouts": 0,
         "lastCdpTimeout": null,
         "lastCdpError": null,
         "lastNav": {
-          "at": 1789879453272,
+          "at": 1789880885664,
           "url": "http://localhost:4101/index.html",
-          "pidBefore": 9330,
-          "pidAfter": 9656,
+          "pidBefore": 14686,
+          "pidAfter": 14705,
           "processSwapped": true,
           "cdpStillAttached": true,
           "innerWidth": 430,
@@ -212,7 +287,7 @@
         "detached": null,
         "reattachedAt": null,
         "devtoolsOpen": false,
-        "osPid": 9658,
+        "osPid": 14706,
         "measured": {
           "innerWidth": 820,
           "innerHeight": 1180,
@@ -230,23 +305,48 @@
         },
         "measureError": null,
         "counts": {
-          "consoleAPICalled": 62,
+          "consoleAPICalled": 64,
           "exceptionThrown": 0,
           "logEntryAdded": 0,
           "network": 1
         },
-        "heartbeatAgeMs": 425,
-        "heartbeatCount": 58,
-        "lastClick": null,
-        "clickSummary": {},
+        "heartbeatAgeMs": 967,
+        "heartbeatCount": 60,
+        "lastClick": {
+          "at": 1789880858269,
+          "zoom": 0.25,
+          "source": "cdpInput",
+          "onTarget": true,
+          "hitId": "target",
+          "dx": 1,
+          "dy": 1.2,
+          "innerWidth": 820
+        },
+        "clickSummary": {
+          "100%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 0.8
+          },
+          "50%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 0.8
+          },
+          "25%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1.2
+          }
+        },
         "cdpTimeouts": 0,
         "lastCdpTimeout": null,
         "lastCdpError": null,
         "lastNav": {
-          "at": 1789879453273,
+          "at": 1789880885664,
           "url": "http://localhost:4101/index.html",
-          "pidBefore": 9332,
-          "pidAfter": 9658,
+          "pidBefore": 14688,
+          "pidAfter": 14706,
           "processSwapped": true,
           "cdpStillAttached": true,
           "innerWidth": 820,
@@ -275,7 +375,7 @@
         "detached": null,
         "reattachedAt": null,
         "devtoolsOpen": false,
-        "osPid": 9659,
+        "osPid": 14708,
         "measured": {
           "innerWidth": 1280,
           "innerHeight": 800,
@@ -293,23 +393,43 @@
         },
         "measureError": null,
         "counts": {
-          "consoleAPICalled": 61,
+          "consoleAPICalled": 63,
           "exceptionThrown": 0,
           "logEntryAdded": 0,
           "network": 1
         },
-        "heartbeatAgeMs": 290,
-        "heartbeatCount": 57,
-        "lastClick": null,
-        "clickSummary": {},
+        "heartbeatAgeMs": 968,
+        "heartbeatCount": 59,
+        "lastClick": {
+          "at": 1789880858655,
+          "zoom": 0.25,
+          "source": "cdpInput",
+          "onTarget": true,
+          "hitId": "target",
+          "dx": -1,
+          "dy": 1.2,
+          "innerWidth": 1280
+        },
+        "clickSummary": {
+          "50%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 0.8
+          },
+          "25%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1.2
+          }
+        },
         "cdpTimeouts": 0,
         "lastCdpTimeout": null,
         "lastCdpError": null,
         "lastNav": {
-          "at": 1789879453272,
+          "at": 1789880885664,
           "url": "http://localhost:4101/index.html",
-          "pidBefore": 9334,
-          "pidAfter": 9659,
+          "pidBefore": 14690,
+          "pidAfter": 14708,
           "processSwapped": true,
           "cdpStillAttached": true,
           "innerWidth": 1280,
@@ -338,7 +458,7 @@
         "detached": null,
         "reattachedAt": null,
         "devtoolsOpen": false,
-        "osPid": 9660,
+        "osPid": 14707,
         "measured": {
           "innerWidth": 1440,
           "innerHeight": 900,
@@ -356,23 +476,43 @@
         },
         "measureError": null,
         "counts": {
-          "consoleAPICalled": 61,
+          "consoleAPICalled": 63,
           "exceptionThrown": 0,
           "logEntryAdded": 0,
           "network": 1
         },
-        "heartbeatAgeMs": 290,
-        "heartbeatCount": 57,
-        "lastClick": null,
-        "clickSummary": {},
+        "heartbeatAgeMs": 967,
+        "heartbeatCount": 59,
+        "lastClick": {
+          "at": 1789880859041,
+          "zoom": 0.25,
+          "source": "cdpInput",
+          "onTarget": true,
+          "hitId": "target",
+          "dx": 1,
+          "dy": 1.2,
+          "innerWidth": 1440
+        },
+        "clickSummary": {
+          "50%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1
+          },
+          "25%": {
+            "hits": 1,
+            "misses": 0,
+            "maxOffset": 1.2
+          }
+        },
         "cdpTimeouts": 0,
         "lastCdpTimeout": null,
         "lastCdpError": null,
         "lastNav": {
-          "at": 1789879453272,
+          "at": 1789880885664,
           "url": "http://localhost:4101/index.html",
-          "pidBefore": 9336,
-          "pidAfter": 9660,
+          "pidBefore": 14692,
+          "pidAfter": 14707,
           "processSwapped": true,
           "cdpStillAttached": true,
           "innerWidth": 1440,
@@ -388,1015 +528,1111 @@
     ],
     "log": [
       {
-        "at": 1789879470194,
+        "at": 1789880905443,
         "paneId": null,
         "kind": "MARK",
-        "detail": "auto run complete: /Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+        "detail": "auto run complete: /Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789880905440.json | beats p2=46 p1=59 p3=59 p4=59 p6=58 p5=58"
       },
       {
-        "at": 1789879470193,
+        "at": 1789880905440,
         "paneId": null,
         "kind": "dump",
-        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json"
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789880905440.json"
       },
       {
-        "at": 1789879470192,
+        "at": 1789880905439,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C3 sampled after reapply | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+        "detail": "C3 sampled after reapply | beats p2=46 p1=58 p3=58 p4=58 p6=57 p5=57"
       },
       {
-        "at": 1789879468191,
+        "at": 1789880902446,
         "paneId": "all",
         "kind": "reapply",
         "detail": "overrides reapplied"
       },
       {
-        "at": 1789879468185,
+        "at": 1789880902439,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C3 reapplying overrides (the PRD fallback) | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+        "detail": "C3 reapplying overrides (the PRD fallback) | beats p2=46 p1=55 p3=56 p4=55 p6=54 p5=55"
       },
       {
-        "at": 1789879467680,
+        "at": 1789880901439,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C3 sampled after external navigation | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+        "detail": "C3 sampled after external navigation | beats p2=46 p1=54 p3=54 p4=54 p6=53 p5=53"
       },
       {
-        "at": 1789879459749,
+        "at": 1789880892546,
         "paneId": "p2",
         "kind": "did-finish-load",
-        "detail": "pid 9655->9677 swap=true innerWidth=390/390 survived=true"
+        "detail": "pid 14703->14714 swap=true innerWidth=390/390 survived=true"
       },
       {
-        "at": 1789879459748,
+        "at": 1789880892546,
         "paneId": "p2",
         "kind": "console.warning",
         "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
       },
       {
-        "at": 1789879459739,
+        "at": 1789880892532,
         "paneId": "p2",
         "kind": "frameNavigated",
         "detail": "https://example.com/"
       },
       {
-        "at": 1789879459675,
+        "at": 1789880892439,
         "paneId": "p2",
         "kind": "navigate",
         "detail": "https://example.com/"
       },
       {
-        "at": 1789879459675,
+        "at": 1789880892438,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C3 navigating pane 2 to https://example.com (external, guaranteed cross-site) | beats p2=46 p3=46 p1=46 p4=46 p5=45 p6=45"
+        "detail": "C3 navigating pane 2 to https://example.com (external, guaranteed cross-site) | beats p2=46 p1=46 p3=46 p4=46 p6=44 p5=44"
       },
       {
-        "at": 1789879459170,
+        "at": 1789880891570,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C3 sampled after cross-origin navigation, no reapply | beats p2=45 p3=45 p1=45 p4=45 p5=44 p6=44"
+        "detail": "C3 sampled after cross-origin navigation, no reapply | beats p2=45 p1=45 p3=45 p4=45 p6=44 p5=44"
       },
       {
-        "at": 1789879453273,
-        "paneId": "p4",
-        "kind": "did-finish-load",
-        "detail": "pid 9332->9658 swap=true innerWidth=820/820 survived=true"
-      },
-      {
-        "at": 1789879453272,
-        "paneId": "p6",
-        "kind": "did-finish-load",
-        "detail": "pid 9336->9660 swap=true innerWidth=1440/1440 survived=true"
-      },
-      {
-        "at": 1789879453272,
-        "paneId": "p2",
-        "kind": "did-finish-load",
-        "detail": "pid 9328->9655 swap=true innerWidth=390/390 survived=true"
-      },
-      {
-        "at": 1789879453272,
-        "paneId": "p6",
-        "kind": "console.warning",
-        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-      },
-      {
-        "at": 1789879453272,
-        "paneId": "p2",
-        "kind": "console.warning",
-        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-      },
-      {
-        "at": 1789879453272,
-        "paneId": "p3",
-        "kind": "did-finish-load",
-        "detail": "pid 9330->9656 swap=true innerWidth=430/430 survived=true"
-      },
-      {
-        "at": 1789879453272,
+        "at": 1789880885665,
         "paneId": "p1",
         "kind": "did-finish-load",
-        "detail": "pid 9326->9657 swap=true innerWidth=360/360 survived=true"
+        "detail": "pid 14682->14704 swap=true innerWidth=360/360 survived=true"
       },
       {
-        "at": 1789879453272,
+        "at": 1789880885665,
         "paneId": "p1",
         "kind": "console.warning",
         "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
       },
       {
-        "at": 1789879453272,
+        "at": 1789880885664,
+        "paneId": "p3",
+        "kind": "did-finish-load",
+        "detail": "pid 14686->14705 swap=true innerWidth=430/430 survived=true"
+      },
+      {
+        "at": 1789880885664,
         "paneId": "p3",
         "kind": "console.warning",
         "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
       },
       {
-        "at": 1789879453272,
-        "paneId": "p4",
-        "kind": "console.warning",
-        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-      },
-      {
-        "at": 1789879453272,
+        "at": 1789880885664,
         "paneId": "p5",
         "kind": "did-finish-load",
-        "detail": "pid 9334->9659 swap=true innerWidth=1280/1280 survived=true"
+        "detail": "pid 14690->14708 swap=true innerWidth=1280/1280 survived=true"
       },
       {
-        "at": 1789879453271,
+        "at": 1789880885664,
         "paneId": "p5",
         "kind": "console.warning",
         "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
       },
       {
-        "at": 1789879453269,
-        "paneId": "p4",
-        "kind": "console.error",
-        "detail": "fixture loaded at http://localhost:4101"
-      },
-      {
-        "at": 1789879453269,
-        "paneId": "p6",
-        "kind": "console.error",
-        "detail": "fixture loaded at http://localhost:4101"
-      },
-      {
-        "at": 1789879453269,
-        "paneId": "p1",
-        "kind": "console.error",
-        "detail": "fixture loaded at http://localhost:4101"
-      },
-      {
-        "at": 1789879453269,
+        "at": 1789880885664,
         "paneId": "p2",
-        "kind": "console.error",
-        "detail": "fixture loaded at http://localhost:4101"
+        "kind": "did-finish-load",
+        "detail": "pid 14684->14703 swap=true innerWidth=390/390 survived=true"
       },
       {
-        "at": 1789879453268,
-        "paneId": "p3",
-        "kind": "console.error",
-        "detail": "fixture loaded at http://localhost:4101"
+        "at": 1789880885664,
+        "paneId": "p2",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
       },
       {
-        "at": 1789879453268,
+        "at": 1789880885664,
+        "paneId": "p6",
+        "kind": "did-finish-load",
+        "detail": "pid 14692->14707 swap=true innerWidth=1440/1440 survived=true"
+      },
+      {
+        "at": 1789880885664,
+        "paneId": "p6",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789880885664,
+        "paneId": "p4",
+        "kind": "did-finish-load",
+        "detail": "pid 14688->14706 swap=true innerWidth=820/820 survived=true"
+      },
+      {
+        "at": 1789880885664,
+        "paneId": "p4",
+        "kind": "console.warning",
+        "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+      },
+      {
+        "at": 1789880885662,
         "paneId": "p5",
         "kind": "console.error",
         "detail": "fixture loaded at http://localhost:4101"
       },
       {
-        "at": 1789879453250,
+        "at": 1789880885661,
+        "paneId": "p6",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789880885661,
+        "paneId": "p3",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789880885660,
+        "paneId": "p1",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789880885660,
+        "paneId": "p4",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789880885660,
+        "paneId": "p2",
+        "kind": "console.error",
+        "detail": "fixture loaded at http://localhost:4101"
+      },
+      {
+        "at": 1789880885631,
         "paneId": "p6",
         "kind": "frameNavigated",
         "detail": "http://localhost:4101/index.html"
       },
       {
-        "at": 1789879453232,
-        "paneId": "p4",
-        "kind": "frameNavigated",
-        "detail": "http://localhost:4101/index.html"
-      },
-      {
-        "at": 1789879453231,
-        "paneId": "p3",
-        "kind": "frameNavigated",
-        "detail": "http://localhost:4101/index.html"
-      },
-      {
-        "at": 1789879453231,
-        "paneId": "p2",
-        "kind": "frameNavigated",
-        "detail": "http://localhost:4101/index.html"
-      },
-      {
-        "at": 1789879453230,
-        "paneId": "p1",
-        "kind": "frameNavigated",
-        "detail": "http://localhost:4101/index.html"
-      },
-      {
-        "at": 1789879453229,
+        "at": 1789880885629,
         "paneId": "p5",
         "kind": "frameNavigated",
         "detail": "http://localhost:4101/index.html"
       },
       {
-        "at": 1789879453167,
+        "at": 1789880885629,
+        "paneId": "p4",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789880885626,
+        "paneId": "p3",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789880885626,
+        "paneId": "p1",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789880885626,
+        "paneId": "p2",
+        "kind": "frameNavigated",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789880885567,
+        "paneId": "p5",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789880885566,
         "paneId": "p6",
         "kind": "navigate",
         "detail": "http://localhost:4101/index.html"
       },
       {
-        "at": 1789879453166,
-        "paneId": "p5",
-        "kind": "navigate",
-        "detail": "http://localhost:4101/index.html"
-      },
-      {
-        "at": 1789879453165,
+        "at": 1789880885564,
         "paneId": "p4",
         "kind": "navigate",
         "detail": "http://localhost:4101/index.html"
       },
       {
-        "at": 1789879453163,
-        "paneId": "p1",
-        "kind": "navigate",
-        "detail": "http://localhost:4101/index.html"
-      },
-      {
-        "at": 1789879453161,
+        "at": 1789880885563,
         "paneId": "p3",
         "kind": "navigate",
         "detail": "http://localhost:4101/index.html"
       },
       {
-        "at": 1789879453158,
+        "at": 1789880885561,
+        "paneId": "p1",
+        "kind": "navigate",
+        "detail": "http://localhost:4101/index.html"
+      },
+      {
+        "at": 1789880885556,
         "paneId": "p2",
         "kind": "navigate",
         "detail": "http://localhost:4101/index.html"
       },
       {
-        "at": 1789879453157,
+        "at": 1789880885555,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C3 navigating all panes to origin B (different hostname) | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+        "detail": "C3 navigating all panes to origin B (different hostname) | beats p2=40 p1=40 p3=40 p4=40 p6=39 p5=39"
       },
       {
-        "at": 1789879453157,
+        "at": 1789880885555,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 sampled after reattach | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+        "detail": "C2 sampled after reattach | beats p2=40 p1=40 p3=40 p4=40 p6=39 p5=39"
       },
       {
-        "at": 1789879448156,
+        "at": 1789880880554,
         "paneId": "p2",
         "kind": "reattach-failed",
         "detail": "Debugger is already attached to the target"
       },
       {
-        "at": 1789879448155,
+        "at": 1789880880554,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 attempting explicit reattach of pane 2 | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+        "detail": "C2 attempting explicit reattach of pane 2 | beats p2=35 p1=35 p3=35 p4=35 p6=34 p5=34"
       },
       {
-        "at": 1789879448155,
+        "at": 1789880880553,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 sampled after DevTools close | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+        "detail": "C2 sampled after DevTools close | beats p2=35 p1=35 p3=35 p4=35 p6=34 p5=34"
       },
       {
-        "at": 1789879440150,
+        "at": 1789880872548,
         "paneId": "p2",
         "kind": "devtools-closed",
         "detail": ""
       },
       {
-        "at": 1789879440135,
+        "at": 1789880872538,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 closing DevTools | beats p2=27 p3=27 p1=26 p4=26 p5=26 p6=26"
+        "detail": "C2 closing DevTools | beats p2=27 p1=27 p3=27 p4=27 p6=26 p5=26"
       },
       {
-        "at": 1789879439631,
+        "at": 1789880872033,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 sampled with DevTools open | beats p2=26 p3=26 p1=26 p4=26 p5=26 p6=26"
+        "detail": "C2 sampled with DevTools open | beats p2=26 p1=26 p3=26 p4=26 p6=25 p5=25"
       },
       {
-        "at": 1789879431787,
+        "at": 1789880864249,
         "paneId": "p2",
         "kind": "devtools-opened",
         "detail": ""
       },
       {
-        "at": 1789879431625,
+        "at": 1789880864023,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 opening real DevTools on pane 2 | beats p2=18 p3=18 p1=18 p4=18 p5=18 p6=18"
+        "detail": "C2 opening real DevTools on pane 2 | beats p2=18 p1=18 p3=18 p4=18 p6=17 p5=17"
       },
       {
-        "at": 1789879428624,
+        "at": 1789880861018,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C2 baseline before DevTools | beats p2=15 p3=15 p1=15 p4=15 p5=15 p6=15"
+        "detail": "C2 baseline before DevTools | beats p2=15 p1=15 p3=15 p4=15 p6=15 p5=14"
       },
       {
-        "at": 1789879428624,
+        "at": 1789880861017,
         "paneId": "p6",
         "kind": "pane-shot",
-        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p6-1789879428624.png"
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p6-1789880861017.png"
       },
       {
-        "at": 1789879428422,
+        "at": 1789880860922,
         "paneId": "p4",
         "kind": "pane-shot",
-        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p4-1789879428422.png"
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p4-1789880860921.png"
       },
       {
-        "at": 1789879428356,
+        "at": 1789880860767,
         "paneId": "p1",
         "kind": "pane-shot",
-        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p1-1789879428356.png"
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p1-1789880860762.png"
       },
       {
-        "at": 1789879428300,
+        "at": 1789880860693,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C1 per-pane CDP screenshots (render independent of canvas compositing) | beats p2=15 p3=15 p1=15 p4=15 p5=14 p6=14"
+        "detail": "C1 per-pane CDP screenshots (render independent of canvas compositing) | beats p2=15 p1=15 p3=15 p4=15 p6=14 p5=14"
       },
       {
-        "at": 1789879427898,
+        "at": 1789880860293,
         "paneId": null,
         "kind": "zoom",
         "detail": "50%"
       },
       {
-        "at": 1789879427898,
+        "at": 1789880860291,
         "paneId": null,
         "kind": "MARK",
-        "detail": "C1 end zoom 25% | beats p2=14 p3=14 p1=14 p4=14 p5=14 p6=14"
+        "detail": "C1 end zoom 25% | beats p2=14 p1=14 p3=14 p4=14 p6=14 p5=14"
       },
       {
-        "at": 1789879427896,
+        "at": 1789880860289,
         "paneId": null,
         "kind": "capture",
-        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom25-1789879427832.png"
+        "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom25-1789880860224.png"
       }
     ]
   },
   "fullLog": [
     {
-      "at": 1789879413017,
+      "at": 1789880845376,
       "paneId": null,
       "kind": "zoom",
       "detail": "50%"
     },
     {
-      "at": 1789879413137,
+      "at": 1789880845512,
       "paneId": "p2",
       "kind": "console.error",
       "detail": "fixture loaded at http://127.0.0.1:4100"
     },
     {
-      "at": 1789879413137,
+      "at": 1789880845512,
       "paneId": "p2",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879413138,
-      "paneId": "p3",
-      "kind": "console.error",
-      "detail": "fixture loaded at http://127.0.0.1:4100"
-    },
-    {
-      "at": 1789879413138,
-      "paneId": "p3",
-      "kind": "console.warning",
-      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-    },
-    {
-      "at": 1789879413140,
-      "paneId": "p3",
-      "kind": "attached",
-      "detail": "wcId=4 pid=9330"
-    },
-    {
-      "at": 1789879413140,
+      "at": 1789880845514,
       "paneId": "p2",
       "kind": "attached",
-      "detail": "wcId=3 pid=9328"
+      "detail": "wcId=3 pid=14684"
     },
     {
-      "at": 1789879413162,
-      "paneId": "p4",
-      "kind": "console.error",
-      "detail": "fixture loaded at http://127.0.0.1:4100"
-    },
-    {
-      "at": 1789879413162,
-      "paneId": "p4",
-      "kind": "console.warning",
-      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-    },
-    {
-      "at": 1789879413162,
+      "at": 1789880845526,
       "paneId": "p1",
       "kind": "console.error",
       "detail": "fixture loaded at http://127.0.0.1:4100"
     },
     {
-      "at": 1789879413162,
+      "at": 1789880845526,
       "paneId": "p1",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879413164,
+      "at": 1789880845527,
+      "paneId": "p3",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789880845527,
+      "paneId": "p3",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789880845528,
+      "paneId": "p1",
+      "kind": "attached",
+      "detail": "wcId=2 pid=14682"
+    },
+    {
+      "at": 1789880845529,
+      "paneId": "p4",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789880845530,
+      "paneId": "p4",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789880845530,
+      "paneId": "p3",
+      "kind": "attached",
+      "detail": "wcId=4 pid=14686"
+    },
+    {
+      "at": 1789880845530,
+      "paneId": "p6",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789880845530,
+      "paneId": "p6",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789880845531,
+      "paneId": "p5",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://127.0.0.1:4100"
+    },
+    {
+      "at": 1789880845531,
+      "paneId": "p5",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789880845531,
       "paneId": "p4",
       "kind": "attached",
-      "detail": "wcId=5 pid=9332"
+      "detail": "wcId=5 pid=14688"
     },
     {
-      "at": 1789879413165,
-      "paneId": "p5",
-      "kind": "console.error",
-      "detail": "fixture loaded at http://127.0.0.1:4100"
-    },
-    {
-      "at": 1789879413165,
-      "paneId": "p1",
-      "kind": "attached",
-      "detail": "wcId=2 pid=9326"
-    },
-    {
-      "at": 1789879413165,
-      "paneId": "p5",
-      "kind": "console.warning",
-      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-    },
-    {
-      "at": 1789879413165,
-      "paneId": "p6",
-      "kind": "console.error",
-      "detail": "fixture loaded at http://127.0.0.1:4100"
-    },
-    {
-      "at": 1789879413165,
-      "paneId": "p6",
-      "kind": "console.warning",
-      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-    },
-    {
-      "at": 1789879413199,
+      "at": 1789880845532,
       "paneId": "p6",
       "kind": "attached",
-      "detail": "wcId=7 pid=9336"
+      "detail": "wcId=7 pid=14692"
     },
     {
-      "at": 1789879413200,
+      "at": 1789880845532,
       "paneId": "p5",
       "kind": "attached",
-      "detail": "wcId=6 pid=9334"
+      "detail": "wcId=6 pid=14690"
     },
     {
-      "at": 1789879415911,
+      "at": 1789880848269,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 begin zoom 100% | beats p2=2 p3=2 p1=2 p4=2 p5=2 p6=2"
+      "detail": "C1 begin zoom 100% | beats p2=2 p1=2 p3=2 p4=2 p6=1 p5=1"
     },
     {
-      "at": 1789879415912,
+      "at": 1789880848270,
       "paneId": null,
       "kind": "zoom",
       "detail": "100%"
     },
     {
-      "at": 1789879416637,
+      "at": 1789880849007,
+      "paneId": "p1",
+      "kind": "click",
+      "detail": "cdpInput zoom=100% HIT offset=0,-0.8"
+    },
+    {
+      "at": 1789880849007,
       "paneId": "p1",
       "kind": "synth-dispatch-cdp",
-      "detail": "window(65,374) zoom=100%"
+      "detail": "window(65,369) zoom=100%"
     },
     {
-      "at": 1789879416900,
+      "at": 1789880849269,
       "paneId": "p1",
       "kind": "synth-dispatch",
-      "detail": "window(65,374) zoom=100%"
+      "detail": "window(65,369) zoom=100%"
     },
     {
-      "at": 1789879417286,
+      "at": 1789880849659,
+      "paneId": "p2",
+      "kind": "click",
+      "detail": "cdpInput zoom=100% HIT offset=0,-0.8"
+    },
+    {
+      "at": 1789880849659,
       "paneId": "p2",
       "kind": "synth-dispatch-cdp",
       "detail": "window(378,351) zoom=100%"
     },
     {
-      "at": 1789879417671,
+      "at": 1789880850045,
+      "paneId": "p3",
+      "kind": "click",
+      "detail": "cdpInput zoom=100% HIT offset=0,-0.8"
+    },
+    {
+      "at": 1789880850045,
       "paneId": "p3",
       "kind": "synth-dispatch-cdp",
       "detail": "window(358,333) zoom=100%"
     },
     {
-      "at": 1789879418063,
+      "at": 1789880850444,
+      "paneId": "p4",
+      "kind": "click",
+      "detail": "cdpInput zoom=100% HIT offset=0,-0.8"
+    },
+    {
+      "at": 1789880850444,
       "paneId": "p4",
       "kind": "synth-dispatch-cdp",
       "detail": "window(163,315) zoom=100%"
     },
     {
-      "at": 1789879419562,
+      "at": 1789880851952,
       "paneId": null,
       "kind": "capture",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom100-1789879419499.png"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom100-1789880851884.png"
     },
     {
-      "at": 1789879419563,
+      "at": 1789880851952,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 end zoom 100% | beats p2=6 p3=6 p1=6 p4=6 p5=6 p6=6"
+      "detail": "C1 end zoom 100% | beats p2=6 p1=6 p3=6 p4=6 p6=6 p5=6"
     },
     {
-      "at": 1789879419565,
+      "at": 1789880851955,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 begin zoom 50% | beats p2=6 p3=6 p1=6 p4=6 p5=6 p6=6"
+      "detail": "C1 begin zoom 50% | beats p2=6 p1=6 p3=6 p4=6 p6=6 p5=6"
     },
     {
-      "at": 1789879419566,
+      "at": 1789880851956,
       "paneId": null,
       "kind": "zoom",
       "detail": "50%"
     },
     {
-      "at": 1789879420295,
+      "at": 1789880852681,
+      "paneId": "p1",
+      "kind": "click",
+      "detail": "cdpInput zoom=50% HIT offset=1,-0.8"
+    },
+    {
+      "at": 1789880852681,
       "paneId": "p1",
       "kind": "synth-dispatch-cdp",
       "detail": "window(33,210) zoom=50%"
     },
     {
-      "at": 1789879420558,
+      "at": 1789880852943,
       "paneId": "p1",
       "kind": "synth-dispatch",
       "detail": "window(33,210) zoom=50%"
     },
     {
-      "at": 1789879420947,
+      "at": 1789880853330,
+      "paneId": "p2",
+      "kind": "click",
+      "detail": "cdpInput zoom=50% HIT offset=1,-0.8"
+    },
+    {
+      "at": 1789880853330,
       "paneId": "p2",
       "kind": "synth-dispatch-cdp",
       "detail": "window(234,210) zoom=50%"
     },
     {
-      "at": 1789879421334,
+      "at": 1789880853717,
+      "paneId": "p3",
+      "kind": "click",
+      "detail": "cdpInput zoom=50% HIT offset=1,-0.8"
+    },
+    {
+      "at": 1789880853717,
       "paneId": "p3",
       "kind": "synth-dispatch-cdp",
       "detail": "window(450,201) zoom=50%"
     },
     {
-      "at": 1789879421717,
+      "at": 1789880854103,
+      "paneId": "p4",
+      "kind": "click",
+      "detail": "cdpInput zoom=50% HIT offset=0,-0.8"
+    },
+    {
+      "at": 1789880854103,
       "paneId": "p4",
       "kind": "synth-dispatch-cdp",
       "detail": "window(352,192) zoom=50%"
     },
     {
-      "at": 1789879422105,
+      "at": 1789880854491,
+      "paneId": "p5",
+      "kind": "click",
+      "detail": "cdpInput zoom=50% HIT offset=0,-0.8"
+    },
+    {
+      "at": 1789880854492,
       "paneId": "p5",
       "kind": "synth-dispatch-cdp",
       "detail": "window(237,192) zoom=50%"
     },
     {
-      "at": 1789879422492,
+      "at": 1789880854880,
+      "paneId": "p6",
+      "kind": "click",
+      "detail": "cdpInput zoom=50% HIT offset=1,-0.8"
+    },
+    {
+      "at": 1789880854880,
       "paneId": "p6",
       "kind": "synth-dispatch-cdp",
       "detail": "window(362,192) zoom=50%"
     },
     {
-      "at": 1789879423726,
+      "at": 1789880856124,
       "paneId": null,
       "kind": "capture",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom50-1789879423667.png"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom50-1789880856056.png"
     },
     {
-      "at": 1789879423726,
+      "at": 1789880856124,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 end zoom 50% | beats p2=10 p3=10 p1=10 p4=10 p5=10 p6=10"
+      "detail": "C1 end zoom 50% | beats p2=10 p1=10 p3=10 p4=10 p6=10 p5=10"
     },
     {
-      "at": 1789879423727,
+      "at": 1789880856124,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 begin zoom 25% | beats p2=10 p3=10 p1=10 p4=10 p5=10 p6=10"
+      "detail": "C1 begin zoom 25% | beats p2=10 p1=10 p3=10 p4=10 p6=10 p5=10"
     },
     {
-      "at": 1789879423727,
+      "at": 1789880856124,
       "paneId": null,
       "kind": "zoom",
       "detail": "25%"
     },
     {
-      "at": 1789879424453,
+      "at": 1789880856850,
+      "paneId": "p1",
+      "kind": "click",
+      "detail": "cdpInput zoom=25% HIT offset=-1,1.2"
+    },
+    {
+      "at": 1789880856850,
       "paneId": "p1",
       "kind": "synth-dispatch-cdp",
       "detail": "window(16,128) zoom=25%"
     },
     {
-      "at": 1789879424715,
+      "at": 1789880857112,
       "paneId": "p1",
       "kind": "synth-dispatch",
       "detail": "window(16,128) zoom=25%"
     },
     {
-      "at": 1789879425101,
+      "at": 1789880857498,
+      "paneId": "p2",
+      "kind": "click",
+      "detail": "cdpInput zoom=25% HIT offset=1,1.2"
+    },
+    {
+      "at": 1789880857498,
       "paneId": "p2",
       "kind": "synth-dispatch-cdp",
       "detail": "window(117,128) zoom=25%"
     },
     {
-      "at": 1789879425486,
+      "at": 1789880857883,
+      "paneId": "p3",
+      "kind": "click",
+      "detail": "cdpInput zoom=25% HIT offset=1,-0.8"
+    },
+    {
+      "at": 1789880857883,
       "paneId": "p3",
       "kind": "synth-dispatch-cdp",
       "detail": "window(225,123) zoom=25%"
     },
     {
-      "at": 1789879425881,
+      "at": 1789880858269,
+      "paneId": "p4",
+      "kind": "click",
+      "detail": "cdpInput zoom=25% HIT offset=1,1.2"
+    },
+    {
+      "at": 1789880858269,
       "paneId": "p4",
       "kind": "synth-dispatch-cdp",
       "detail": "window(343,119) zoom=25%"
     },
     {
-      "at": 1789879426265,
+      "at": 1789880858655,
+      "paneId": "p5",
+      "kind": "click",
+      "detail": "cdpInput zoom=25% HIT offset=-1,1.2"
+    },
+    {
+      "at": 1789880858656,
       "paneId": "p5",
       "kind": "synth-dispatch-cdp",
       "detail": "window(391,119) zoom=25%"
     },
     {
-      "at": 1789879426650,
+      "at": 1789880859041,
+      "paneId": "p6",
+      "kind": "click",
+      "detail": "cdpInput zoom=25% HIT offset=1,1.2"
+    },
+    {
+      "at": 1789880859041,
       "paneId": "p6",
       "kind": "synth-dispatch-cdp",
       "detail": "window(722,119) zoom=25%"
     },
     {
-      "at": 1789879427896,
+      "at": 1789880860289,
       "paneId": null,
       "kind": "capture",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom25-1789879427832.png"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/c1-zoom25-1789880860224.png"
     },
     {
-      "at": 1789879427898,
+      "at": 1789880860291,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 end zoom 25% | beats p2=14 p3=14 p1=14 p4=14 p5=14 p6=14"
+      "detail": "C1 end zoom 25% | beats p2=14 p1=14 p3=14 p4=14 p6=14 p5=14"
     },
     {
-      "at": 1789879427898,
+      "at": 1789880860293,
       "paneId": null,
       "kind": "zoom",
       "detail": "50%"
     },
     {
-      "at": 1789879428300,
+      "at": 1789880860693,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C1 per-pane CDP screenshots (render independent of canvas compositing) | beats p2=15 p3=15 p1=15 p4=15 p5=14 p6=14"
+      "detail": "C1 per-pane CDP screenshots (render independent of canvas compositing) | beats p2=15 p1=15 p3=15 p4=15 p6=14 p5=14"
     },
     {
-      "at": 1789879428356,
+      "at": 1789880860767,
       "paneId": "p1",
       "kind": "pane-shot",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p1-1789879428356.png"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p1-1789880860762.png"
     },
     {
-      "at": 1789879428422,
+      "at": 1789880860922,
       "paneId": "p4",
       "kind": "pane-shot",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p4-1789879428422.png"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p4-1789880860921.png"
     },
     {
-      "at": 1789879428624,
+      "at": 1789880861017,
       "paneId": "p6",
       "kind": "pane-shot",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p6-1789879428624.png"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/pane-p6-1789880861017.png"
     },
     {
-      "at": 1789879428624,
+      "at": 1789880861018,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 baseline before DevTools | beats p2=15 p3=15 p1=15 p4=15 p5=15 p6=15"
+      "detail": "C2 baseline before DevTools | beats p2=15 p1=15 p3=15 p4=15 p6=15 p5=14"
     },
     {
-      "at": 1789879431625,
+      "at": 1789880864023,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 opening real DevTools on pane 2 | beats p2=18 p3=18 p1=18 p4=18 p5=18 p6=18"
+      "detail": "C2 opening real DevTools on pane 2 | beats p2=18 p1=18 p3=18 p4=18 p6=17 p5=17"
     },
     {
-      "at": 1789879431787,
+      "at": 1789880864249,
       "paneId": "p2",
       "kind": "devtools-opened",
       "detail": ""
     },
     {
-      "at": 1789879439631,
+      "at": 1789880872033,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 sampled with DevTools open | beats p2=26 p3=26 p1=26 p4=26 p5=26 p6=26"
+      "detail": "C2 sampled with DevTools open | beats p2=26 p1=26 p3=26 p4=26 p6=25 p5=25"
     },
     {
-      "at": 1789879440135,
+      "at": 1789880872538,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 closing DevTools | beats p2=27 p3=27 p1=26 p4=26 p5=26 p6=26"
+      "detail": "C2 closing DevTools | beats p2=27 p1=27 p3=27 p4=27 p6=26 p5=26"
     },
     {
-      "at": 1789879440150,
+      "at": 1789880872548,
       "paneId": "p2",
       "kind": "devtools-closed",
       "detail": ""
     },
     {
-      "at": 1789879448155,
+      "at": 1789880880553,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 sampled after DevTools close | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+      "detail": "C2 sampled after DevTools close | beats p2=35 p1=35 p3=35 p4=35 p6=34 p5=34"
     },
     {
-      "at": 1789879448155,
+      "at": 1789880880554,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 attempting explicit reattach of pane 2 | beats p2=35 p3=35 p1=34 p4=34 p5=34 p6=34"
+      "detail": "C2 attempting explicit reattach of pane 2 | beats p2=35 p1=35 p3=35 p4=35 p6=34 p5=34"
     },
     {
-      "at": 1789879448156,
+      "at": 1789880880554,
       "paneId": "p2",
       "kind": "reattach-failed",
       "detail": "Debugger is already attached to the target"
     },
     {
-      "at": 1789879453157,
+      "at": 1789880885555,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C2 sampled after reattach | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+      "detail": "C2 sampled after reattach | beats p2=40 p1=40 p3=40 p4=40 p6=39 p5=39"
     },
     {
-      "at": 1789879453157,
+      "at": 1789880885555,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C3 navigating all panes to origin B (different hostname) | beats p2=40 p3=40 p1=39 p4=39 p5=39 p6=39"
+      "detail": "C3 navigating all panes to origin B (different hostname) | beats p2=40 p1=40 p3=40 p4=40 p6=39 p5=39"
     },
     {
-      "at": 1789879453158,
+      "at": 1789880885556,
       "paneId": "p2",
       "kind": "navigate",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453161,
+      "at": 1789880885561,
+      "paneId": "p1",
+      "kind": "navigate",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789880885563,
       "paneId": "p3",
       "kind": "navigate",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453163,
-      "paneId": "p1",
-      "kind": "navigate",
-      "detail": "http://localhost:4101/index.html"
-    },
-    {
-      "at": 1789879453165,
+      "at": 1789880885564,
       "paneId": "p4",
       "kind": "navigate",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453166,
-      "paneId": "p5",
-      "kind": "navigate",
-      "detail": "http://localhost:4101/index.html"
-    },
-    {
-      "at": 1789879453167,
+      "at": 1789880885566,
       "paneId": "p6",
       "kind": "navigate",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453229,
+      "at": 1789880885567,
       "paneId": "p5",
-      "kind": "frameNavigated",
+      "kind": "navigate",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453230,
-      "paneId": "p1",
-      "kind": "frameNavigated",
-      "detail": "http://localhost:4101/index.html"
-    },
-    {
-      "at": 1789879453231,
+      "at": 1789880885626,
       "paneId": "p2",
       "kind": "frameNavigated",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453231,
+      "at": 1789880885626,
+      "paneId": "p1",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789880885626,
       "paneId": "p3",
       "kind": "frameNavigated",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453232,
+      "at": 1789880885629,
       "paneId": "p4",
       "kind": "frameNavigated",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453250,
+      "at": 1789880885629,
+      "paneId": "p5",
+      "kind": "frameNavigated",
+      "detail": "http://localhost:4101/index.html"
+    },
+    {
+      "at": 1789880885631,
       "paneId": "p6",
       "kind": "frameNavigated",
       "detail": "http://localhost:4101/index.html"
     },
     {
-      "at": 1789879453268,
-      "paneId": "p5",
-      "kind": "console.error",
-      "detail": "fixture loaded at http://localhost:4101"
-    },
-    {
-      "at": 1789879453268,
-      "paneId": "p3",
-      "kind": "console.error",
-      "detail": "fixture loaded at http://localhost:4101"
-    },
-    {
-      "at": 1789879453269,
+      "at": 1789880885660,
       "paneId": "p2",
       "kind": "console.error",
       "detail": "fixture loaded at http://localhost:4101"
     },
     {
-      "at": 1789879453269,
+      "at": 1789880885660,
+      "paneId": "p4",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789880885660,
       "paneId": "p1",
       "kind": "console.error",
       "detail": "fixture loaded at http://localhost:4101"
     },
     {
-      "at": 1789879453269,
+      "at": 1789880885661,
+      "paneId": "p3",
+      "kind": "console.error",
+      "detail": "fixture loaded at http://localhost:4101"
+    },
+    {
+      "at": 1789880885661,
       "paneId": "p6",
       "kind": "console.error",
       "detail": "fixture loaded at http://localhost:4101"
     },
     {
-      "at": 1789879453269,
-      "paneId": "p4",
+      "at": 1789880885662,
+      "paneId": "p5",
       "kind": "console.error",
       "detail": "fixture loaded at http://localhost:4101"
     },
     {
-      "at": 1789879453271,
-      "paneId": "p5",
-      "kind": "console.warning",
-      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-    },
-    {
-      "at": 1789879453272,
-      "paneId": "p5",
-      "kind": "did-finish-load",
-      "detail": "pid 9334->9659 swap=true innerWidth=1280/1280 survived=true"
-    },
-    {
-      "at": 1789879453272,
+      "at": 1789880885664,
       "paneId": "p4",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879453272,
-      "paneId": "p3",
+      "at": 1789880885664,
+      "paneId": "p4",
+      "kind": "did-finish-load",
+      "detail": "pid 14688->14706 swap=true innerWidth=820/820 survived=true"
+    },
+    {
+      "at": 1789880885664,
+      "paneId": "p6",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879453272,
-      "paneId": "p1",
-      "kind": "console.warning",
-      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
-    },
-    {
-      "at": 1789879453272,
-      "paneId": "p1",
+      "at": 1789880885664,
+      "paneId": "p6",
       "kind": "did-finish-load",
-      "detail": "pid 9326->9657 swap=true innerWidth=360/360 survived=true"
+      "detail": "pid 14692->14707 swap=true innerWidth=1440/1440 survived=true"
     },
     {
-      "at": 1789879453272,
-      "paneId": "p3",
-      "kind": "did-finish-load",
-      "detail": "pid 9330->9656 swap=true innerWidth=430/430 survived=true"
-    },
-    {
-      "at": 1789879453272,
+      "at": 1789880885664,
       "paneId": "p2",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879453272,
-      "paneId": "p6",
+      "at": 1789880885664,
+      "paneId": "p2",
+      "kind": "did-finish-load",
+      "detail": "pid 14684->14703 swap=true innerWidth=390/390 survived=true"
+    },
+    {
+      "at": 1789880885664,
+      "paneId": "p5",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879453272,
-      "paneId": "p2",
+      "at": 1789880885664,
+      "paneId": "p5",
       "kind": "did-finish-load",
-      "detail": "pid 9328->9655 swap=true innerWidth=390/390 survived=true"
+      "detail": "pid 14690->14708 swap=true innerWidth=1280/1280 survived=true"
     },
     {
-      "at": 1789879453272,
-      "paneId": "p6",
-      "kind": "did-finish-load",
-      "detail": "pid 9336->9660 swap=true innerWidth=1440/1440 survived=true"
+      "at": 1789880885664,
+      "paneId": "p3",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879453273,
-      "paneId": "p4",
+      "at": 1789880885664,
+      "paneId": "p3",
       "kind": "did-finish-load",
-      "detail": "pid 9332->9658 swap=true innerWidth=820/820 survived=true"
+      "detail": "pid 14686->14705 swap=true innerWidth=430/430 survived=true"
     },
     {
-      "at": 1789879459170,
+      "at": 1789880885665,
+      "paneId": "p1",
+      "kind": "console.warning",
+      "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
+    },
+    {
+      "at": 1789880885665,
+      "paneId": "p1",
+      "kind": "did-finish-load",
+      "detail": "pid 14682->14704 swap=true innerWidth=360/360 survived=true"
+    },
+    {
+      "at": 1789880891570,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C3 sampled after cross-origin navigation, no reapply | beats p2=45 p3=45 p1=45 p4=45 p5=44 p6=44"
+      "detail": "C3 sampled after cross-origin navigation, no reapply | beats p2=45 p1=45 p3=45 p4=45 p6=44 p5=44"
     },
     {
-      "at": 1789879459675,
+      "at": 1789880892438,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C3 navigating pane 2 to https://example.com (external, guaranteed cross-site) | beats p2=46 p3=46 p1=46 p4=46 p5=45 p6=45"
+      "detail": "C3 navigating pane 2 to https://example.com (external, guaranteed cross-site) | beats p2=46 p1=46 p3=46 p4=46 p6=44 p5=44"
     },
     {
-      "at": 1789879459675,
+      "at": 1789880892439,
       "paneId": "p2",
       "kind": "navigate",
       "detail": "https://example.com/"
     },
     {
-      "at": 1789879459739,
+      "at": 1789880892532,
       "paneId": "p2",
       "kind": "frameNavigated",
       "detail": "https://example.com/"
     },
     {
-      "at": 1789879459748,
+      "at": 1789880892546,
       "paneId": "p2",
       "kind": "console.warning",
       "detail": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Co"
     },
     {
-      "at": 1789879459749,
+      "at": 1789880892546,
       "paneId": "p2",
       "kind": "did-finish-load",
-      "detail": "pid 9655->9677 swap=true innerWidth=390/390 survived=true"
+      "detail": "pid 14703->14714 swap=true innerWidth=390/390 survived=true"
     },
     {
-      "at": 1789879467680,
+      "at": 1789880901439,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C3 sampled after external navigation | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+      "detail": "C3 sampled after external navigation | beats p2=46 p1=54 p3=54 p4=54 p6=53 p5=53"
     },
     {
-      "at": 1789879468185,
+      "at": 1789880902439,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C3 reapplying overrides (the PRD fallback) | beats p2=46 p3=54 p1=54 p4=54 p5=53 p6=53"
+      "detail": "C3 reapplying overrides (the PRD fallback) | beats p2=46 p1=55 p3=56 p4=55 p6=54 p5=55"
     },
     {
-      "at": 1789879468191,
+      "at": 1789880902446,
       "paneId": "all",
       "kind": "reapply",
       "detail": "overrides reapplied"
     },
     {
-      "at": 1789879470192,
+      "at": 1789880905439,
       "paneId": null,
       "kind": "MARK",
-      "detail": "C3 sampled after reapply | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+      "detail": "C3 sampled after reapply | beats p2=46 p1=58 p3=58 p4=58 p6=57 p5=57"
     },
     {
-      "at": 1789879470193,
+      "at": 1789880905440,
       "paneId": null,
       "kind": "dump",
-      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json"
+      "detail": "/Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789880905440.json"
     },
     {
-      "at": 1789879470194,
+      "at": 1789880905443,
       "paneId": null,
       "kind": "MARK",
-      "detail": "auto run complete: /Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789879470193.json | beats p2=46 p3=56 p1=56 p4=56 p5=55 p6=55"
+      "detail": "auto run complete: /Users/mrbest/code/other/breakpoint/breakpoint-main/prototypes/pane-host-spike/out/state-1789880905440.json | beats p2=46 p1=59 p3=59 p4=59 p6=58 p5=58"
     }
   ]
 }
