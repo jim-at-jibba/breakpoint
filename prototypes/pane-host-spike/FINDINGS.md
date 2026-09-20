@@ -59,7 +59,10 @@ Desktop                   50% 1/1 ±1     25% 1/1 ±1.2
 ```
 
 Max offset from the target centre is **1.2px** at 25% zoom, which is coordinate-conversion
-rounding in the harness, not input offset. Laptop and Desktop have no 100% row because at 100%
+rounding in the harness, not input offset. Reproducible: two consecutive `--auto` runs give
+identical results. (An earlier version missed intermittently at 100% zoom only — the canvas
+scrolls furthest there, and the target's rect was being read mid-scroll, so the click was aimed at
+stale geometry. `autoClickAll` now waits for the scroll to stop before measuring.) Laptop and Desktop have no 100% row because at 100%
 zoom they are off-screen and the harness skips them; the thresholds only require 50% and 25%.
 
 Human clicks route identically — confirmed during the manual pass, which is also how the sizing

@@ -145,11 +145,26 @@ function setZoom (z) {
 // Condition 1, automated: aim at the centre of each pane's 44x44 target,
 // converting page coordinates to host-window coordinates through the canvas
 // scale, and fire a real input event at the window.
+// The canvas can scroll a long way at 100% zoom, and reading the target's
+// rect mid-scroll aims the click at stale geometry. Wait for the scroll to
+// stop before measuring.
+async function settleScroll () {
+  const vp = el('#viewport');
+  let last = [-1, -1], stable = 0;
+  for (let i = 0; i < 60 && stable < 3; i++) {
+    await new Promise(r => requestAnimationFrame(r));
+    const now = [vp.scrollLeft, vp.scrollTop];
+    stable = (now[0] === last[0] && now[1] === last[1]) ? stable + 1 : 0;
+    last = now;
+  }
+  await sleep(80);
+}
+
 async function autoClickAll () {
   for (const p of presets) {
     const paneEl = document.querySelector(`[data-pane="${p.id}"]`);
     paneEl.scrollIntoView({ block: 'nearest', inline: 'center' });
-    await sleep(120);
+    await settleScroll();
     let rect;
     try { rect = await window.spike.targetRect(p.id); }
     catch (err) { continue; }
@@ -171,6 +186,7 @@ el('#fit').onclick = () => setZoom(Math.min(1, el('#viewport').clientWidth / nat
 el('#autoclick').onclick = autoClickAll;
 async function shoot (label) {
   el('#viewport').scrollTo(0, 0);
+  await settleScroll();
   await sleep(900);                       // let the guests re-present after the scroll
   return window.spike.capture(label);
 }
