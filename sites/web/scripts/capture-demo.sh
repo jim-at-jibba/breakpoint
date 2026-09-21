@@ -2,7 +2,7 @@
 # Regenerate src/assets/demo-canvas.png from the design prototype.
 #
 # This is a stopgap. The landing page is meant to embed the demo as a real
-# interactive island (see docs/adr/0001) — until then the page shows this still.
+# interactive island (see docs/adr/0014) — until then the page shows this still.
 #
 # Two things make it fiddly, hence the script:
 #

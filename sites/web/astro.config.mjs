@@ -42,7 +42,7 @@ export default defineConfig({
 
       // Docs content lives in src/content/docs/docs/ so that it serves at
       // /docs/**, leaving / to src/pages/index.astro. This is Starlight's
-      // supported subpath convention, not a workaround. See docs/adr/0001.
+      // supported subpath convention, not a workaround. See docs/adr/0014.
 
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/jim-at-jibba/breakpoint' },

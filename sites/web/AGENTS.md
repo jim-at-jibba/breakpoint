@@ -24,7 +24,7 @@ Consult these guides before working on related tasks:
 ## This project
 
 The Breakpoint Site: landing page at `/`, Docs at `/docs`. See `README.md` for layout and
-the design rules, and `docs/adr/0001-astro-starlight-for-the-site.md` in the repository
+the design rules, and `docs/adr/0014-astro-starlight-for-the-site.md` in the repository
 root for why it is built this way.
 
 Three things that will bite if you do not know them:

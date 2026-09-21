@@ -14,7 +14,7 @@ This project has its own `package-lock.json` and is **not** part of an npm works
 repository root is an Electron app whose `postinstall` runs `electron-builder
 install-app-deps`; keeping the trees separate stops Astro's dependencies from ending up
 in the tree that rebuilds native modules. You install twice, on purpose. See
-`docs/adr/0001-astro-starlight-for-the-site.md`.
+`docs/adr/0014-astro-starlight-for-the-site.md`.
 
 ## Layout
 

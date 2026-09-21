@@ -1,7 +1,7 @@
 # PRD: Breakpoint — a multi-viewport dev browser for developers and their coding agents
 
 **Working title:** Breakpoint
-**Status:** Draft v0.6 (UI stack chosen)
+**Status:** Draft v0.7 (Phase 0 spike answered; Phase 1 grilled)
 **Date:** 19 September 2026
 **Platform:** Electron
 **Reference products:** [Polypane](https://polypane.app/), [Sizzy](https://sizzy.co/), Responsively App
@@ -13,6 +13,25 @@
 Breakpoint is a desktop dev browser. You open a project and it renders your site in several viewports at once (mobile, tablet, laptop, desktop), keeps them in sync, and shows one console for every pane.
 
 It is also **agent-native**: everything a developer can see or do in the window, a coding agent can see or do through a local MCP server and CLI. The agent edits code, then uses Breakpoint to check real renders, real console output and real layout at every breakpoint, without spinning up its own headless browser. The developer watches the same panes the agent is looking at.
+
+### What changed in v0.7
+
+Phase 0's spike (#1) and the Phase 1 grill corrected six things. Each amendment below links
+the ADR carrying the reasoning; the ADRs are the record, this document is the requirement.
+
+- **6.2 V3** — the pane header degrades through a six-tier ladder. As written it could not be
+  satisfied at 25% zoom, where a mobile pane is ~100px wide. [ADR-0010](adr/0010-header-degradation-ladder.md)
+- **6.3 L1-L3** — Fit is a zoom value, not a third layout mode. [ADR-0009](adr/0009-fit-is-a-zoom-value.md)
+- **8.5** — emulation is not reapplied on renderer process swap. Measured: overrides survive
+  swaps untouched. [ADR-0002](adr/0002-no-reapply-on-process-swap.md)
+- **11, Phase 1** — the exit criterion no longer accepts an `innerWidth` assertion, which
+  passed for three probe runs while every pane was 150px tall. [ADR-0004](adr/0004-pane-geometry-is-verified-host-side.md)
+- **12 items 2 and 3** — the DevTools paused state is dropped; there is no detach signal to
+  build it on. The `innerWidth` threshold is replaced. [ADR-0003](adr/0003-no-paused-state-for-devtools.md), [ADR-0004](adr/0004-pane-geometry-is-verified-host-side.md)
+- **14 question 6** — resolved: CLI access is on by default. [ADR-0008](adr/0008-cli-access-on-by-default.md)
+
+Vocabulary is now fixed in [`CONTEXT.md`](../CONTEXT.md). The debugging connection to a pane
+is an **attachment**; **session** means the storage partition only. [ADR-0001](adr/0001-attachment-names-the-cdp-session.md)
 
 ### What changed in v0.6
 
@@ -125,7 +144,7 @@ Priority: **P0** = required for v1, **P1** = fast follow, **P2** = later.
 |---|---|---|
 | V1 | Default set: Mobile 390×844, Tablet 820×1180, Desktop 1440×900 | P0 |
 | V2 | Add a pane from a preset or custom width × height; presets are user-editable JSON | P0 |
-| V3 | Pane header: name, live CSS viewport, DPR, session, emulation badges, error count | P0 |
+| V3 | Pane header: name, live CSS viewport, DPR, session, emulation badges, error count, degrading through the six-tier ladder as the pane narrows on screen ([ADR-0010](adr/0010-header-degradation-ladder.md)) | P0 |
 | V4 | Resize by typing or dragging; rotate | P0 |
 | V5 | Presets carry DPR, user agent and mobile flag | P0 |
 | V6 | Per-pane colour scheme: light, dark, system. "Duplicate as dark" shortcut | P0 |
@@ -141,7 +160,7 @@ Default presets: Mobile S 360×800 @3x, Mobile 390×844 @3x, Mobile L 430×932 @
 | ID | Requirement | Pri |
 |---|---|---|
 | L1 | Horizontal layout on a scrolling canvas with canvas zoom (25–100%) | P0 |
-| L2 | Fit layout: zoom chosen so all panes fit without scrolling | P0 |
+| L2 | Zoom accepts `Fit`: the zoom at which all panes fit without scrolling. A zoom value, not a layout mode ([ADR-0009](adr/0009-fit-is-a-zoom-value.md)) | P0 |
 | L3 | Focus layout: one pane at 100%, others as a strip | P0 |
 | L4 | Zoom scales rendering only; each pane's CSS viewport stays at its declared size | P0 |
 | L5 | Drag to reorder; vertical layout | P1 |
@@ -448,7 +467,7 @@ Pane content has no IPC channel. Everything the app learns from a pane arrives o
 
 ### 8.5 Emulation
 
-All via CDP, reapplied on attach and after any render-process swap: `Emulation.setDeviceMetricsOverride` (true CSS viewport independent of on-screen size, which enables canvas zoom), `setUserAgentOverride` with client hints, `setTouchEmulationEnabled`, `setEmulatedMedia` for colour scheme, reduced motion, forced colours, contrast and print.
+All via CDP, reapplied on attach and on `did-navigate`. **Not** reapplied on renderer process swap: overrides were measured surviving real swaps untouched, so no swap listener and no user-visible event ([ADR-0002](adr/0002-no-reapply-on-process-swap.md)). The overrides: `Emulation.setDeviceMetricsOverride` (true CSS viewport independent of on-screen size, which enables canvas zoom), `setUserAgentOverride` with client hints, `setTouchEmulationEnabled`, `setEmulatedMedia` for colour scheme, reduced motion, forced colours, contrast and print.
 
 ### 8.6 Event log and console pipeline
 
@@ -530,7 +549,7 @@ This keeps the CLI from becoming a project of its own, and makes it the test har
 | Phase | App scope | CLI shipped alongside | Exit criteria |
 |---|---|---|---|
 | **0. Spikes** (2 days) | Section 12, items 1–3 (item 4 moves to Phase 6) | None | Pane host chosen; emulation and CDP coexistence verified |
-| **1. Panes and projects** (1.5 weeks) | Foundations above, PaneHost, emulation, presets, layouts, projects, certs | `breakpoint .`, `open`, `state`, `quit`, `--wait`, `--no-launch`, best-effort `--background`, `--json` | Three panes render localhost with correct `innerWidth`, DPR and scheme at 50% zoom; project restores; `breakpoint . --wait --json` from a terminal prints the pane set |
+| **1. Panes and projects** (1.5 weeks) | Foundations above, PaneHost, emulation, presets, layouts, projects, certs | `breakpoint .`, `open`, `state`, `quit`, `--wait`, `--no-launch`, best-effort `--background`, `--json` | Three panes render localhost at 50% zoom with each pane's **rendered element size** matching its declared size × zoom, verified host-side, plus a hit test near a pane's bottom edge ([ADR-0004](adr/0004-pane-geometry-is-verified-host-side.md)); DPR and scheme correct; project restores; `breakpoint . --wait --json` from a terminal prints the pane set |
 | **2. Console** (1 week) | Console pipeline on the event log, source maps, console UI, filters, dedupe, REPL, DevTools button | `logs`, `changes` | A CORS error and a mobile-only exception appear with repo-relative paths, in the UI and in `breakpoint logs --errors --json` |
 | **3. Sync** (3 days) | Navigation and scroll sync, origin allow-list | `nav`, `reload`, `back`, `forward`, `settle` (network idle plus 500 ms of log silence) | Works on a Next.js app and a Vite SPA; `breakpoint nav` moves all panes |
 | **4. Capture and checks** (1 week) | Pane and composite screenshots, P0 layout checks, Layout tab, "Copy as Markdown" context packets | `shot`, `check`, `assert-clean`, `agent-guide`, exit codes 0–3 | Claude Code in a terminal, with no MCP configured, fixes a seeded mobile overflow bug using only observe commands, navigation and one composite screenshot. `breakpoint check` works in a git hook |
@@ -556,8 +575,8 @@ This keeps the CLI from becoming a project of its own, and makes it the test har
 | # | Question | Why it matters | Fallback |
 |---|---|---|---|
 | 1 | `<webview>` with 6+ panes, scaled, without input offset or blur | Layout architecture, overlays | `WebContentsView`, Fit and Focus only |
-| 2 | App CDP session and real DevTools attached to one pane simultaneously | Console and agent tools must keep working while DevTools is open | Detect detach, show "paused while DevTools is open", reattach |
-| 3 | Emulation overrides across cross-origin navigations and process swaps | Silent reset destroys trust | Reapply on navigation; assert `innerWidth` after load |
+| 2 | ~~App attachment and real DevTools on one pane simultaneously~~ **Answered:** DevTools never evicts our attachment. No paused state; no detach signal exists to build one on ([ADR-0003](adr/0003-no-paused-state-for-devtools.md)) | | |
+| 3 | ~~Emulation overrides across cross-origin navigations and process swaps~~ **Answered:** overrides survive process swaps untouched ([ADR-0002](adr/0002-no-reapply-on-process-swap.md)). Note `innerWidth` is *not* sufficient evidence — it reports the emulated viewport whether or not it is rendered ([ADR-0004](adr/0004-pane-geometry-is-verified-host-side.md)) | | |
 | 4 | `Input.dispatch*` events land correctly in a CSS-scaled, emulated `<webview>` | Act tools and click sync | Dispatch via element-centre coordinates computed in page space; fall back to `element.click()` with a warning |
 | 5 | `settle` reliability across Vite, Next and Webpack HMR | The agent loop depends on it | v1 ships the simple heuristic (network idle plus log quiet). If it proves flaky, add an optional per-project hook into the dev server's HMR websocket |
 | 6 | Layout check false positives (carousels, intentional overflow, off-canvas menus) | Noise makes agents chase non-bugs | Ignore list in `.breakpoint.json`; `data-breakpoint-ignore`; severity levels |
@@ -583,4 +602,4 @@ This keeps the CLI from becoming a project of its own, and makes it the test har
 3. Should Breakpoint ship agent rules (the agent guide in 7.2) and offer to add them to the project? Likely yes, and cheap.
 4. How much act capability is really needed in v1? Observe plus `navigate`, `reload` and `wait_for_settled` may cover most value, with click and type following once input sync (N8) has proven the locator and dispatch path.
 5. Is an embedded agent chat UI ever needed, or is terminal plus CLI enough? Sizzy built the former; this PRD bets on the latter.
-6. Should "Allow CLI access" be on by default? It would make the agent story truly zero-config, at the cost of any same-user process being able to read console output. The PRD says off by default, with a one-time prompt the first time a command is refused.
+6. ~~Should "Allow CLI access" be on by default?~~ **Resolved: on.** A same-user process can already read `userData` directly, so the socket widens nothing; off by default would make U12's zero-config promise false. Revisit in Phase 6, when act commands change the stakes ([ADR-0008](adr/0008-cli-access-on-by-default.md)).

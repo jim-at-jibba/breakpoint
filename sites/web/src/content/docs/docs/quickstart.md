@@ -26,11 +26,14 @@ Three panes open by default — mobile, tablet and desktop. Each has its own emu
 viewport width, device pixel ratio and colour scheme, and each carries a colour from the
 pane palette.
 
-Layout modes:
+There are two layouts:
 
 - **Horizontal** lines the panes up so you can compare neighbours.
-- **Fit** scales the whole set to the window.
 - **Focus** gives one pane full size and drops the rest to a strip.
+
+Zoom is a separate control. Its value is a percentage, or `Fit`, which sizes the whole set
+to the window the way a PDF reader does — and the moment you touch the zoom control you are
+no longer fitted. Fit is a zoom value, not a third layout.
 
 ## 3. Check it from a terminal
 
