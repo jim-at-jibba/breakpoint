@@ -1,0 +1,40 @@
+/* ============================================================================
+   Breakpoint marketing site — its own tokens.
+   Deliberately NOT the app's globals.css: the app sheet is tuned for 12px
+   chrome that recedes, which reads as cramped on a page. The only thing the
+   site inherits from the product is the pane identity palette, because that
+   is the brand device.
+   Everything else comes from the Nocturne stylesheet (--color-*, --font-*,
+   --space-*, --radius-*, --shadow-*), linked alongside this file.
+   ========================================================================= */
+
+:root {
+  /* ---- pane identity palette ------------------------------------------
+     Ten hues on one OKLCH lightness and one chroma. Kept byte-identical to
+     the app's dark-theme values so screenshots, the live demo and the page
+     graphics agree. */
+  --bp-pane-1: oklch(0.760 0.105 218);   /* blue   */
+  --bp-pane-2: oklch(0.760 0.105 168);   /* teal   */
+  --bp-pane-3: oklch(0.760 0.105 128);   /* green  */
+  --bp-pane-4: oklch(0.760 0.105 82);    /* amber  */
+  --bp-pane-5: oklch(0.760 0.105 28);    /* rust   */
+  --bp-pane-6: oklch(0.760 0.105 332);   /* pink   */
+  --bp-pane-7: oklch(0.760 0.105 248);   /* indigo */
+  --bp-pane-8: oklch(0.760 0.105 196);   /* cyan   */
+  --bp-pane-9: oklch(0.760 0.105 52);    /* orange */
+  --bp-pane-10: oklch(0.760 0.105 302);  /* violet */
+  --bp-pane-ink: #14151f;                /* text inside a filled badge */
+
+  /* ---- status, used only in the product-UI illustrations -------------- */
+  --bp-error: #e0697a;
+  --bp-warn: #d9a25c;
+  --bp-info: #6fa8d6;
+  --bp-success: #6fbf95;
+
+  /* ---- the one font the Nocturne sheet does not carry ------------------ */
+  --bp-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Nocturne has no section-band text token; name it here so the band does
+     not rely on an inline fallback. */
+  --color-section-text: #e9e9ed;
+}

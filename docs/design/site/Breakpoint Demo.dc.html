@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="../support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="../_ds/nocturne-aa61735d-b9e7-46c7-a3a3-9fc9d5b641b8/styles.css">
+<script src="../_ds/nocturne-aa61735d-b9e7-46c7-a3a3-9fc9d5b641b8/_ds_bundle.js"></script>
+<link rel="stylesheet" href="../globals.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  @keyframes bpFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes bpSpin { to { transform: rotate(360deg); } }
+  @keyframes bpBar { 0% { transform: translateX(-100%); } 100% { transform: translateX(320%); } }
+  .bpx::-webkit-scrollbar { height: 10px; width: 10px; }
+  .bpx::-webkit-scrollbar-thumb { background: var(--bp-border-strong); border-radius: 6px; border: 3px solid transparent; background-clip: content-box; }
+  .bpx::-webkit-scrollbar-track { background: transparent; }
+  .bpr input[type=range] { -webkit-appearance: none; appearance: none; background: transparent; height: 18px; }
+  .bpr input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--bp-border-strong); border-radius: 2px; }
+  .bpr input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px; border-radius: 50%; background: var(--bp-ink-muted); cursor: pointer; }
+  .bpr input[type=range]:hover::-webkit-slider-thumb { background: var(--bp-accent); }
+</style>
+</helmet>
+
+<div class="{{ themeClass }}" style="background: var(--bp-chrome); color: var(--bp-ink); font-family: var(--bp-font-ui); font-size: 12px; height: 100vh; padding: 0;">
+
+  <!-- ========================= THE APP WINDOW ========================== -->
+  <div style="position: relative; overflow: hidden; background: var(--bp-chrome); display: flex; flex-direction: column; height: 100%; max-width: none; border-radius: 0;">
+
+    <!-- ----------------------------- TOOLBAR ---------------------------- -->
+    <div class="bp-drag" style="height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 10px 0 0; background: var(--bp-chrome); border-bottom: 1px solid var(--bp-border);">
+
+      <div style="display: flex; align-items: center; gap: 8px; width: 78px; padding-left: 14px; flex: none;">
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f57;"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #febc2e;"></span>
+        <span style="width: 12px; height: 12px; border-radius: 50%; background: #28c840;"></span>
+      </div>
+
+      <button type="button" onClick="{{ openProjects }}" style="-webkit-app-region: no-drag; font: inherit; font-size: 12px; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--bp-border-strong); background: var(--bp-chrome-sunken); color: var(--bp-ink); cursor: pointer; flex: none;">
+        <span style="width: 7px; height: 7px; border-radius: 1px; background: var(--bp-success);"></span>
+        <span style="font-weight: 500;">atlas-web</span>
+        <span style="color: var(--bp-ink-faint); font-family: var(--bp-font-mono); font-size: 10px;">:3000</span>
+        <span style="color: var(--bp-ink-faint); font-size: 9px; margin-left: 2px;">▾</span>
+      </button>
+
+      <div style="display: flex; align-items: center; gap: 1px; flex: none;">
+        <sc-for list="{{ navBtns }}" as="n" hint-placeholder-count="3">
+          <button type="button" title="{{ n.title }}" style="-webkit-app-region: no-drag; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: {{ n.fg }}; cursor: pointer; font-size: 13px; font-family: var(--bp-font-ui);" style-hover="background: var(--bp-hover);">{{ n.g }}</button>
+        </sc-for>
+      </div>
+
+      <div style="-webkit-app-region: no-drag; flex: 1 1 auto; min-width: 120px; max-width: 620px; height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: 4px; border: 1px solid {{ addrBorder }}; background: var(--bp-chrome-sunken);">
+        <span style="color: var(--bp-success); font-size: 10px;">●</span>
+        <span data-selectable="true" style="font-family: var(--bp-font-mono); font-size: 13px; color: var(--bp-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ address }}</span>
+        <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint); flex: none;">6 panes</span>
+      </div>
+
+      <button type="button" onClick="{{ toggleSync }}" title="Sync scroll, clicks and navigation across panes" style="-webkit-app-region: no-drag; font: inherit; font-size: 11px; display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid {{ syncBorder }}; background: {{ syncBg }}; color: {{ syncFg }}; cursor: pointer; flex: none;">
+        <span style="font-size: 12px; line-height: 1;">⇄</span><span>Sync</span>
+      </button>
+
+      <div style="display: flex; align-items: center; gap: 1px; padding: 2px; border-radius: 4px; background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); flex: none;">
+        <sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
+          <button type="button" onClick="{{ m.on }}" style="-webkit-app-region: no-drag; font: inherit; font-size: 11px; height: 20px; padding: 0 8px; border: 0; border-radius: 3px; cursor: pointer; background: {{ m.bg }}; color: {{ m.fg }};">{{ m.t }}</button>
+        </sc-for>
+      </div>
+
+      <div class="bpr" style="-webkit-app-region: no-drag; display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--bp-border); background: var(--bp-chrome-sunken); flex: none;">
+        <input type="range" min="25" max="100" step="5" value="{{ zoom }}" onChange="{{ onZoom }}" onInput="{{ onZoom }}" style="width: 76px;">
+        <span style="font-family: var(--bp-font-mono); font-size: 11px; color: var(--bp-ink-muted); width: 30px; text-align: right;">{{ zoomLabel }}</span>
+      </div>
+
+      <button type="button" title="Add pane" style="-webkit-app-region: no-drag; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--bp-border-strong); border-radius: 4px; background: transparent; color: var(--bp-ink-muted); cursor: pointer; font-size: 14px; flex: none;" style-hover="background: var(--bp-hover); color: var(--bp-ink);">+</button>
+    </div>
+
+    <!-- ------------------------ CANVAS + PANEL -------------------------- -->
+    <div style="flex: 1 1 auto; min-height: 0; display: flex; flex-direction: {{ dockDir }};">
+
+      <div class="bpx" style="flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; background: var(--bp-canvas); background-image: linear-gradient(90deg, var(--bp-canvas-grid) 1px, transparent 1px); background-size: 96px 100%; position: relative;">
+
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 clamp(24px, 8vw, 120px); gap: 14px;">
+            <div style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--bp-ink-faint);">No project open</div>
+            <div style="font-size: 20px; font-weight: 500; letter-spacing: -0.01em;">Open a local repo to start rendering it.</div>
+            <div style="display: flex; gap: 8px; margin-top: 2px;">
+              <button type="button" onClick="{{ exitEmpty }}" style="font: inherit; font-size: 12px; height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--bp-accent); background: transparent; color: var(--bp-accent-ink); cursor: pointer;">Open project…</button>
+              <button type="button" onClick="{{ openPalette }}" style="font: inherit; font-size: 12px; height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--bp-border-strong); background: transparent; color: var(--bp-ink); cursor: pointer;">Recent ⌘P</button>
+            </div>
+            <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; color: var(--bp-ink-faint);">
+              <span style="font-family: var(--bp-font-mono);">$ breakpoint open ~/src/atlas-web</span>
+              <span style="font-family: var(--bp-font-mono);">$ breakpoint pane add mobile --url /checkout</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; align-items: flex-start; gap: 16px; padding: 16px; min-height: 100%;">
+            <sc-for list="{{ panes }}" as="p" hint-placeholder-count="6">
+              <div onClick="{{ p.select }}" style="flex: none; border-radius: 4px; background: var(--bp-chrome); box-shadow: {{ p.shell }}; padding: 0 1px 1px; cursor: default; opacity: {{ p.dim }};">
+
+                <div style="height: 24px; display: flex; align-items: center; gap: 5px; padding-right: 5px; width: {{ p.headW }}; overflow: hidden; position: relative;">
+                  <span style="width: 3px; height: 12px; border-radius: 0 2px 2px 0; flex: none; background: {{ p.color }};"></span>
+                  <span style="font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink); white-space: nowrap; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: clip;">{{ p.headText }}</span>
+                  <sc-if value="{{ p.showScheme }}" hint-placeholder-val="{{ false }}">
+                    <span title="{{ p.schemeTitle }}" style="font-size: 10px; color: {{ p.schemeFg }}; flex: none;">{{ p.schemeGlyph }}</span>
+                  </sc-if>
+                  <sc-if value="{{ p.showErr }}" hint-placeholder-val="{{ false }}">
+                    <span style="margin-left: auto; flex: none; display: inline-flex; align-items: center; height: 14px; padding: 0 4px; border-radius: 2px; font-family: var(--bp-font-mono); font-size: 9.5px; font-weight: 500; background: var(--bp-error); color: var(--bp-pane-ink);">{{ p.errText }}</span>
+                  </sc-if>
+                  <sc-if value="{{ p.flash }}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; inset: 0; background: var(--bp-error-wash); box-shadow: inset 0 0 0 1px var(--bp-error); animation: bpFlash var(--bp-dur-flash) var(--bp-ease) 3; pointer-events: none;"></span>
+                  </sc-if>
+                </div>
+
+                <div style="position: relative; width: {{ p.dw }}; height: {{ p.dh }}; border-radius: 3px; overflow: hidden; background: {{ p.paneBg }}; box-shadow: inset 0 0 0 1px var(--bp-border-seam);">
+                  <div style="width: {{ p.cssW }}; height: {{ p.cssH }}; transform: scale({{ p.scale }}); transform-origin: top left;">
+                    <div style="height: 56px; background: {{ p.c1 }}; display: flex; align-items: center; padding: 0 20px; gap: 14px;">
+                      <span style="width: 78px; height: 14px; border-radius: 2px; background: {{ p.c4 }};"></span>
+                      <span style="width: 46px; height: 9px; border-radius: 2px; background: {{ p.c3 }};"></span>
+                      <span style="width: 46px; height: 9px; border-radius: 2px; background: {{ p.c3 }};"></span>
+                    </div>
+                    <div style="padding: 32px 20px 0;">
+                      <div style="height: 30px; width: 76%; border-radius: 3px; background: {{ p.c4 }};"></div>
+                      <div style="height: 10px; width: 92%; border-radius: 2px; background: {{ p.c3 }}; margin-top: 16px;"></div>
+                      <div style="height: 10px; width: 84%; border-radius: 2px; background: {{ p.c3 }}; margin-top: 8px;"></div>
+                      <div style="height: 10px; width: 61%; border-radius: 2px; background: {{ p.c3 }}; margin-top: 8px;"></div>
+                      <div style="height: 180px; border-radius: 4px; background: {{ p.c2 }}; margin-top: 24px;"></div>
+                      <div style="display: flex; gap: 12px; margin-top: 20px;">
+                        <span style="flex: 1; height: 96px; border-radius: 4px; background: {{ p.c2 }};"></span>
+                        <span style="flex: 1; height: 96px; border-radius: 4px; background: {{ p.c2 }};"></span>
+                      </div>
+                      <div style="height: 10px; width: 70%; border-radius: 2px; background: {{ p.c3 }}; margin-top: 24px;"></div>
+                      <div style="height: 10px; width: 55%; border-radius: 2px; background: {{ p.c3 }}; margin-top: 8px;"></div>
+                    </div>
+                  </div>
+
+                  <sc-if value="{{ p.inspect }}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; left: {{ p.insX }}; top: {{ p.insY }}; width: {{ p.insW }}; height: {{ p.insH }}; box-shadow: 0 0 0 1.5px var(--bp-accent); background: var(--bp-accent-wash); pointer-events: none;"></span>
+                    <span style="position: absolute; left: {{ p.insX }}; top: {{ p.insLabelY }}; font-family: var(--bp-font-mono); font-size: 9px; line-height: 14px; height: 14px; padding: 0 4px; border-radius: 2px; background: var(--bp-accent); color: var(--bp-pane-ink); white-space: nowrap;">{{ p.insLabel }}</span>
+                  </sc-if>
+
+                  <sc-if value="{{ p.loading }}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; inset: 0; background: var(--bp-chrome); display: grid; place-items: center;">
+                      <span style="width: 54px; height: 2px; border-radius: 2px; background: var(--bp-border-strong); overflow: hidden;">
+                        <span style="display: block; width: 30%; height: 100%; background: var(--bp-accent); animation: bpBar 900ms linear infinite;"></span>
+                      </span>
+                    </span>
+                  </sc-if>
+
+                  <sc-if value="{{ p.crashed }}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; inset: 0; background: var(--bp-chrome); display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 8px; padding: 0 12px;">
+                      <span style="font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-error);">RENDERER GONE</span>
+                      <span style="font-size: 11px; color: var(--bp-ink-muted); line-height: 1.4;">Killed after 2 crashes in 30s.</span>
+                      <button type="button" style="font: inherit; font-size: 11px; height: 22px; padding: 0 9px; border-radius: 3px; border: 1px solid var(--bp-border-strong); background: transparent; color: var(--bp-ink); cursor: pointer;">Reload pane</button>
+                    </span>
+                  </sc-if>
+
+                  <sc-if value="{{ p.offscreen }}" hint-placeholder-val="{{ false }}">
+                    <span style="position: absolute; inset: 0; background: var(--bp-chrome-sunken); display: grid; place-items: center;">
+                      <span style="font-family: var(--bp-font-mono); font-size: 9px; letter-spacing: 0.08em; color: var(--bp-ink-disabled);">SUSPENDED</span>
+                    </span>
+                  </sc-if>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <div style="flex: none; display: flex; flex-direction: column; background: var(--bp-chrome); border-top: {{ panelBorderTop }}; border-left: {{ panelBorderLeft }}; height: {{ panelH }}; width: {{ panelW }}; min-height: 0;">
+
+        <div style="height: 30px; flex: none; display: flex; align-items: stretch; gap: 0; border-bottom: 1px solid var(--bp-border); padding: 0 6px 0 0;">
+          <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+            <button type="button" onClick="{{ t.on }}" style="font: inherit; font-size: 11px; display: flex; align-items: center; gap: 5px; padding: 0 10px; border: 0; border-bottom: 2px solid {{ t.rule }}; background: transparent; color: {{ t.fg }}; cursor: pointer;">
+              <span>{{ t.name }}</span>
+              <sc-if value="{{ t.showCount }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family: var(--bp-font-mono); font-size: 9.5px; padding: 0 4px; height: 13px; line-height: 13px; border-radius: 2px; background: {{ t.countBg }}; color: {{ t.countFg }};">{{ t.count }}</span>
+              </sc-if>
+            </button>
+          </sc-for>
+          <div style="margin-left: auto; display: flex; align-items: center; gap: 6px;">
+            <sc-for list="{{ panelFilters }}" as="f" hint-placeholder-count="4">
+              <button type="button" onClick="{{ f.on }}" title="{{ f.title }}" style="font: inherit; font-size: 10px; font-family: var(--bp-font-mono); height: 18px; padding: 0 6px; border-radius: 2px; border: 1px solid {{ f.bd }}; background: {{ f.bg }}; color: {{ f.fg }}; cursor: pointer;">{{ f.t }}</button>
+            </sc-for>
+            <span style="width: 1px; height: 14px; background: var(--bp-border);"></span>
+            <button type="button" onClick="{{ toggleDock }}" title="Dock right / bottom" style="width: 20px; height: 20px; display: grid; place-items: center; border: 0; border-radius: 3px; background: transparent; color: var(--bp-ink-faint); cursor: pointer; font-size: 11px;" style-hover="background: var(--bp-hover); color: var(--bp-ink);">⊟</button>
+          </div>
+        </div>
+
+        <!-- CONSOLE -->
+        <sc-if value="{{ isConsole }}" hint-placeholder-val="{{ true }}">
+          <div class="bpx" style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 2px 0 0;">
+            <sc-for list="{{ consoleRows }}" as="r" hint-placeholder-count="14">
+              <div data-selectable="true" style="display: flex; align-items: flex-start; gap: 8px; min-height: 22px; padding: 3px 10px; border-bottom: 1px solid var(--bp-border); background: {{ r.bg }}; font-family: var(--bp-font-mono); font-size: 11.5px; line-height: 1.35;">
+                <span style="flex: none; width: 10px; text-align: center; color: {{ r.levelFg }}; font-size: 10px; line-height: 16px;">{{ r.glyph }}</span>
+                <span style="flex: none; width: 100px; display: flex; gap: 2px; padding-top: 1px; overflow: hidden;">
+                  <sc-for list="{{ r.badges }}" as="b" hint-placeholder-count="1">
+                    <span style="display: inline-flex; align-items: center; height: 14px; padding: 0 4px; border-radius: 2px; font-size: 9px; font-weight: 500; letter-spacing: 0.02em; background: {{ b.c }}; color: var(--bp-pane-ink);">{{ b.t }}</span>
+                  </sc-for>
+                </span>
+                <span style="flex: none; width: 82px; color: var(--bp-ink-faint); font-size: 10.5px; line-height: 16px;">{{ r.time }}</span>
+                <span style="flex: 1 1 auto; min-width: 0; color: {{ r.msgFg }}; white-space: pre-wrap; word-break: break-word;">{{ r.msg }}</span>
+                <span style="flex: none; color: var(--bp-ink-faint); font-size: 10.5px; line-height: 16px;">{{ r.src }}</span>
+              </div>
+            </sc-for>
+            <div style="display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; font-family: var(--bp-font-mono); font-size: 11px; color: var(--bp-ink-faint);">
+              <span style="color: var(--bp-accent);">›</span><span>filter…</span>
+              <span style="margin-left: auto; display: inline-flex; align-items: center; gap: 5px;"><span style="width: 5px; height: 5px; border-radius: 50%; background: var(--bp-success);"></span>stick to bottom · 2,140/s</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- LAYOUT -->
+        <sc-if value="{{ isLayout }}" hint-placeholder-val="{{ false }}">
+          <div class="bpx" style="flex: 1 1 auto; min-height: 0; overflow: auto;">
+            <sc-for list="{{ layoutRows }}" as="r" hint-placeholder-count="5">
+              <div data-selectable="true" style="display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-bottom: 1px solid var(--bp-border); font-size: 11.5px;">
+                <span style="flex: none; width: 10px; text-align: center; color: {{ r.fg }}; font-size: 10px;">{{ r.glyph }}</span>
+                <span style="flex: none; display: inline-flex; align-items: center; height: 14px; padding: 0 4px; border-radius: 2px; font-family: var(--bp-font-mono); font-size: 9px; font-weight: 500; background: {{ r.c }}; color: var(--bp-pane-ink);">{{ r.badge }}</span>
+                <span style="flex: 1 1 auto; min-width: 0; color: var(--bp-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.msg }}</span>
+                <span style="flex: none; font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-faint);">{{ r.sel }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- NETWORK -->
+        <sc-if value="{{ isNetwork }}" hint-placeholder-val="{{ false }}">
+          <div class="bpx" style="flex: 1 1 auto; min-height: 0; overflow: auto;">
+            <div style="display: flex; align-items: center; gap: 8px; height: 22px; padding: 0 10px; border-bottom: 1px solid var(--bp-border); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bp-ink-faint);">
+              <span style="flex: none; width: 34px;">Pane</span><span style="flex: none; width: 46px;">Status</span><span style="flex: none; width: 52px;">Method</span><span style="flex: 1 1 auto;">Path</span><span style="flex: none; width: 64px; text-align: right;">Size</span><span style="flex: none; width: 56px; text-align: right;">Time</span>
+            </div>
+            <sc-for list="{{ netRows }}" as="r" hint-placeholder-count="8">
+              <div data-selectable="true" style="display: flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-bottom: 1px solid var(--bp-border); font-family: var(--bp-font-mono); font-size: 11px;">
+                <span style="flex: none; width: 34px;"><span style="display: inline-flex; align-items: center; height: 14px; padding: 0 4px; border-radius: 2px; font-size: 9px; font-weight: 500; background: {{ r.c }}; color: var(--bp-pane-ink);">{{ r.badge }}</span></span>
+                <span style="flex: none; width: 46px; color: {{ r.statusFg }};">{{ r.status }}</span>
+                <span style="flex: none; width: 52px; color: var(--bp-ink-muted);">{{ r.method }}</span>
+                <span style="flex: 1 1 auto; min-width: 0; color: var(--bp-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.path }}</span>
+                <span style="flex: none; width: 64px; text-align: right; color: var(--bp-ink-muted);">{{ r.size }}</span>
+                <span style="flex: none; width: 56px; text-align: right; color: var(--bp-ink-muted);">{{ r.time }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <!-- TERMINAL -->
+        <sc-if value="{{ isTerminal }}" hint-placeholder-val="{{ false }}">
+          <div class="bpx" data-selectable="true" style="flex: 1 1 auto; min-height: 0; overflow: auto; padding: 8px 10px; font-family: var(--bp-font-mono); font-size: 11.5px; line-height: 1.55; background: var(--bp-chrome-sunken);">
+            <sc-for list="{{ termLines }}" as="l" hint-placeholder-count="9">
+              <div style="color: {{ l.fg }}; white-space: pre-wrap;">{{ l.t }}</div>
+            </sc-for>
+            <div style="display: flex; gap: 6px; margin-top: 2px;"><span style="color: var(--bp-accent);">❯</span><span style="width: 7px; height: 14px; background: var(--bp-accent);"></span></div>
+          </div>
+        </sc-if>
+
+        <!-- PROCESSES -->
+        <sc-if value="{{ isProcesses }}" hint-placeholder-val="{{ false }}">
+          <div class="bpx" style="flex: 1 1 auto; min-height: 0; overflow: auto;">
+            <sc-for list="{{ procRows }}" as="r" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; gap: 10px; height: 26px; padding: 0 10px; border-bottom: 1px solid var(--bp-border); font-size: 11.5px;">
+                <span style="flex: none; width: 6px; height: 6px; border-radius: 50%; background: {{ r.dot }};"></span>
+                <span style="flex: none; width: 120px; color: var(--bp-ink);">{{ r.name }}</span>
+                <span style="flex: none; font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-faint); width: 56px;">{{ r.pid }}</span>
+                <span style="flex: 1 1 auto; min-width: 0; font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.cmd }}</span>
+                <span style="flex: none; font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted); width: 52px; text-align: right;">{{ r.cpu }}</span>
+                <span style="flex: none; font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-muted); width: 60px; text-align: right;">{{ r.mem }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+    </div>
+
+    <sc-if value="{{ overlayOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeOverlay }}" style="position: absolute; inset: 0; background: rgba(0,0,0,0.38); display: flex; align-items: flex-start; justify-content: center; padding-top: 88px;">
+
+        <sc-if value="{{ isPalette }}" hint-placeholder-val="{{ false }}">
+          <div style="width: 560px; max-width: 92%; border-radius: 8px; background: var(--bp-chrome-raised); box-shadow: var(--bp-shadow-lg); overflow: hidden; align-self: flex-start;">
+            <div style="display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--bp-border);">
+              <span style="color: var(--bp-ink-faint); font-size: 13px;">›</span>
+              <span style="font-size: 15px; color: var(--bp-ink);">pane</span>
+              <span style="width: 1px; height: 17px; background: var(--bp-accent);"></span>
+              <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint);">⌘⇧P</span>
+            </div>
+            <sc-for list="{{ paletteGroups }}" as="g" hint-placeholder-count="2">
+              <div style="padding: 5px 0 2px;">
+                <div style="font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--bp-ink-faint); padding: 4px 12px 5px;">{{ g.name }}</div>
+                <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                  <div style="display: flex; align-items: center; gap: 9px; height: 26px; padding: 0 12px; background: {{ r.bg }};">
+                    <span style="flex: none; width: 14px; text-align: center; color: var(--bp-ink-faint); font-size: 11px;">{{ r.icon }}</span>
+                    <span style="font-size: 13px; color: var(--bp-ink);">{{ r.t }}</span>
+                    <span style="font-size: 12px; color: var(--bp-ink-faint);">{{ r.hint }}</span>
+                    <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint);">{{ r.kbd }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-for>
+            <div style="display: flex; align-items: center; gap: 14px; height: 26px; padding: 0 12px; border-top: 1px solid var(--bp-border); font-size: 10.5px; color: var(--bp-ink-faint); background: var(--bp-chrome-sunken);">
+              <span>↑↓ navigate</span><span>↵ run</span><span>⇥ complete</span><span style="margin-left: auto;">37 commands</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isProjects }}" hint-placeholder-val="{{ false }}">
+          <div style="width: 480px; max-width: 92%; border-radius: 8px; background: var(--bp-chrome-raised); box-shadow: var(--bp-shadow-lg); overflow: hidden; align-self: flex-start;">
+            <div style="display: flex; align-items: center; gap: 9px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--bp-border);">
+              <span style="color: var(--bp-ink-faint); font-size: 13px;">⌕</span>
+              <span style="font-size: 15px; color: var(--bp-ink-faint);">Search projects…</span>
+              <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint);">⌘P</span>
+            </div>
+            <sc-for list="{{ projectRows }}" as="r" hint-placeholder-count="5">
+              <div style="display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 12px; background: {{ r.bg }};">
+                <span style="flex: none; width: 7px; height: 7px; border-radius: 1px; background: {{ r.dot }};"></span>
+                <span style="flex: none; font-size: 13px; color: var(--bp-ink);">{{ r.name }}</span>
+                <span style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ r.path }}</span>
+                <span style="margin-left: auto; flex: none; display: flex; gap: 2px;">
+                  <sc-for list="{{ r.panes }}" as="b" hint-placeholder-count="3">
+                    <span style="width: 12px; height: 4px; border-radius: 1px; background: {{ b.c }};"></span>
+                  </sc-for>
+                </span>
+                <span style="flex: none; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint); width: 46px; text-align: right;">{{ r.port }}</span>
+              </div>
+            </sc-for>
+            <div style="display: flex; align-items: center; height: 26px; padding: 0 12px; border-top: 1px solid var(--bp-border); font-size: 10.5px; color: var(--bp-ink-faint); background: var(--bp-chrome-sunken);">
+              <span>↵ open</span><span style="margin-left: auto;">⌘↵ open in new window</span>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isCert }}" hint-placeholder-val="{{ false }}">
+          <div style="width: 420px; max-width: 92%; border-radius: 8px; background: var(--bp-chrome-raised); box-shadow: var(--bp-shadow-lg); padding: 18px 18px 14px; align-self: flex-start;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+              <span style="width: 7px; height: 7px; border-radius: 1px; background: var(--bp-warn);"></span>
+              <div style="font-size: 13px; font-weight: 500;">Trust the certificate for localhost?</div>
+            </div>
+            <p style="font-size: 12px; line-height: 1.55; color: var(--bp-ink-muted); margin: 0 0 10px;">Your dev server presents a self-signed certificate. Breakpoint can add it to the login keychain so panes stop warning on every reload. This affects this machine only.</p>
+            <div data-selectable="true" style="font-family: var(--bp-font-mono); font-size: 10.5px; line-height: 1.6; color: var(--bp-ink-muted); background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); border-radius: 4px; padding: 8px 10px; margin-bottom: 14px;">CN=localhost · SHA-256<br>9F:2C:41:AA:7B:03:E8:51:D6:90:4C:18:2E:BB:70:35</div>
+            <div style="display: flex; gap: 8px; justify-content: flex-end;">
+              <button type="button" onClick="{{ closeOverlay }}" style="font: inherit; font-size: 12px; height: 26px; padding: 0 11px; border-radius: 4px; border: 1px solid var(--bp-border-strong); background: transparent; color: var(--bp-ink); cursor: pointer;">Not now</button>
+              <button type="button" onClick="{{ closeOverlay }}" style="font: inherit; font-size: 12px; height: 26px; padding: 0 11px; border-radius: 4px; border: 1px solid var(--bp-accent); background: var(--bp-accent-wash); color: var(--bp-accent-ink); cursor: pointer;">Trust and reload</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+          <div style="width: 620px; max-width: 94%; height: 420px; border-radius: 8px; background: var(--bp-chrome-raised); box-shadow: var(--bp-shadow-lg); display: flex; overflow: hidden; align-self: flex-start;">
+            <div style="width: 150px; flex: none; border-right: 1px solid var(--bp-border); background: var(--bp-chrome-sunken); padding: 8px 0;">
+              <sc-for list="{{ settingsNav }}" as="n" hint-placeholder-count="5">
+                <div style="height: 24px; display: flex; align-items: center; padding: 0 12px; font-size: 12px; color: {{ n.fg }}; background: {{ n.bg }};">{{ n.t }}</div>
+              </sc-for>
+            </div>
+            <div class="bpx" style="flex: 1 1 auto; min-width: 0; overflow: auto; padding: 14px 16px;">
+              <div style="font-size: 13px; font-weight: 500; margin-bottom: 12px;">Appearance</div>
+              <sc-for list="{{ settingsRows }}" as="r" hint-placeholder-count="6">
+                <div style="display: flex; align-items: center; gap: 12px; min-height: 28px; padding: 6px 0; border-bottom: 1px solid var(--bp-border);">
+                  <div style="flex: 1 1 auto; min-width: 0;">
+                    <div style="font-size: 12px; color: var(--bp-ink);">{{ r.t }}</div>
+                    <div style="font-size: 10.5px; color: var(--bp-ink-faint); margin-top: 2px;">{{ r.d }}</div>
+                  </div>
+                  <div style="flex: none; font-family: var(--bp-font-mono); font-size: 11px; color: var(--bp-ink-muted); border: 1px solid var(--bp-border-strong); border-radius: 4px; height: 22px; display: flex; align-items: center; padding: 0 8px; background: var(--bp-chrome-sunken);">{{ r.v }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position: absolute; right: 14px; bottom: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end;">
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 7px 10px; border-radius: 5px; background: var(--bp-chrome-raised); box-shadow: var(--bp-shadow-md);">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--bp-success); flex: none;"></span>
+          <span style="font-size: 12px; color: var(--bp-ink);">Composite screenshot written</span>
+          <span data-selectable="true" style="font-family: var(--bp-font-mono); font-size: 10.5px; color: var(--bp-ink-faint);">shots/0148.png</span>
+          <button type="button" onClick="{{ hideToast }}" style="margin-left: 4px; width: 18px; height: 18px; display: grid; place-items: center; border: 0; border-radius: 3px; background: transparent; color: var(--bp-ink-faint); cursor: pointer; font-size: 11px;" style-hover="background: var(--bp-hover);">✕</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 9px; min-height: 30px; padding: 7px 10px; border-radius: 5px; background: var(--bp-chrome-raised); box-shadow: var(--bp-shadow-md);">
+          <span style="width: 6px; height: 6px; border-radius: 50%; background: var(--bp-error); flex: none;"></span>
+          <span style="font-size: 12px; color: var(--bp-ink);">Pane Wide crashed — renderer gone</span>
+          <button type="button" onClick="{{ hideToast }}" style="margin-left: 4px; font: inherit; font-size: 11px; height: 20px; padding: 0 8px; border-radius: 3px; border: 1px solid var(--bp-border-strong); background: transparent; color: var(--bp-ink); cursor: pointer;">Reload</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1520,&quot;height&quot;:960}}">
+const PANES = [
+  { id: 1, name: 'Mobile',   w: 390,  h: 844,  dpr: 3, scheme: 'dark',  errs: 3 },
+  { id: 2, name: 'Tablet',   w: 820,  h: 1180, dpr: 2, scheme: 'dark',  errs: 0 },
+  { id: 3, name: 'Desktop',  w: 1440, h: 900,  dpr: 2, scheme: 'dark',  errs: 0 },
+  { id: 4, name: 'Wide',     w: 1920, h: 1080, dpr: 1, scheme: 'dark',  errs: 0 },
+  { id: 5, name: 'SE',       w: 375,  h: 667,  dpr: 2, scheme: 'light', errs: 1 },
+  { id: 6, name: 'Fold',     w: 344,  h: 882,  dpr: 3, scheme: 'dark',  errs: 0 },
+];
+
+// Header degradation ladder, keyed on available screen width in px.
+function headerTiers(p) {
+  return [
+    { min: 220, t: p.name + ' ' + p.w + '×' + p.h + ' @' + p.dpr + 'x', err: true },
+    { min: 148, t: p.name + ' ' + p.w + '×' + p.h,                      err: true },
+    { min: 104, t: p.w + '×' + p.h,                                     err: true },
+    { min: 72,  t: String(p.w),                                         err: true },
+    { min: 56,  t: String(p.w),                                         err: true, noScheme: true },
+    { min: 0,   t: '',                                                  err: true, noScheme: true },
+  ];
+}
+
+const BADGE = ['MOB', 'TAB', 'DESK', 'WIDE', 'SE', 'FOLD'];
+
+const CONSOLE = [
+  { l: 'info',  p: [1,2,3,4,5,6], t: '14:02:11.004', m: '[vite] connected.', s: 'client.ts:18:7' },
+  { l: 'log',   p: [3],           t: '14:02:11.219', m: 'checkout:mount step=payment', s: 'Checkout.tsx:44:12' },
+  { l: 'warn',  p: [1,5],         t: '14:02:11.402', m: 'Image with src "/hero@3x.avif" has no explicit width; layout will shift.', s: 'Hero.tsx:31:5' },
+  { l: 'error', p: [1],           t: '14:02:11.618', m: 'Uncaught TypeError: Cannot read properties of undefined (reading \'total\')', s: 'CartSummary.tsx:87:22' },
+  { l: 'log',   p: [2,3,4],       t: '14:02:11.640', m: 'fetch /api/cart → 200 in 48ms', s: 'api.ts:12:3' },
+  { l: 'warn',  p: [1,2,3,4,5,6], t: '14:02:11.771', m: 'React Hook useEffect has a missing dependency: \'cartId\'.', s: 'useCart.ts:29:6' },
+  { l: 'error', p: [1,5],         t: '14:02:12.003', m: 'Failed to load resource: the server responded with 502 (Bad Gateway)', s: '/api/rates:0:0' },
+  { l: 'log',   p: [4],           t: '14:02:12.115', m: 'resize 1920×1080 → dpr 1', s: 'viewport.ts:9:4' },
+  { l: 'info',  p: [1,2,3,4,5,6], t: '14:02:12.260', m: 'hmr update /src/routes/checkout/CartSummary.tsx', s: 'client.ts:204:9' },
+  { l: 'log',   p: [3],           t: '14:02:12.288', m: 'checkout:rerender reason=hmr', s: 'Checkout.tsx:44:12' },
+  { l: 'error', p: [1],           t: '14:02:12.301', m: 'Uncaught TypeError: Cannot read properties of undefined (reading \'total\')', s: 'CartSummary.tsx:87:22' },
+  { l: 'warn',  p: [6],           t: '14:02:12.440', m: 'Viewport 344px narrower than smallest breakpoint (360px).', s: 'breakpoints.ts:7:1' },
+  { l: 'log',   p: [1,2,3,4,5,6], t: '14:02:12.512', m: 'scroll sync → y=1204', s: 'sync.ts:61:8' },
+  { l: 'info',  p: [3],           t: '14:02:12.690', m: 'agent: screenshot composite written to .breakpoint/shots/0148.png', s: 'cli.ts:88:2' },
+];
+
+const NET = [
+  { p: 3, st: 200, mth: 'GET',  path: '/checkout?step=payment', size: '14.2 kB', ms: '61 ms' },
+  { p: 3, st: 200, mth: 'GET',  path: '/assets/app-4f1c.js', size: '286 kB', ms: '112 ms' },
+  { p: 1, st: 200, mth: 'GET',  path: '/assets/hero@3x.avif', size: '412 kB', ms: '338 ms' },
+  { p: 2, st: 304, mth: 'GET',  path: '/assets/inter-var.woff2', size: '—', ms: '8 ms' },
+  { p: 1, st: 502, mth: 'POST', path: '/api/rates', size: '0 B', ms: '3.1 s' },
+  { p: 5, st: 502, mth: 'POST', path: '/api/rates', size: '0 B', ms: '3.1 s' },
+  { p: 4, st: 200, mth: 'GET',  path: '/api/cart', size: '2.4 kB', ms: '48 ms' },
+  { p: 6, st: 404, mth: 'GET',  path: '/assets/fold-splash.png', size: '0 B', ms: '12 ms' },
+];
+
+const TERM = [
+  ['var(--bp-ink-faint)', '❯ pnpm dev'],
+  ['var(--bp-ink-muted)', ''],
+  ['var(--bp-success)',   '  VITE v5.4.2  ready in 412 ms'],
+  ['var(--bp-ink-muted)', ''],
+  ['var(--bp-ink)',       '  ➜  Local:   http://localhost:3000/'],
+  ['var(--bp-ink-muted)', '  ➜  Network: use --host to expose'],
+  ['var(--bp-ink-muted)', ''],
+  ['var(--bp-ink-muted)', '14:02:11 [vite] hmr update /src/routes/checkout/CartSummary.tsx'],
+  ['var(--bp-warn)',      '14:02:12 [ts] CartSummary.tsx(87,22): Object is possibly \'undefined\'.'],
+];
+
+class Component extends DCLogic {
+  state = {
+    theme: 'dark', zoom: 50, mode: 'horizontal', sync: true,
+    selected: 3, scenario: 'normal', inspect: false, empty: false,
+    dock: 'bottom', tab: 'Console', overlay: null, toast: false,
+  };
+
+  set(k, v) { this.setState({ [k]: v }); }
+
+  effectiveZoom() {
+    if (this.state.mode === 'fit') return 22;
+    return this.state.zoom;
+  }
+
+  renderVals() {
+    const s = this.state;
+    const dark = s.theme === 'dark';
+    const paneDark = (v) => v ? 'var(--bp-surface)' : 'transparent';
+    const z = this.effectiveZoom() / 100;
+
+    const panes = PANES.map((p, i) => {
+      const focusMe = s.mode === 'focus' && s.selected === p.id;
+      const focusOther = s.mode === 'focus' && s.selected !== p.id;
+      const scale = focusMe ? 1 : (focusOther ? 0.06 : z);
+      const dw = Math.round(p.w * scale);
+      const dh = Math.min(Math.round(p.h * scale), focusOther ? 120 : 560);
+
+      const tier = headerTiers(p).find(t => dw >= t.min);
+      const schemeMismatch = p.scheme !== s.theme;
+      const loading = s.scenario === 'loading' && p.id === 2;
+      const crashed = s.scenario === 'crashed' && p.id === 4;
+      const offscreen = focusOther || (s.scenario === 'offscreen' && p.id > 3);
+      const errs = s.scenario === 'errors' ? p.errs + (p.id === 1 ? 9 : 2) : p.errs;
+
+      const light = p.scheme === 'light';
+      return {
+        key: p.id,
+        select: () => this.set('selected', p.id),
+        color: 'var(--bp-pane-' + p.id + ')',
+        shell: (s.selected === p.id
+          ? 'var(--bp-shadow-pane), inset 0 0 0 1.5px var(--bp-pane-' + p.id + ')'
+          : (errs > 0 && s.scenario === 'errors'
+            ? 'var(--bp-shadow-pane), inset 0 0 0 1.5px var(--bp-error)'
+            : 'var(--bp-shadow-pane), inset 0 0 0 1px var(--bp-border-strong)')),
+        dim: offscreen ? 0.62 : 1,
+        headW: Math.max(dw, 32) + 'px',
+        headText: tier.t,
+        showScheme: !tier.noScheme && tier.t !== '',
+        schemeGlyph: light ? '☀' : '☾',
+        schemeFg: schemeMismatch ? 'var(--bp-warn)' : 'var(--bp-ink-faint)',
+        schemeTitle: schemeMismatch ? 'Pane emulates ' + p.scheme + ', app is ' + s.theme : 'Pane scheme matches app',
+        showErr: errs > 0,
+        errText: String(errs),
+        flash: s.scenario === 'errors' && p.id === 1,
+        dw: dw + 'px', dh: dh + 'px',
+        cssW: p.w + 'px', cssH: p.h + 'px', scale: scale,
+        paneBg: light ? '#ffffff' : '#0d0e15',
+        c1: light ? '#eceef5' : '#16171f',
+        c2: light ? '#e3e5ee' : '#1b1c26',
+        c3: light ? '#c8cbd8' : '#2a2c39',
+        c4: light ? '#a9adbe' : '#3b3e4e',
+        loading, crashed, offscreen,
+        inspect: s.inspect && s.selected === p.id && !offscreen && !loading && !crashed,
+        insX: Math.round(20 * scale) + 'px',
+        insY: Math.round(200 * scale) + 'px',
+        insW: Math.round((p.w - 40) * scale) + 'px',
+        insH: Math.round(180 * scale) + 'px',
+        insLabelY: Math.round(200 * scale) + 'px',
+        insLabel: (p.w - 40) + '×180',
+      };
+    });
+
+    const btn = (t, on, active) => ({ t, on, bg: active ? 'var(--bp-accent-wash)' : 'transparent', fg: active ? 'var(--bp-accent-ink)' : 'var(--bp-ink-muted)' });
+
+    return {
+      themeClass: dark ? 'dark' : 'light',
+      panes,
+      hasPanes: !s.empty,
+      isEmpty: s.empty,
+      zoom: s.zoom,
+      zoomLabel: this.effectiveZoom() + '%',
+      onZoom: (e) => this.setState({ zoom: Number(e.target.value), mode: 'horizontal' }),
+      address: 'localhost:3000/checkout?step=payment',
+      addrBorder: 'var(--bp-border-strong)',
+      toggleSync: () => this.set('sync', !s.sync),
+      syncBg: s.sync ? 'var(--bp-accent-wash)' : 'var(--bp-chrome-sunken)',
+      syncFg: s.sync ? 'var(--bp-accent-ink)' : 'var(--bp-ink-muted)',
+      syncBorder: s.sync ? 'var(--bp-accent)' : 'var(--bp-border)',
+      dockDir: s.dock === 'bottom' ? 'column' : 'row',
+      openProjects: () => this.set('overlay', 'projects'),
+      openPalette: () => this.set('overlay', 'palette'),
+      exitEmpty: () => this.setState({ empty: false }),
+
+      navBtns: [
+        { g: '←', title: 'Back', fg: 'var(--bp-ink)' },
+        { g: '→', title: 'Forward', fg: 'var(--bp-ink-disabled)' },
+        { g: '⟳', title: 'Reload all panes', fg: 'var(--bp-ink)' },
+      ],
+      modes: [
+        { t: 'Horizontal', on: () => this.set('mode', 'horizontal'), bg: paneDark(s.mode === 'horizontal'), fg: s.mode === 'horizontal' ? 'var(--bp-ink)' : 'var(--bp-ink-muted)' },
+        { t: 'Fit', on: () => this.set('mode', 'fit'), bg: paneDark(s.mode === 'fit'), fg: s.mode === 'fit' ? 'var(--bp-ink)' : 'var(--bp-ink-muted)' },
+        { t: 'Focus', on: () => this.set('mode', 'focus'), bg: paneDark(s.mode === 'focus'), fg: s.mode === 'focus' ? 'var(--bp-ink)' : 'var(--bp-ink-muted)' },
+      ],
+      ladder: [
+        { key: 1, range: '≥ 220px', w: '220px', t: 'Mobile 390×844 @3x', scheme: '☾', note: 'Everything. Desktop and wider panes stay here down to 15% zoom.' },
+        { key: 2, range: '≥ 148px', w: '148px', t: 'Mobile 390×844', scheme: '☾', note: 'DPR drops first — it is the least often wrong and the easiest to check elsewhere.' },
+        { key: 3, range: '≥ 104px', w: '104px', t: '390×844', scheme: '☾', note: 'The name drops. Dimensions identify a pane better than a nickname does, and the colour tab still carries identity.' },
+        { key: 4, range: '≥ 72px', w: '72px', t: '390', scheme: '☾', note: 'Height drops. Mobile at 25% zoom lands here — 390 is enough to name the pane to a developer.' },
+        { key: 5, range: '≥ 56px', w: '56px', t: '390', scheme: '', note: 'Scheme glyph drops into the colour tab, which splits to half-tone when the pane scheme differs from the app theme. 56px is the narrowest width that still draws a three-digit number and a count without clipping either.' },
+        { key: 6, range: '< 56px', w: '32px', t: '', scheme: '', note: 'Tab and error count only. The full header is available on hover and in the pane list; nothing here is load-bearing.' },
+      ],
+      rationale: [
+        { key: 1, h: 'Recede, and stay legible, by being opaque rather than distant',
+          p: 'Chrome recedes by having no opinion: one flat plate colour, one ink ramp, one accent used only for focus and selection, no gradient, no translucency, no blur. That is also what makes it legible. Every legibility problem in this app comes from chrome sampling colours it does not control — a frosted toolbar over a neon page, a semi-transparent label over a photo. So nothing in the chrome is ever transparent over a pane. The plate is --bp-chrome at full opacity, the label is --bp-ink on it, and the contrast ratio is a constant the page cannot move. The one place the two touch is the 1px --bp-border-seam inside the bezel: it guarantees the frame never sits directly against a page pixel, so a pure-white page and a pure-black page both terminate against a known neutral.' },
+        { key: 2, h: 'Overlay strokes counter-scale; their geometry does not',
+          p: 'Anything drawn over a pane splits into two things. Geometry — where the inspect box sits, how big the element is — belongs to the page and scales with the canvas transform, otherwise the highlight stops matching the element. Presentation — stroke width, label type, badge size — belongs to us and is divided by the zoom: width: calc(1.5px / var(--bp-zoom)). Set --bp-zoom once on the canvas and every overlay stays a constant 1.5 screen px from 25% to 100%. The alternative, letting strokes scale, gives you a quarter-pixel border at 25% (invisible, so the feature does not exist at the zoom where you most need it) and a 6px border at 100% (a lie about the element\'s box). The cost is that at 25% the overlay is thick relative to the content it annotates; that is the right trade, because at 25% you are looking for which pane has the problem, not measuring it.' },
+        { key: 3, h: 'Pane headers are fixed screen size and clipped by their pane',
+          p: 'A header that scales is unreadable at 25%, and a header that floats free of its pane loses its binding at exactly the zoom where six panes are on screen at once. Fixed size plus clipping gives both: the header is always 24px tall and always exactly as wide as its pane, so it can never claim width it does not have, and it can never be mistaken for its neighbour\'s. It degrades through six tiers, dropping DPR, then the name, then the height, then the scheme glyph, ending at the colour tab and the error count. The constant 24px of vertical chrome per pane is the price, and at 25% that is proportionally large — acceptable, because at that zoom the header is most of what you are reading.' },
+        { key: 4, h: 'Pane identity is one hue at one lightness',
+          p: 'Ten hues on a single OKLCH lightness and a single low chroma. Fixing lightness is what lets the set work in both themes without a second palette and survive rasterising into a screenshot: hue discriminates reliably at equal value, where saturation does not. Low chroma keeps the colours from competing with page content, and equal chroma keeps any one pane from looking more important than another. The colour appears in exactly four places and always means the same thing: the 3px tab on the header, the console row badge, the layout-finding badge, and the border baked into composite PNGs.' },
+        { key: 5, h: 'Where the PRD seems wrong: the console is a table, not a log',
+          p: 'The brief describes console rows as level icon, badges, timestamp, message, source — which is a five-column table — and then asks for variable height and 2,000 entries per second. Those pull against each other: variable height means no fixed row metric, which means the virtualiser measures, which is where the frame budget goes. The design here fixes everything except the message column to a 22px line box and lets only the message wrap, so measurement is cheap and the columns stay scannable at speed. It also assumes the "identical messages collapse" rule is on by default rather than a filter; at 2,000/s an uncollapsed stream is not readable at any row height, so collapsing is the normal view and expanding is the exception.' },
+        { key: 6, h: 'Where the PRD seems wrong: Fit mode and the zoom control overlap',
+          p: 'Fit is described as a layout mode alongside Horizontal and Focus, but it is really a zoom behaviour — it sets the zoom, and the moment you touch the zoom slider you are no longer in it. Modelling it as a third mode means two controls own one value and they will disagree. Cleaner: two layout modes (Horizontal, Focus) and a zoom control whose value can be "Fit", the way a PDF reader does it. The prototype implements the PRD as written, but the toolbar is arranged so collapsing Fit into the zoom control later is a one-component change.' },
+      ],
+
+      // ---- overlays ----
+      overlayOpen: s.overlay !== null,
+      closeOverlay: (e) => { if (e.target === e.currentTarget) this.set('overlay', null); },
+      isPalette: s.overlay === 'palette',
+      isProjects: s.overlay === 'projects',
+      isCert: s.overlay === 'cert',
+      isSettings: s.overlay === 'settings',
+      toastOpen: s.toast,
+      hideToast: () => this.set('toast', false),
+      paletteGroups: [
+        { key: 'p', name: 'Panes', rows: [
+          { key: 1, icon: '▭', t: 'Pane: Add…', hint: 'from a preset or a custom size', kbd: '⌘⇧N', bg: 'var(--bp-selected)' },
+          { key: 2, icon: '▭', t: 'Pane: Duplicate Desktop', hint: '', kbd: '', bg: 'transparent' },
+          { key: 3, icon: '▭', t: 'Pane: Toggle colour scheme', hint: 'Mobile → light', kbd: '', bg: 'transparent' },
+          { key: 4, icon: '▭', t: 'Pane: Set device pixel ratio…', hint: '1, 2, 3', kbd: '', bg: 'transparent' },
+        ]},
+        { key: 'c', name: 'Canvas', rows: [
+          { key: 5, icon: '◫', t: 'Canvas: Fit all panes', hint: '', kbd: '⌘0', bg: 'transparent' },
+          { key: 6, icon: '◫', t: 'Canvas: Focus selected pane', hint: '', kbd: '⌘1', bg: 'transparent' },
+          { key: 7, icon: '◫', t: 'Canvas: Capture composite screenshot', hint: 'all panes, pane colours baked in', kbd: '⌘⇧4', bg: 'transparent' },
+        ]},
+      ],
+      projectRows: [
+        { key: 1, name: 'atlas-web', path: '~/src/atlas-web', port: ':3000', dot: 'var(--bp-success)', bg: 'var(--bp-selected)', panes: [1,2,3,4,5,6].map(n => ({ key: n, c: 'var(--bp-pane-' + n + ')' })) },
+        { key: 2, name: 'orbit-docs', path: '~/src/orbit/apps/docs', port: ':4321', dot: 'var(--bp-success)', bg: 'transparent', panes: [1,3].map(n => ({ key: n, c: 'var(--bp-pane-' + n + ')' })) },
+        { key: 3, name: 'checkout-v3', path: '~/work/checkout-v3', port: ':5173', dot: 'var(--bp-ink-disabled)', bg: 'transparent', panes: [1,2,3].map(n => ({ key: n, c: 'var(--bp-pane-' + n + ')' })) },
+        { key: 4, name: 'marketing', path: '~/src/atlas-marketing', port: ':3001', dot: 'var(--bp-ink-disabled)', bg: 'transparent', panes: [3,4].map(n => ({ key: n, c: 'var(--bp-pane-' + n + ')' })) },
+        { key: 5, name: 'design-system', path: '~/src/atlas-ds', port: ':6006', dot: 'var(--bp-ink-disabled)', bg: 'transparent', panes: [2].map(n => ({ key: n, c: 'var(--bp-pane-' + n + ')' })) },
+      ],
+      settingsNav: ['Appearance', 'Panes', 'Console', 'Shortcuts', 'CLI & agents', 'Advanced'].map((t, i) => ({
+        key: t, t, fg: i === 0 ? 'var(--bp-ink)' : 'var(--bp-ink-muted)', bg: i === 0 ? 'var(--bp-selected)' : 'transparent',
+      })),
+      settingsRows: [
+        { key: 1, t: 'App theme', d: 'Follows macOS by default', v: 'System' },
+        { key: 2, t: 'Default pane colour scheme', d: 'Applied to new panes', v: 'Match app' },
+        { key: 3, t: 'Chrome density', d: 'Row height and base font', v: 'Compact' },
+        { key: 4, t: 'Canvas grid', d: '96px ruler ticks behind panes', v: 'On' },
+        { key: 5, t: 'Overlay strokes', d: 'Counter-scale so they stay 1.5px on screen', v: 'Counter-scale' },
+        { key: 6, t: 'Pane palette', d: 'Baked into composite screenshots', v: 'Nocturne 10' },
+      ],
+
+      // ---- bottom panel ----
+      panelH: s.dock === 'bottom' ? '278px' : 'auto',
+      panelW: s.dock === 'bottom' ? 'auto' : '460px',
+      panelBorderTop: s.dock === 'bottom' ? '1px solid var(--bp-border)' : '0',
+      panelBorderLeft: s.dock === 'bottom' ? '0' : '1px solid var(--bp-border)',
+      toggleDock: () => this.set('dock', s.dock === 'bottom' ? 'right' : 'bottom'),
+      isConsole: s.tab === 'Console',
+      isLayout: s.tab === 'Layout',
+      isNetwork: s.tab === 'Network',
+      isTerminal: s.tab === 'Terminal',
+      isProcesses: s.tab === 'Processes',
+      tabs: ['Console', 'Layout', 'Network', 'Terminal', 'Processes'].map(name => ({
+        name,
+        on: () => this.set('tab', name),
+        fg: s.tab === name ? 'var(--bp-ink)' : 'var(--bp-ink-muted)',
+        rule: s.tab === name ? 'var(--bp-accent)' : 'transparent',
+        showCount: name === 'Console' || name === 'Layout',
+        count: name === 'Console' ? '14' : '3',
+        countBg: name === 'Console' ? 'var(--bp-error-wash)' : 'var(--bp-warn-wash)',
+        countFg: name === 'Console' ? 'var(--bp-error)' : 'var(--bp-warn)',
+      })),
+      panelFilters: [
+        { t: 'all', title: 'All panes', on: () => {}, bd: 'var(--bp-accent)', bg: 'var(--bp-accent-wash)', fg: 'var(--bp-accent-ink)' },
+        { t: 'err', title: 'Errors only', on: () => {}, bd: 'var(--bp-border)', bg: 'transparent', fg: 'var(--bp-ink-muted)' },
+        { t: 'warn', title: 'Warnings only', on: () => {}, bd: 'var(--bp-border)', bg: 'transparent', fg: 'var(--bp-ink-muted)' },
+        { t: 'group', title: 'Collapse identical messages', on: () => {}, bd: 'var(--bp-accent)', bg: 'var(--bp-accent-wash)', fg: 'var(--bp-accent-ink)' },
+      ],
+      consoleRows: CONSOLE.map((r, i) => ({
+        key: i,
+        glyph: r.l === 'error' ? '✕' : r.l === 'warn' ? '!' : r.l === 'info' ? 'i' : '·',
+        levelFg: r.l === 'error' ? 'var(--bp-error)' : r.l === 'warn' ? 'var(--bp-warn)' : r.l === 'info' ? 'var(--bp-info)' : 'var(--bp-ink-faint)',
+        bg: r.l === 'error' ? 'var(--bp-error-wash)' : r.l === 'warn' ? 'var(--bp-warn-wash)' : 'transparent',
+        msgFg: r.l === 'error' ? 'var(--bp-error)' : 'var(--bp-ink)',
+        badges: (r.p.length > 2
+          ? r.p.slice(0, 2).map(n => ({ key: n, t: BADGE[n - 1], c: 'var(--bp-pane-' + n + ')' }))
+              .concat([{ key: 'more', t: '+' + (r.p.length - 2), c: 'var(--bp-border-strong)' }])
+          : r.p.map(n => ({ key: n, t: BADGE[n - 1], c: 'var(--bp-pane-' + n + ')' }))),
+        time: r.t, msg: r.m, src: r.s,
+      })),
+      layoutRows: [
+        { key: 1, glyph: '!', fg: 'var(--bp-warn)', badge: 'MOB', c: 'var(--bp-pane-1)', msg: 'Horizontal overflow — content is 412px in a 390px viewport', sel: '.cart-summary' },
+        { key: 2, glyph: '!', fg: 'var(--bp-warn)', badge: 'MOB', c: 'var(--bp-pane-1)', msg: 'Tap target 28×28 below 44×44 minimum', sel: 'button.qty-dec' },
+        { key: 3, glyph: '!', fg: 'var(--bp-warn)', badge: 'SE', c: 'var(--bp-pane-5)', msg: 'Text contrast 3.1:1 against #eceef5', sel: '.legal-note' },
+        { key: 4, glyph: '·', fg: 'var(--bp-ink-faint)', badge: 'TAB', c: 'var(--bp-pane-2)', msg: 'Layout shift 0.04 after webfont swap', sel: 'h1.page-title' },
+        { key: 5, glyph: '·', fg: 'var(--bp-ink-faint)', badge: 'WIDE', c: 'var(--bp-pane-4)', msg: 'Container reaches max-width at 1440px, 480px of gutter', sel: '.shell' },
+      ],
+      netRows: NET.map((r, i) => ({
+        key: i, badge: BADGE[r.p - 1], c: 'var(--bp-pane-' + r.p + ')',
+        status: r.st, statusFg: r.st >= 500 ? 'var(--bp-error)' : r.st >= 400 ? 'var(--bp-warn)' : 'var(--bp-success)',
+        method: r.mth, path: r.path, size: r.size, time: r.ms,
+      })),
+      termLines: TERM.map((l, i) => ({ key: i, t: l[1], fg: l[0] })),
+      procRows: [
+        { key: 1, name: 'dev server', dot: 'var(--bp-success)', pid: '48213', cmd: 'pnpm dev --port 3000', cpu: '2.4%', mem: '412 MB' },
+        { key: 2, name: 'typescript', dot: 'var(--bp-success)', pid: '48219', cmd: 'tsc --watch --noEmit', cpu: '0.8%', mem: '286 MB' },
+        { key: 3, name: 'tailwind', dot: 'var(--bp-success)', pid: '48224', cmd: 'tailwindcss -w -i app.css', cpu: '0.1%', mem: '64 MB' },
+        { key: 4, name: 'storybook', dot: 'var(--bp-ink-disabled)', pid: '—', cmd: 'pnpm storybook', cpu: '—', mem: '—' },
+        { key: 5, name: 'agent (cli)', dot: 'var(--bp-accent)', pid: '48901', cmd: 'breakpoint watch --json', cpu: '0.3%', mem: '38 MB' },
+      ],
+
+      demoButtons: [
+        btn(dark ? 'Light theme' : 'Dark theme', () => this.set('theme', dark ? 'light' : 'dark'), false),
+        btn('Normal', () => this.set('scenario', 'normal'), s.scenario === 'normal'),
+        btn('Loading', () => this.set('scenario', 'loading'), s.scenario === 'loading'),
+        btn('Crashed', () => this.set('scenario', 'crashed'), s.scenario === 'crashed'),
+        btn('Error flash', () => this.set('scenario', 'errors'), s.scenario === 'errors'),
+        btn('Suspended', () => this.set('scenario', 'offscreen'), s.scenario === 'offscreen'),
+        btn('Inspect box', () => this.set('inspect', !s.inspect), s.inspect),
+        btn('⌘P projects', () => this.set('overlay', 'projects'), s.overlay === 'projects'),
+        btn('⌘⇧P palette', () => this.set('overlay', 'palette'), s.overlay === 'palette'),
+        btn('Cert prompt', () => this.set('overlay', 'cert'), s.overlay === 'cert'),
+        btn('Settings', () => this.set('overlay', 'settings'), s.overlay === 'settings'),
+        btn('Toast', () => this.set('toast', !s.toast), s.toast),
+        btn('Empty state', () => this.set('empty', !s.empty), s.empty),
+        btn(s.dock === 'bottom' ? 'Dock right' : 'Dock bottom', () => this.set('dock', s.dock === 'bottom' ? 'right' : 'bottom'), false),
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>
