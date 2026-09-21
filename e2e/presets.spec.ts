@@ -1,4 +1,12 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
@@ -470,6 +478,32 @@ test('a presets file that cannot be read refuses rather than being overwritten',
   expect(readFileSync(presetFile(), 'utf8')).toBe(broken)
   // A pane at a size of its own needs no presets, so it still works.
   expect(await addPane({ width: 1024, height: 768 })).toMatchObject({ preset: null })
+})
+
+/**
+ * A new project's panes are resolved from the presets, so a file that cannot be read
+ * refuses the open rather than creating the project from a set the developer did not
+ * write — those panes are snapshots, and a wrong one saved now is wrong for good.
+ */
+test('a presets file that cannot be read refuses to create a project rather than guessing', async () => {
+  mkdirSync(sandbox.userDataDir, { recursive: true })
+  writeFileSync(presetFile(), JSON.stringify({ version: 1, presets: [{ id: 'mobile' }] }))
+  launched = await launchApp(sandbox)
+  const shop = emptyRepo('shop')
+
+  const run = await runCli(sandbox, ['.', '--json'], shop)
+
+  expect(run.code).not.toBe(0)
+  expect(run.stderr).toContain('PRESETS_UNREADABLE')
+  // Named well enough to fix by hand: which preset, and which of its fields.
+  expect(run.stderr).toContain('preset mobile')
+  // Nothing was opened, and no project file was left behind for the repo.
+  expect((await state()).project).toBeNull()
+  expect(existsSync(join(sandbox.userDataDir, 'projects', projectFileName(shop)))).toBe(false)
+
+  // The failure is in the event log too, where an agent already looks ([ADR-0006]).
+  const run2 = await runCli(sandbox, ['logs', '--json'])
+  expect(run2.stdout).toContain('PRESETS_UNREADABLE')
 })
 
 test('panes.add, panes.remove, panes.resize and panes.rotate refuse malformed params', async () => {

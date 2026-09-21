@@ -15,23 +15,31 @@ import type { Pane, RefusalReason } from './project'
  * what a valid one says and what a pane resolved from it looks like.
  */
 
-export interface Preset {
-  id: string
-  name: string
+/**
+ * The viewport properties themselves, which a preset declares and a pane resolves into
+ * its own. One type, so a preset and a pane can never disagree about what one is, and one
+ * parser below, so the file holding either is read to the same rules.
+ */
+export interface ViewportProperties {
   width: number
   height: number
   dpr: number
-  /** Whether a pane from this preset claims to be a mobile device. */
+  /** Whether a pane carrying these claims to be a mobile device. */
   mobile: boolean
   /** Touch emulation, on for the mobile and tablet presets (PRD 6.2 V7). */
   touch: boolean
   /**
-   * The user agent a pane from this preset sends, or `null` for Breakpoint's own —
-   * chosen by the mobile flag and carrying the version of the Chromium that is actually
+   * The user agent a pane carrying these sends, or `null` for Breakpoint's own — chosen
+   * by the mobile flag and carrying the version of the Chromium that is actually
    * rendering. The defaults are all `null`: a literal string seeded into a file would
    * claim a Chromium the app stopped shipping at the next upgrade.
    */
   userAgent: string | null
+}
+
+export interface Preset extends ViewportProperties {
+  id: string
+  name: string
 }
 
 /** PRD 6.2: the seven the file is seeded with. Mobile and tablet set the mobile flag and touch. */
@@ -93,9 +101,9 @@ export function paneFromPreset(preset: Preset): PaneDraft {
 }
 
 /** A pane at a size the developer typed, belonging to no preset. */
-export function paneFromSize({ width, height }: Size, name?: string): PaneDraft {
+export function paneFromSize({ width, height }: Size): PaneDraft {
   return {
-    name: name ?? `${width}×${height}`,
+    name: `${width}×${height}`,
     width,
     height,
     dpr: 1,
@@ -126,26 +134,28 @@ export function writePresetFile(presets: readonly Preset[]): PresetFile {
   return { version: PRESET_FILE_VERSION, presets: [...presets] }
 }
 
-export function readPresetFile(raw: unknown, version = PRESET_FILE_VERSION): ReadPresetResult {
+export function readPresetFile(raw: unknown): ReadPresetResult {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return corrupt('the file is not a JSON object')
   }
   const file = raw as Record<string, unknown>
   if (!Number.isInteger(file.version)) return corrupt('the file has no integer version')
-  if ((file.version as number) > version) {
+  if ((file.version as number) > PRESET_FILE_VERSION) {
     return {
       ok: false,
       reason: 'newer',
-      message: `written by a newer Breakpoint (file version ${String(file.version)}, this build reads ${version})`
+      message: `written by a newer Breakpoint (file version ${String(file.version)}, this build reads ${PRESET_FILE_VERSION})`
     }
   }
   if (!Array.isArray(file.presets)) return corrupt('the file holds no preset list')
 
   const presets: Preset[] = []
   const seen = new Set<string>()
-  for (const entry of file.presets) {
+  for (const [index, entry] of file.presets.entries()) {
     const preset = parsePreset(entry)
-    if (!preset) return corrupt('one of the presets is not a preset')
+    // The file is hand-edited, so a refusal has to say which entry and which field: a
+    // developer holding one mistyped preset should not have to find it by bisection.
+    if (!preset) return corrupt(`${describeEntry(entry, index)} is not a preset`)
     // Two presets under one id means `preset: "mobile"` on a pane names two things.
     if (seen.has(preset.id)) return corrupt(`two presets share the id ${preset.id}`)
     seen.add(preset.id)
@@ -158,19 +168,48 @@ function corrupt(message: string): ReadPresetResult {
   return { ok: false, reason: 'corrupt', message }
 }
 
-/** Every field checked, and only the known fields copied out, so the result is exactly a `Preset`. */
-function parsePreset(value: unknown): Preset | undefined {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
-  const raw = value as Record<string, unknown>
-  if (typeof raw.id !== 'string' || raw.id.length === 0) return undefined
-  if (typeof raw.name !== 'string' || raw.name.length === 0) return undefined
+/** A refused entry as the developer will look for it in their editor: by id, then field. */
+function describeEntry(entry: unknown, index: number): string {
+  const where =
+    typeof entry === 'object' && entry !== null && typeof (entry as Preset).id === 'string'
+      ? `preset ${(entry as Preset).id}`
+      : `preset ${index + 1}`
+  const fields = badFields(entry)
+  return fields.length === 0 ? where : `${where} (${fields.join(', ')})`
+}
+
+/** The fields of an entry a preset would refuse, so the message can name every one. */
+function badFields(entry: unknown): string[] {
+  if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) return []
+  const raw = entry as Record<string, unknown>
+  const bad: string[] = []
+  const check = (field: string, ok: boolean): void => {
+    if (!ok) bad.push(field)
+  }
+  check('id', typeof raw.id === 'string' && raw.id.length > 0)
+  check('name', typeof raw.name === 'string' && raw.name.length > 0)
+  check('width', isPaneDimension(raw.width))
+  check('height', isPaneDimension(raw.height))
+  check('dpr', typeof raw.dpr === 'number' && Number.isFinite(raw.dpr) && raw.dpr > 0)
+  check('mobile', typeof raw.mobile === 'boolean')
+  check('touch', typeof raw.touch === 'boolean')
+  check('userAgent', raw.userAgent === null || typeof raw.userAgent === 'string')
+  return bad
+}
+
+/**
+ * Every field checked, and only the known fields copied out. Shared by the preset file
+ * and the project file: a preset resolves straight into a pane, so a value one would
+ * accept and the other refuse could only ever be a bug.
+ */
+export function parseViewportProperties(
+  raw: Readonly<Record<string, unknown>>
+): ViewportProperties | undefined {
   if (!isPaneDimension(raw.width) || !isPaneDimension(raw.height)) return undefined
   if (typeof raw.dpr !== 'number' || !Number.isFinite(raw.dpr) || raw.dpr <= 0) return undefined
   if (typeof raw.mobile !== 'boolean' || typeof raw.touch !== 'boolean') return undefined
   if (raw.userAgent !== null && typeof raw.userAgent !== 'string') return undefined
   return {
-    id: raw.id,
-    name: raw.name,
     width: raw.width,
     height: raw.height,
     dpr: raw.dpr,
@@ -178,4 +217,13 @@ function parsePreset(value: unknown): Preset | undefined {
     touch: raw.touch,
     userAgent: raw.userAgent
   }
+}
+
+function parsePreset(value: unknown): Preset | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  if (typeof raw.id !== 'string' || raw.id.length === 0) return undefined
+  if (typeof raw.name !== 'string' || raw.name.length === 0) return undefined
+  const properties = parseViewportProperties(raw)
+  return properties && { id: raw.id, name: raw.name, ...properties }
 }

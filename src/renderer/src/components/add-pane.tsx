@@ -62,11 +62,7 @@ export function AddPane(): React.JSX.Element {
           </Button>
         }
       />
-      <PopoverContent
-        align="end"
-        className="w-64 gap-[var(--bp-space-2)] rounded-[var(--bp-radius-md)] bg-[var(--bp-chrome-raised)] p-[var(--bp-space-2)]"
-        data-testid="add-pane-menu"
-      >
+      <PopoverContent align="end" data-testid="add-pane-menu">
         <div className="flex flex-col">
           {presets === null ? (
             <span className="px-[var(--bp-space-2)] py-[var(--bp-space-2)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
@@ -160,7 +156,7 @@ function SizeField({
       value={value}
       data-testid={testId}
       onChange={(event) => onChange(event.target.value)}
-      className="h-[var(--bp-row-md)] w-16 rounded-[var(--bp-radius-sm)] bg-[var(--bp-chrome-sunken)] px-[var(--bp-space-2)] font-mono text-[length:var(--bp-text-sm)] md:text-[length:var(--bp-text-sm)]"
+      className="w-[var(--bp-field-w)] font-mono"
     />
   )
 }

@@ -210,6 +210,33 @@ describe('readProjectFile', () => {
     expect(result).toEqual({ ok: true, project: { ...stored, name: 'old' } })
   })
 
+  it('brings a version 1 pane whose size the current rules refuse into range', () => {
+    const before = {
+      version: 1,
+      project: {
+        ...stored,
+        panes: stored.panes.map((pane, index) => {
+          const older: Record<string, unknown> = { ...pane }
+          delete older.touch
+          delete older.userAgent
+          return { ...older, width: [390.5, 1_000_000, 0][index] }
+        })
+      }
+    }
+
+    const result = readProjectFile(before, {
+      version: PROJECT_FILE_VERSION,
+      migrations: PROJECT_MIGRATIONS
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.ok && result.project.panes.map((pane) => pane.width)).toEqual([391, 10_000, 1])
+    // Heights the rules already accept are untouched.
+    expect(result.ok && result.project.panes.map((pane) => pane.height)).toEqual(
+      stored.panes.map((pane) => pane.height)
+    )
+  })
+
   it('treats a missing migration step as corruption rather than skipping it', () => {
     const result = readProjectFile({ version: 1, project: stored }, { version: 3, migrations: {} })
     expect(result.ok === false && result.reason).toBe('corrupt')

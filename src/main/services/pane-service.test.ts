@@ -305,12 +305,6 @@ describe('adding a pane', () => {
     })
   })
 
-  it('takes a name over the preset’s when one is given', async () => {
-    await openShop()
-    const { pane } = await panes.add({ preset: 'tablet', name: 'Checkout tablet' })
-    expect(pane).toMatchObject({ name: 'Checkout tablet', width: 820, preset: 'tablet' })
-  })
-
   /** [ADR-0011]: a preset is consulted at creation time and never again. */
   it('follows a preset edited between two adds, and leaves the pane already saved alone', async () => {
     await openShop()

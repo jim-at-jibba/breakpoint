@@ -94,10 +94,6 @@ describe('paneFromSize', () => {
       preset: null
     })
   })
-
-  it('takes a name when one is given', () => {
-    expect(paneFromSize({ width: 1024, height: 768 }, 'Kiosk').name).toBe('Kiosk')
-  })
 })
 
 describe('presetById', () => {
@@ -141,6 +137,28 @@ describe('readPresetFile', () => {
     ]
   ])('refuses a corrupt file: %s', (_label, raw) => {
     expect(readPresetFile(raw)).toMatchObject({ ok: false, reason: 'corrupt' })
+  })
+
+  it('names the preset it refused and every field of it that is wrong', () => {
+    const noTouch: Record<string, unknown> = { ...mobile }
+    delete noTouch.touch
+    expect(readPresetFile({ version: PRESET_FILE_VERSION, presets: [noTouch] })).toEqual({
+      ok: false,
+      reason: 'corrupt',
+      message: 'preset mobile (touch) is not a preset'
+    })
+    expect(
+      readPresetFile({
+        version: PRESET_FILE_VERSION,
+        presets: [{ ...mobile, width: '390', dpr: 0 }]
+      })
+    ).toMatchObject({ message: 'preset mobile (width, dpr) is not a preset' })
+  })
+
+  it('numbers an entry that has no id to name it by', () => {
+    expect(
+      readPresetFile({ version: PRESET_FILE_VERSION, presets: [mobile, { name: 'Watch' }] })
+    ).toMatchObject({ message: expect.stringContaining('preset 2 (id, width') })
   })
 
   it('copies only the known fields out, so an edited file cannot smuggle one in', () => {

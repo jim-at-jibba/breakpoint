@@ -131,15 +131,14 @@ export class PaneService {
 
   private async draftFor(creation: PaneCreation): Promise<PaneDraft> {
     if (!('preset' in creation)) {
-      return paneFromSize({ width: creation.width, height: creation.height }, creation.name)
+      return paneFromSize({ width: creation.width, height: creation.height })
     }
     const { presets } = await this.presets.list()
     const preset = presetById(presets, creation.preset)
     if (!preset) {
       throw new RouteError('PRESET_NOT_FOUND', `no preset ${creation.preset} in the presets file`)
     }
-    const draft = paneFromPreset(preset)
-    return creation.name === undefined ? draft : { ...draft, name: creation.name }
+    return paneFromPreset(preset)
   }
 
   /**

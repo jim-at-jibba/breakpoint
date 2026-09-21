@@ -115,8 +115,22 @@ function expectPane(raw: unknown, shape: string): { pane: string } | ParamsBad {
   return { pane }
 }
 
-function isBad(value: { pane: string } | ParamsBad): value is ParamsBad {
+function isRefusal(value: { pane: string } | ParamsBad): value is ParamsBad {
   return 'ok' in value
+}
+
+/**
+ * A field the route does not take is a refusal, not a field to ignore: a misspelt one
+ * would otherwise be a change that silently changes nothing.
+ */
+function rejectUnknown(
+  raw: unknown,
+  fields: readonly string[],
+  shape: string
+): ParamsBad | undefined {
+  const unknown = Object.keys(raw as object).filter((key) => !fields.includes(key))
+  if (unknown.length === 0) return undefined
+  return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
 }
 
 const PANE_SHAPE = 'this route takes { pane }'
@@ -125,9 +139,9 @@ function expectPaneOnly<N extends 'panes.remove' | 'panes.rotate'>(
   raw: unknown
 ): ParamsOk<N> | ParamsBad {
   const named = expectPane(raw, PANE_SHAPE)
-  if (isBad(named)) return named
-  const unknown = Object.keys(raw as object).filter((key) => key !== 'pane')
-  if (unknown.length > 0) return { ok: false, message: `${PANE_SHAPE}, not ${unknown.join(', ')}` }
+  if (isRefusal(named)) return named
+  const refused = rejectUnknown(raw, ['pane'], PANE_SHAPE)
+  if (refused) return refused
   return { ok: true, params: named as RouteParams<N> }
 }
 
@@ -136,11 +150,9 @@ const DIMENSIONS = `whole numbers of CSS pixels from ${PANE_DIMENSION_RANGE.min}
 function expectPaneResize(raw: unknown): ParamsOk<'panes.resize'> | ParamsBad {
   const shape = 'this route takes { pane } and at least one of width, height'
   const named = expectPane(raw, shape)
-  if (isBad(named)) return named
-  const unknown = Object.keys(raw as object).filter(
-    (key) => !['pane', 'width', 'height'].includes(key)
-  )
-  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+  if (isRefusal(named)) return named
+  const refused = rejectUnknown(raw, ['pane', 'width', 'height'], shape)
+  if (refused) return refused
 
   const { width, height } = raw as { width?: unknown; height?: unknown }
   if (width === undefined && height === undefined) return { ok: false, message: shape }
@@ -159,25 +171,17 @@ function expectPaneResize(raw: unknown): ParamsOk<'panes.resize'> | ParamsBad {
   }
 }
 
-const CREATION_FIELDS = ['preset', 'name', 'width', 'height'] as const
+const CREATION_FIELDS = ['preset', 'width', 'height'] as const
 
 function expectPaneCreation(raw: unknown): ParamsOk<'panes.add'> | ParamsBad {
-  const shape = 'this route takes { preset } or { width, height }, with an optional name'
+  const shape = 'this route takes { preset } or { width, height }'
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return { ok: false, message: shape }
   }
-  const creation = raw as Record<string, unknown>
-  const unknown = Object.keys(creation).filter(
-    (key) => !(CREATION_FIELDS as readonly string[]).includes(key)
-  )
-  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+  const refused = rejectUnknown(raw, CREATION_FIELDS, shape)
+  if (refused) return refused
 
-  const { preset, name, width, height } = creation
-  if (name !== undefined && (typeof name !== 'string' || name.length === 0)) {
-    return { ok: false, message: 'name must be a non-empty string' }
-  }
-  const named = name === undefined ? {} : { name }
-
+  const { preset, width, height } = raw as Record<string, unknown>
   if (preset !== undefined) {
     // A preset and a size together would leave it unsaid which one the pane came from.
     if (width !== undefined || height !== undefined) {
@@ -186,12 +190,12 @@ function expectPaneCreation(raw: unknown): ParamsOk<'panes.add'> | ParamsBad {
     if (typeof preset !== 'string' || preset.length === 0) {
       return { ok: false, message: 'preset must be a non-empty string' }
     }
-    return { ok: true, params: { preset, ...named } }
+    return { ok: true, params: { preset } }
   }
   if (!isPaneDimension(width) || !isPaneDimension(height)) {
     return { ok: false, message: `${shape}, in ${DIMENSIONS}` }
   }
-  return { ok: true, params: { width, height, ...named } }
+  return { ok: true, params: { width, height } }
 }
 
 const EMULATION_FIELDS = ['colorScheme', 'dpr', 'mobile', 'touch'] as const
@@ -199,13 +203,10 @@ const EMULATION_FIELDS = ['colorScheme', 'dpr', 'mobile', 'touch'] as const
 function expectEmulationSetting(raw: unknown): ParamsOk<'panes.setEmulation'> | ParamsBad {
   const shape = `this route takes { pane } and at least one of ${EMULATION_FIELDS.join(', ')}`
   const named = expectPane(raw, shape)
-  if (isBad(named)) return named
+  if (isRefusal(named)) return named
   const setting = raw as Record<string, unknown>
-  // A misspelt field would otherwise be a change that silently changes nothing.
-  const unknown = Object.keys(setting).filter(
-    (key) => key !== 'pane' && !(EMULATION_FIELDS as readonly string[]).includes(key)
-  )
-  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+  const refused = rejectUnknown(raw, ['pane', ...EMULATION_FIELDS], shape)
+  if (refused) return refused
 
   const { colorScheme, dpr, mobile, touch } = setting
   if (

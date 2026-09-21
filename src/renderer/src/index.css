@@ -99,6 +99,11 @@
   --bp-toolbar-h: 44px;
   --bp-tabbar-h: 30px;
 
+  /* ---- control widths --------------------------------------------------- */
+  --bp-menu-w: 240px;         /* a popover list: presets, and menus like it */
+  --bp-field-w: 64px;         /* a short numeric input, such as a pane size */
+  --bp-field-w-inline: 4ch;   /* the same, typed inline in a pane header    */
+
   /* ---- radii: tighter than Nocturne's 8px; this is a tool -------------- */
   --bp-radius-xs: 2px;      /* badges, chips, inline marks                */
   --bp-radius-sm: 4px;      /* buttons, inputs, pane shell                */

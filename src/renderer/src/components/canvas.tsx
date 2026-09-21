@@ -144,7 +144,12 @@ function useGeometryCheck(
 
 /**
  * Holds its screen size whatever the zoom and is clipped by its own pane, so it can never
- * claim width the pane does not have. The degradation ladder is #14.
+ * claim width the pane does not have.
+ *
+ * The size fields, rotate and remove are the developer's end of `panes.resize`,
+ * `panes.rotate` and `panes.remove` — no route here the terminal cannot reach
+ * ([ADR-0005]). They are drawn at every width for now; tiering them away as the pane
+ * narrows is the degradation ladder's business (#14, [ADR-0010]).
  */
 function PaneHeader({
   pane,
@@ -274,7 +279,7 @@ function SizeInput({
           event.currentTarget.blur()
         }
       }}
-      className="w-[4ch] rounded-[var(--bp-radius-xs)] bg-transparent text-center tabular-nums outline-none hover:bg-[var(--bp-hover)] focus:bg-[var(--bp-chrome-sunken)] focus:text-[color:var(--bp-ink)]"
+      className="w-[var(--bp-field-w-inline)] rounded-[var(--bp-radius-xs)] bg-transparent text-center tabular-nums outline-none hover:bg-[var(--bp-hover)] focus:bg-[var(--bp-chrome-sunken)] focus:text-[color:var(--bp-ink)]"
     />
   )
 }
