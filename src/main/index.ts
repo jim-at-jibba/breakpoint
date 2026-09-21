@@ -10,25 +10,53 @@ import {
   resolveUserDataDir
 } from '../shared/paths'
 import { registerIpcAdapter } from './adapters/ipc'
+import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
-import { createDispatch, createRouteTable } from './routes'
+import { repoPathFromArguments } from './launch-arguments'
+import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
+import { ProjectService } from './services/project-service'
+import { ProjectStore } from './services/project-store'
+import { StateFeed } from './state-feed'
 
 // Named before anything reads a path, so `userData` is the same directory in dev as in a
 // packaged build and the CLI — which computes the path without asking us — agrees.
 app.setName(APP_NAME)
 const pathEnvironment = currentPathEnvironment(homedir())
-app.setPath('userData', resolveUserDataDir(pathEnvironment))
+const userDataDir = resolveUserDataDir(pathEnvironment)
+app.setPath('userData', userDataDir)
 
 /**
- * Two launch problems, two mechanisms. This lock is Finder and Dock double-launch: a
- * second copy of the app hands its argv over and exits. The CLI never comes through
- * here — it talks to the socket, and only spawns the app when there is no socket to talk
- * to.
+ * A second executable hands its argv over and exits. Native macOS opens arrive through
+ * `open-file` instead. The CLI talks to the socket and only spawns the app if needed.
  */
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 let socketAdapter: SocketAdapter | undefined
+let patchAdapter: PatchAdapter | undefined
+let dispatch: Dispatch | undefined
+let launchReady = false
+const pendingRepoPaths: string[] = []
+
+function openFromArguments(argv: readonly string[], workingDirectory: string): void {
+  const mode = { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
+  const path = repoPathFromArguments(argv, mode, workingDirectory)
+  if (path) openProject(path)
+}
+
+function openProject(path: string): void {
+  if (!launchReady || !dispatch) {
+    pendingRepoPaths.push(path)
+    return
+  }
+  void dispatch({ id: 'launch', route: 'project.open', params: { path } })
+    .then(({ response }) => {
+      if (!response.ok) {
+        console.error(`[breakpoint] could not open ${path}: ${response.error.message}`)
+      }
+    })
+    .catch((error: unknown) => console.error(`[breakpoint] could not open ${path}:`, error))
+}
 
 function createWindow(): void {
   // Create the browser window.
@@ -88,12 +116,20 @@ if (!hasSingleInstanceLock) {
   // lock, so there is nothing left to do but get out of the way.
   app.quit()
 } else {
-  app.on('second-instance', (_event, argv, workingDirectory) => {
-    // #8 reads this to open the project the second launch was pointed at. Until then it
-    // is announced so the hand-off is observable.
-    console.log(`[breakpoint] second-instance ${JSON.stringify({ argv, workingDirectory })}`)
-    focusExistingWindow()
+  app.on('open-file', (event, path) => {
+    event.preventDefault()
+    openProject(path)
+    if (launchReady) focusExistingWindow()
   })
+
+  app.on('second-instance', (_event, argv, workingDirectory) => {
+    // Announced so the hand-off is observable from outside the process.
+    console.log(`[breakpoint] second-instance ${JSON.stringify({ argv, workingDirectory })}`)
+    openFromArguments(argv, workingDirectory)
+    if (launchReady) focusExistingWindow()
+  })
+
+  openFromArguments(process.argv, process.cwd())
 
   // This method will be called when Electron has finished
   // initialization and is ready to create browser windows.
@@ -109,8 +145,16 @@ if (!hasSingleInstanceLock) {
       optimizer.watchWindowShortcuts(window)
     })
 
-    const dispatch = createDispatch(createRouteTable({ app: new AppService() }))
+    const feed = new StateFeed()
+    const projectStore = new ProjectStore(join(userDataDir, 'projects'))
+    dispatch = createDispatch(
+      createRouteTable({
+        app: new AppService(),
+        project: new ProjectService(projectStore, feed)
+      })
+    )
     registerIpcAdapter(dispatch)
+    patchAdapter = createPatchAdapter(feed)
 
     const socketPath = resolveSocketPath(pathEnvironment)
     try {
@@ -123,6 +167,8 @@ if (!hasSingleInstanceLock) {
     }
 
     createWindow()
+    launchReady = true
+    for (const path of pendingRepoPaths.splice(0)) openProject(path)
 
     app.on('activate', function () {
       // On macOS it's common to re-create a window in the app when the
@@ -151,6 +197,8 @@ if (!hasSingleInstanceLock) {
 app.on('will-quit', () => {
   socketAdapter?.close()
   socketAdapter = undefined
+  patchAdapter?.close()
+  patchAdapter = undefined
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common

@@ -8,15 +8,16 @@
  * Codes a route call can come back with. These travel over the wire.
  *
  * Stable strings in the spelling #6 settled: the message beside them is for humans and
- * may be reworded freely, the code may not. Codes for things Phase 1 cannot yet fail at
- * — `PROJECT_NOT_FOUND`, `PANE_NOT_FOUND` — are declared by the tickets that can raise
- * them, not guessed at here.
+ * may be reworded freely, the code may not. Codes for things nothing can yet fail at —
+ * `PANE_NOT_FOUND` — are declared by the tickets that can raise them, not guessed at here.
  */
 export const WIRE_ERROR_CODES = [
   'UNKNOWN_ROUTE',
   'INVALID_REQUEST',
   'INVALID_PARAMS',
-  'INTERNAL_ERROR'
+  'INTERNAL_ERROR',
+  /** The project's file is on disk but this build will not load it: corrupt, or newer. */
+  'PROJECT_UNREADABLE'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

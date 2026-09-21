@@ -38,7 +38,7 @@ class CliError extends Error {
 }
 
 function main(): void {
-  const parsed = parseArgv(process.argv.slice(2))
+  const parsed = parseArgv(process.argv.slice(2), process.cwd())
 
   if (parsed.kind === 'help') {
     process.stdout.write(helpText())
@@ -54,10 +54,10 @@ function main(): void {
     process.exit(code)
   }
 
-  const { command, options } = parsed
+  const { command, options, params } = parsed
   const diagnose = createDiagnose(options)
 
-  run(command.route, options, diagnose)
+  run(command.route, params, options, diagnose)
     .then((response) => process.exit(report(command, response, options)))
     .catch((error: unknown) => {
       const code: ErrorCode = error instanceof CliError ? error.code : 'INTERNAL_ERROR'
@@ -74,6 +74,7 @@ function createDiagnose(options: CliOptions): (message: string) => void {
 
 async function run(
   route: string,
+  params: unknown,
   options: CliOptions,
   diagnose: (message: string) => void
 ): Promise<RouteResponse> {
@@ -81,7 +82,7 @@ async function run(
   diagnose(`socket ${socketPath}`)
 
   try {
-    return await request(socketPath, route, diagnose)
+    return await request(socketPath, route, params, diagnose)
   } catch (error) {
     if (!(error instanceof CliError) || error.code !== 'APP_NOT_RUNNING') throw error
     if (options.noLaunch) throw error
@@ -89,7 +90,7 @@ async function run(
     diagnose('no socket — starting the app')
     await launchApp()
     await waitForSocket(socketPath, diagnose)
-    return await request(socketPath, route, diagnose)
+    return await request(socketPath, route, params, diagnose)
   }
 }
 
@@ -117,6 +118,7 @@ function reportError({ error, options }: { error: RouteError; options: CliOption
 function request(
   socketPath: string,
   route: string,
+  params: unknown,
   diagnose: (message: string) => void
 ): Promise<RouteResponse> {
   return new Promise((resolve, reject) => {
@@ -144,7 +146,9 @@ function request(
 
     socket.on('connect', () => {
       diagnose(`connected, calling ${route}`)
-      socket.write(encodeLine({ id: '1', route }))
+      socket.write(
+        encodeLine(params === undefined ? { id: '1', route } : { id: '1', route, params })
+      )
     })
 
     socket.on('data', (chunk: string) => {

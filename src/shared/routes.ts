@@ -9,10 +9,12 @@
  * renderer, the main process and the CLI all see at once.
  */
 
+import type { StateSnapshot } from './state'
+
 /** A route is a dotted `noun.verb`. The noun is the service, the verb is the method. */
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
-export const ROUTE_NAMES = ['app.quit'] as const
+export const ROUTE_NAMES = ['app.quit', 'project.open', 'project.state'] as const
 
 export type RouteName = (typeof ROUTE_NAMES)[number]
 
@@ -22,6 +24,13 @@ export type RouteName = (typeof ROUTE_NAMES)[number]
  */
 export interface RouteSignatures {
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Opens the project for a repo, creating it the first time. `path` is absolute: the
+   * caller resolves it against its own working directory, which the app cannot know.
+   */
+  'project.open': { params: { path: string }; payload: StateSnapshot }
+  /** The snapshot every surface renders from. `project` is null until one is opened. */
+  'project.state': { params: undefined; payload: StateSnapshot }
 }
 
 export type RouteParams<N extends RouteName> = RouteSignatures[N]['params']

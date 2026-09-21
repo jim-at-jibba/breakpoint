@@ -135,10 +135,13 @@ export interface CliRun {
   stderr: string
 }
 
-/** Runs the repo-local shim, the same way a developer who symlinked it would. */
-export function runCli(sandbox: Sandbox, args: string[]): Promise<CliRun> {
+/**
+ * Runs the repo-local shim, the same way a developer who symlinked it would. `cwd` is
+ * the terminal's directory, which is what `breakpoint .` means by `.`.
+ */
+export function runCli(sandbox: Sandbox, args: string[], cwd: string = REPO_ROOT): Promise<CliRun> {
   return new Promise((resolve, reject) => {
-    const child: ChildProcess = spawn(CLI_SHIM, args, { env: sandbox.env })
+    const child: ChildProcess = spawn(CLI_SHIM, args, { env: sandbox.env, cwd })
     let stdout = ''
     let stderr = ''
     child.stdout?.on('data', (chunk: Buffer) => (stdout += chunk.toString()))
