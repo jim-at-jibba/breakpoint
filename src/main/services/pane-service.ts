@@ -11,6 +11,25 @@ import { paneStatusesFor } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
 
+interface AttachmentFailure {
+  pane: string
+  attempt: 1 | 2
+  retrying: boolean
+  message: string
+}
+
+interface LoadFailure {
+  pane: string
+  url: string
+  code: number
+  message: string
+}
+
+interface GuestDestruction {
+  pane: string
+  current: boolean
+}
+
 /**
  * Panes as the app observes them while it runs: whether each has its attachment, whether
  * it is drawn at the size it claims, and why it is degraded if it is.
@@ -57,12 +76,12 @@ export class PaneService {
     this.observe(pane, { type: 'guestCreated' })
   }
 
-  attached(pane: string, attempt: number): void {
+  attached(pane: string, attempt: 1 | 2): void {
     this.record(pane, { type: 'pane.attached', attempt })
     this.observe(pane, { type: 'attached' })
   }
 
-  attachFailed(pane: string, attempt: number, retrying: boolean, message: string): void {
+  attachFailed({ pane, attempt, retrying, message }: AttachmentFailure): void {
     this.record(pane, { type: 'pane.attachFailed', attempt, retrying, message })
     this.observe(pane, { type: 'attachFailed', message })
   }
@@ -71,7 +90,7 @@ export class PaneService {
     this.record(pane, { type: 'pane.loaded', url })
   }
 
-  loadFailed(pane: string, url: string, code: number, message: string): void {
+  loadFailed({ pane, url, code, message }: LoadFailure): void {
     this.record(pane, { type: 'pane.loadFailed', url, code, message })
   }
 
@@ -79,7 +98,7 @@ export class PaneService {
    * `current` is false for a guest the pane has already replaced: its going is recorded,
    * but what is observed of the replacement stands.
    */
-  guestDestroyed(pane: string, current: boolean): void {
+  guestDestroyed({ pane, current }: GuestDestruction): void {
     this.record(pane, { type: 'pane.destroyed' })
     if (current) this.observe(pane, { type: 'guestDestroyed' })
   }
@@ -90,8 +109,9 @@ export class PaneService {
    * An entry is written when the pane goes wrong or comes right, not on every report.
    */
   reportGeometry({ pane, expected, measured }: GeometryReport): { status: PaneStatus } {
+    if (!this.has(pane))
+      throw new RouteError('PANE_NOT_FOUND', `no pane ${pane} in the open project`)
     const before = this.current[pane]
-    if (!before) throw new RouteError('PANE_NOT_FOUND', `no pane ${pane} in the open project`)
 
     const result = compareGeometry(expected, measured)
     if (!result.ok) {
@@ -118,8 +138,8 @@ export class PaneService {
 
   /** Statuses change only for panes of the open project, and are announced only on change. */
   private observe(pane: string, observation: PaneObservation): void {
+    if (!this.has(pane)) return
     const before = this.current[pane]
-    if (!before) return
     const after = foldPaneStatus(before, observation)
     if (JSON.stringify(after) === JSON.stringify(before)) return
     this.current = { ...this.current, [pane]: after }

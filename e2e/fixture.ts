@@ -59,6 +59,7 @@ function page(origin: string, other: string): string {
   <p id="origin">${origin}</p>
   <a id="blank" href="${other}/" target="_blank">other origin, new window</a>
   <button id="open" type="button" onclick="window.open('${other}/')">window.open</button>
+  <input id="draft" aria-label="Draft">
 </main>
 <button id="target" type="button" data-hits="0"
   onclick="this.dataset.hits = String(Number(this.dataset.hits) + 1)"></button>
@@ -73,6 +74,11 @@ function serve(host: string, other: () => string): Promise<{ server: Server; ori
     const server = createServer((request, response) => {
       if (request.url === '/favicon.ico') {
         response.writeHead(204).end()
+        return
+      }
+      const target = new URL(request.url ?? '/', 'http://fixture')
+      if (target.pathname === '/redirect') {
+        response.writeHead(302, { location: target.searchParams.get('to') ?? '/' }).end()
         return
       }
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })

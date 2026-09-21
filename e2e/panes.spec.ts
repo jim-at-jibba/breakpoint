@@ -3,8 +3,11 @@ import { createServer } from 'node:net'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { expect, test, type Page } from '@playwright/test'
 import type { Entry, LogRead } from '../src/shared/event-log'
+import { PATCH_CHANNEL, ROUTE_CHANNEL } from '../src/shared/ipc'
+import type { RouteResponse } from '../src/shared/protocol'
 import {
   createProject,
   projectFileName,
@@ -13,7 +16,15 @@ import {
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { HIT_TARGET, startFixture, type Fixture } from './fixture'
-import { closeApp, launchApp, runCli, Sandbox, type LaunchedApp } from './harness'
+import {
+  closeApp,
+  launchApp,
+  requestLine,
+  runCli,
+  Sandbox,
+  sendRaw,
+  type LaunchedApp
+} from './harness'
 
 /**
  * Panes on the canvas, probed from outside: the CLI over the real socket, the window's
@@ -30,14 +41,18 @@ let fixture: Fixture
 function makeRepo(name: string, startUrl: string): Project {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project = { ...createProject(realpathSync.native(path)), startUrl }
+  const project: Project = { ...createProject(realpathSync.native(path)), startUrl }
+  saveProject(project)
+  return project
+}
+
+function saveProject(project: Project): void {
   const projects = join(sandbox.userDataDir, 'projects')
   mkdirSync(projects, { recursive: true })
   writeFileSync(
     join(projects, projectFileName(project.repoPath)),
     JSON.stringify(writeProjectFile(project))
   )
-  return project
 }
 
 async function open(project: Project): Promise<StateSnapshot> {
@@ -178,7 +193,13 @@ test('state --json prints the pane set, each pane with what is observed of it', 
  * Another debugger client takes every pane's guest before the app can, which is the one
  * way to refuse an attachment from outside. `release` lets go once the first load stops.
  */
-async function holdEveryAttachment(app: LaunchedApp['app'], release: boolean): Promise<void> {
+async function holdEveryAttachment({
+  app,
+  release
+}: {
+  app: LaunchedApp['app']
+  release: boolean
+}): Promise<void> {
   await app.evaluate(({ app }, release) => {
     app.on('web-contents-created', (_event, contents) => {
       if (contents.getType() !== 'webview') return
@@ -191,7 +212,7 @@ async function holdEveryAttachment(app: LaunchedApp['app'], release: boolean): P
 test('a pane whose attachment fails still renders, degraded with the reason, and retries once after load only', async () => {
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()
-  await holdEveryAttachment(launched.app, false)
+  await holdEveryAttachment({ app: launched.app, release: false })
   const shop = makeRepo('shop', `${fixture.a}/`)
 
   await open(shop)
@@ -242,7 +263,7 @@ test('a pane whose attachment fails still renders, degraded with the reason, and
 
 test('a pane whose first attachment is refused attaches on its one retry after load', async () => {
   launched = await launchApp(sandbox)
-  await holdEveryAttachment(launched.app, true)
+  await holdEveryAttachment({ app: launched.app, release: true })
   const shop = makeRepo('shop', `${fixture.a}/`)
 
   await open(shop)
@@ -382,6 +403,23 @@ test('a guest that asks for a preload, node integration, no sandbox or popups ge
      })`
   )
 
+  const preferences = await app.evaluateHandle(({ BrowserWindow }) => ({
+    hardened: new Promise<{
+      webSecurity: boolean | undefined
+      allowRunningInsecureContent: boolean | undefined
+    }>((resolve) => {
+      BrowserWindow.getAllWindows()[0].webContents.once(
+        'will-attach-webview',
+        (_event, preferences) => {
+          resolve({
+            webSecurity: preferences.webSecurity,
+            allowRunningInsecureContent: preferences.allowRunningInsecureContent
+          })
+        }
+      )
+    })
+  }))
+
   // The renderer asks for everything a guest must not have, on a fresh element in the
   // pane's place, under the pane's id.
   await page.locator(`webview[data-pane="${mobile.id}"]`).evaluate(
@@ -390,7 +428,7 @@ test('a guest that asks for a preload, node integration, no sandbox or popups ge
       hostile.setAttribute('partition', 'persist:default')
       hostile.setAttribute(
         'webpreferences',
-        `breakpointPane=${pane}, sandbox=no, contextIsolation=no, nodeIntegration=yes, webviewTag=yes`
+        `breakpointPane=${pane}, sandbox=no, contextIsolation=no, nodeIntegration=yes, webviewTag=yes, webSecurity=no, allowRunningInsecureContent=yes`
       )
       hostile.setAttribute('preload', preload)
       hostile.setAttribute('nodeintegration', '')
@@ -399,9 +437,14 @@ test('a guest that asks for a preload, node integration, no sandbox or popups ge
       hostile.setAttribute('src', url)
       element.replaceWith(hostile)
     },
-    { preload: `file://${preload}`, url: `${fixture.a}/?probe=security`, pane: mobile.id }
+    { preload: pathToFileURL(preload).href, url: `${fixture.a}/?probe=security`, pane: mobile.id }
   )
 
+  expect(await preferences.evaluate(({ hardened }) => hardened)).toEqual({
+    webSecurity: true,
+    allowRunningInsecureContent: false
+  })
+  await preferences.dispose()
   await expect.poll(() => reportGuest(app, 'probe=security'), { timeout: 10_000 }).not.toBeNull()
   expect(await reportGuest(app, 'probe=security')).toEqual({
     require: 'undefined',
@@ -409,6 +452,17 @@ test('a guest that asks for a preload, node integration, no sandbox or popups ge
     preloaded: null,
     sandboxed: true
   })
+
+  const cors = await app.evaluate(async ({ webContents }, other: string): Promise<string> => {
+    const guest = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getURL().includes('probe=security'))
+    if (!guest) throw new Error('security guest missing')
+    return guest.executeJavaScript(`fetch(${JSON.stringify(other)}).then(
+      () => 'readable', error => error.name
+    )`)
+  }, fixture.b)
+  expect(cors).toBe('TypeError')
 
   // It is still that pane's guest, so the rules for panes hold for it too.
   expect(ofType(await logs(), 'pane.created', mobile.id).at(-1)).toMatchObject({
@@ -539,4 +593,342 @@ test('a pane whose page cannot load logs that it failed, and never that it loade
     ])
     expect(ofType(entries, 'pane.loaded', pane.id)).toEqual([])
   }
+})
+
+test('unknown and prototype-named pane ids return PANE_NOT_FOUND without changing state or logs', async () => {
+  launched = await launchApp(sandbox)
+  expect(
+    await sendRaw(
+      sandbox.socketPath,
+      requestLine('panes.reportGeometry', {
+        pane: 'toString',
+        expected: { width: 1, height: 1 },
+        measured: { width: 1, height: 1 }
+      })
+    )
+  ).toEqual({
+    id: 'test',
+    ok: false,
+    error: { code: 'PANE_NOT_FOUND', message: 'no pane toString in the open project' }
+  })
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await open(shop)
+  await settled(shop)
+  const before = await state()
+
+  for (const pane of ['missing', '__proto__', 'constructor', 'toString']) {
+    const response = await sendRaw(
+      sandbox.socketPath,
+      requestLine('panes.reportGeometry', {
+        pane,
+        expected: { width: 390, height: 844 },
+        measured: { width: 390, height: 844 }
+      })
+    )
+    expect(response).toEqual({
+      id: 'test',
+      ok: false,
+      error: { code: 'PANE_NOT_FOUND', message: `no pane ${pane} in the open project` }
+    })
+  }
+  expect(await state()).toEqual(before)
+  expect(await logs(before.cursor)).toEqual([])
+})
+
+test('guest permission checks and requests are denied on shared and isolated sessions', async () => {
+  launched = await launchApp(sandbox)
+  const original = makeRepo('shop', `${fixture.a}/`)
+  const shop: Project = {
+    ...original,
+    sessions: [...original.sessions, { id: 'isolated', name: 'Isolated' }],
+    panes: original.panes.map((pane, index) =>
+      index === 0 ? { ...pane, session: 'isolated' } : pane
+    )
+  }
+  saveProject(shop)
+  await open(shop)
+  await settled(shop)
+
+  const permissions = await launched.app.evaluate(async ({ webContents }) => {
+    const guests = webContents
+      .getAllWebContents()
+      .filter((contents) => contents.getType() === 'webview')
+    return Promise.all(
+      guests.map((guest) =>
+        guest.executeJavaScript(`(async () => ({
+      checked: (await navigator.permissions.query({ name: 'notifications' })).state,
+      requested: await Notification.requestPermission()
+    }))()`)
+      )
+    )
+  })
+  expect(permissions).toEqual(
+    Array.from({ length: 3 }, () => ({ checked: 'denied', requested: 'denied' }))
+  )
+})
+
+test('a renderer cannot attach a guest with a non-HTTP(S) source', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await open(shop)
+  await settled(shop)
+  const before = await contentsByType(app)
+  const local = join(repos, 'local.html')
+  writeFileSync(local, '<!doctype html><title>forbidden</title>')
+
+  for (const src of [
+    pathToFileURL(local).href,
+    'data:text/html,forbidden',
+    'about:blank',
+    'javascript:alert(1)',
+    'breakpoint://open'
+  ]) {
+    const attachment = await app.evaluateHandle(({ BrowserWindow }) => ({
+      refused: new Promise<boolean>((resolve) => {
+        BrowserWindow.getAllWindows()[0].webContents.once('will-attach-webview', (event) => {
+          resolve(event.defaultPrevented)
+        })
+      })
+    }))
+    await page.evaluate(
+      ({ src, pane }: { src: string; pane: string }): void => {
+        const element = document.createElement('webview')
+        element.setAttribute('data-probe', 'forbidden')
+        element.setAttribute('webpreferences', `breakpointPane=${pane}`)
+        element.setAttribute('src', src)
+        document.body.append(element)
+      },
+      { src, pane: shop.panes[0].id }
+    )
+    expect(await attachment.evaluate(({ refused }) => refused)).toBe(true)
+    await attachment.dispose()
+    await page.locator('[data-probe="forbidden"]').evaluate((element) => element.remove())
+    expect(await contentsByType(app)).toEqual(before)
+  }
+})
+
+for (const scheme of ['file', 'data', 'about'] as const) {
+  test(`an attached guest blocks ${scheme}: URLs from loadURL and webview.src`, async () => {
+    launched = await launchApp(sandbox)
+    const { app } = launched
+    const page = await app.firstWindow()
+    const shop = makeRepo('shop', `${fixture.a}/`)
+    await open(shop)
+    await settled(shop)
+    const local = join(repos, 'local.html')
+    writeFileSync(local, '<!doctype html><title>forbidden</title>')
+    const urls: Record<typeof scheme, string> = {
+      file: pathToFileURL(local).href,
+      data: 'data:text/html,<title>forbidden</title>',
+      about: 'about:blank'
+    }
+    const url = urls[scheme]
+    const outcome = await app.evaluate(async ({ webContents }, url: string) => {
+      const guest = webContents
+        .getAllWebContents()
+        .find((contents) => contents.getType() === 'webview')
+      if (!guest) throw new Error('guest missing')
+      const result = await guest.loadURL(url).then(
+        () => 'loaded',
+        () => 'blocked'
+      )
+      return { result, url: guest.getURL() }
+    }, url)
+    expect(outcome).toEqual({ result: 'blocked', url: `${fixture.a}/` })
+
+    const refused = page.waitForEvent('console', {
+      predicate: (message) => message.text().includes('Pane navigation requires')
+    })
+    await page
+      .locator('webview')
+      .first()
+      .evaluate((element, url: string) => element.setAttribute('src', url), url)
+    await refused
+
+    expect(
+      await app.evaluate(({ webContents }) => {
+        const guest = webContents
+          .getAllWebContents()
+          .find((contents) => contents.getType() === 'webview')
+        return guest?.getURL()
+      })
+    ).toBe(`${fixture.a}/`)
+  })
+}
+
+test('guest redirects reject local files and still allow another HTTP origin', async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await open(shop)
+  await settled(shop)
+  const local = join(repos, 'local.html')
+  writeFileSync(local, '<!doctype html><title>forbidden</title>')
+
+  const blocked = await launched.app.evaluate(
+    async ({ webContents }, url: string): Promise<string> => {
+      const guest = webContents
+        .getAllWebContents()
+        .find((contents) => contents.getType() === 'webview')
+      if (!guest) throw new Error('guest missing')
+      return guest.loadURL(url).then(
+        () => 'loaded',
+        () => 'blocked'
+      )
+    },
+    `${fixture.a}/redirect?to=${encodeURIComponent(pathToFileURL(local).href)}`
+  )
+  expect(blocked).toBe('blocked')
+
+  const navigated = await launched.app.evaluate(
+    async ({ webContents }, url: string): Promise<string> => {
+      const guest = webContents
+        .getAllWebContents()
+        .find((contents) => contents.getType() === 'webview')
+      if (!guest) throw new Error('guest missing')
+      await guest.loadURL(url)
+      return guest.getURL()
+    },
+    `${fixture.a}/redirect?to=${encodeURIComponent(`${fixture.b}/after-redirect`)}`
+  )
+  expect(navigated).toBe(`${fixture.b}/after-redirect`)
+})
+
+test('page navigation blocks non-HTTP(S) documents while embedded data and blob resources still work', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await open(shop)
+  await settled(shop)
+  const navigation = await app.evaluateHandle(({ webContents }) => {
+    const guest = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getType() === 'webview')
+    if (!guest) throw new Error('guest missing')
+    return {
+      refused: new Promise<boolean>((resolve) =>
+        guest.once('will-navigate', (event) => resolve(event.defaultPrevented))
+      )
+    }
+  })
+  await app.evaluate(async ({ webContents }): Promise<void> => {
+    const guest = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getType() === 'webview')
+    if (!guest) throw new Error('guest missing')
+    await guest.executeJavaScript(`location.href = URL.createObjectURL(
+      new Blob(['<title>forbidden</title>'], { type: 'text/html' })
+    )`)
+  })
+  expect(await navigation.evaluate(({ refused }) => refused)).toBe(true)
+  await navigation.dispose()
+
+  const resources = await app.evaluate(async ({ webContents }) => {
+    const guest = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getType() === 'webview')
+    if (!guest) throw new Error('guest missing')
+    return {
+      url: guest.getURL(),
+      values: await guest.executeJavaScript(`(async () => {
+        const blob = URL.createObjectURL(new Blob(['blob resource']))
+        try {
+          return await Promise.all([
+            fetch('data:text/plain,data%20resource').then(response => response.text()),
+            fetch(blob).then(response => response.text())
+          ])
+        } finally {
+          URL.revokeObjectURL(blob)
+        }
+      })()`)
+    }
+  })
+  expect(resources).toEqual({ url: `${fixture.a}/`, values: ['data resource', 'blob resource'] })
+})
+
+interface GuestPageState {
+  id: number
+  url: string
+  history: string[]
+  draft: string
+}
+
+function guestPageStates(app: LaunchedApp['app']): Promise<GuestPageState[]> {
+  return app.evaluate(async ({ webContents }) => {
+    const guests = webContents
+      .getAllWebContents()
+      .filter((contents) => contents.getType() === 'webview')
+    return Promise.all(
+      guests.map(async (guest): Promise<GuestPageState> => ({
+        id: guest.id,
+        url: guest.getURL(),
+        history: guest.navigationHistory.getAllEntries().map((entry) => entry.url),
+        draft: await guest.executeJavaScript('document.getElementById("draft").value')
+      }))
+    )
+  })
+}
+
+test('snapshot refresh, failure, and retry preserve guest identity, history, navigation, and unsaved forms', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await open(shop)
+  await settled(shop)
+  await app.evaluate(async ({ webContents }, other: string): Promise<void> => {
+    const guest = webContents
+      .getAllWebContents()
+      .find((contents) => contents.getType() === 'webview')
+    if (!guest) throw new Error('guest missing')
+    await guest.loadURL(`${other}/form`)
+    await guest.executeJavaScript('document.getElementById("draft").value = "unsaved draft"')
+  }, fixture.b)
+  const before = await guestPageStates(app)
+  const snapshot = await state()
+  const refresh = await app.evaluateHandle(({ ipcMain }, channel: string) => {
+    const { promise, resolve } = Promise.withResolvers<RouteResponse<StateSnapshot>>()
+    ipcMain.removeHandler(channel)
+    ipcMain.handle(channel, () => promise)
+    return {
+      fail: (): void =>
+        resolve({
+          id: 'test',
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'snapshot unavailable' }
+        })
+    }
+  }, ROUTE_CHANNEL)
+  await app.evaluate(
+    ({ BrowserWindow }, { channel, snapshot }) => {
+      BrowserWindow.getAllWindows()[0].webContents.send(channel, [
+        {
+          revision: snapshot.revision + 2,
+          patch: { type: 'project.opened', project: snapshot.project }
+        }
+      ])
+    },
+    { channel: PATCH_CHANNEL, snapshot }
+  )
+
+  await expect(page.getByRole('status')).toHaveText('Refreshing project…')
+  expect(await guestPageStates(app)).toEqual(before)
+  await refresh.evaluate(({ fail }) => fail())
+  await refresh.dispose()
+  await expect(page.getByRole('alert')).toContainText('snapshot unavailable')
+  expect(await guestPageStates(app)).toEqual(before)
+
+  await app.evaluate(
+    ({ ipcMain }, { channel, snapshot }) => {
+      ipcMain.removeHandler(channel)
+      ipcMain.handle(channel, () => ({ id: 'test', ok: true, data: snapshot }))
+    },
+    { channel: ROUTE_CHANNEL, snapshot }
+  )
+  await page.getByRole('button', { name: 'Retry' }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(page.getByRole('status')).toHaveCount(0)
+  expect(await guestPageStates(app)).toEqual(before)
+  expect(ofType(await logs(snapshot.cursor), 'pane.destroyed')).toEqual([])
 })

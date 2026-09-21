@@ -9,9 +9,9 @@ import {
 import type { PatchBatch, StateSnapshot } from '../../../shared/state'
 
 export type SnapshotState =
-  | { status: 'fetching' }
+  | { status: 'fetching'; snapshot: StateSnapshot | null }
   | { status: 'live'; snapshot: StateSnapshot }
-  | { status: 'error'; message: string }
+  | { status: 'error'; snapshot: StateSnapshot | null; message: string }
 
 interface SnapshotReaderOptions {
   fetchSnapshot(): Promise<RouteResponse<StateSnapshot>>
@@ -32,6 +32,7 @@ export function createSnapshotReader({
   onChange
 }: SnapshotReaderOptions): SnapshotReader {
   let projection: Projection = startProjection()
+  let lastSnapshot: StateSnapshot | null = null
   let closed = false
   let inFlight = false
   let acceptingPatches = true
@@ -42,6 +43,7 @@ export function createSnapshotReader({
     projection = result.projection
     if (projection.status === 'live') {
       failures = 0
+      lastSnapshot = projection.snapshot
       onChange(projection)
     }
     if (result.refetch) void requestSnapshot()
@@ -50,7 +52,7 @@ export function createSnapshotReader({
   function failed(message: string): void {
     projection = startProjection()
     acceptingPatches = false
-    onChange({ status: 'error', message })
+    onChange({ status: 'error', snapshot: lastSnapshot, message })
     const delay = RETRY_DELAYS_MS[failures]
     failures += 1
     if (delay !== undefined) {
@@ -65,7 +67,7 @@ export function createSnapshotReader({
     if (closed || inFlight) return
     inFlight = true
     acceptingPatches = true
-    onChange({ status: 'fetching' })
+    onChange({ status: 'fetching', snapshot: lastSnapshot })
     let response: RouteResponse<StateSnapshot>
     try {
       response = await fetchSnapshot()

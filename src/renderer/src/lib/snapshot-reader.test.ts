@@ -66,6 +66,7 @@ describe('snapshot recovery', () => {
       await vi.advanceTimersByTimeAsync(0)
       expect(h.onChange).toHaveBeenLastCalledWith({
         status: 'error',
+        snapshot: null,
         message: expect.stringContaining('unavailable')
       })
 
@@ -149,12 +150,52 @@ describe('snapshot recovery', () => {
     h.fetchSnapshot.mockRejectedValueOnce(new Error('disconnected'))
     h.fetchSnapshot.mockResolvedValueOnce(success('test', { ...snapshot, revision: 3 }))
     h.push([{ revision: 3, patch: { type: 'project.opened', project: shop } }])
+    expect(h.onChange).toHaveBeenLastCalledWith({ status: 'fetching', snapshot })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.onChange).toHaveBeenLastCalledWith({
+      status: 'error',
+      snapshot,
+      message: 'disconnected'
+    })
     await vi.advanceTimersByTimeAsync(250)
     expect(h.fetchSnapshot).toHaveBeenCalledTimes(3)
     expect(h.onChange).toHaveBeenLastCalledWith({
       status: 'live',
       snapshot: { ...snapshot, revision: 3 }
     })
+    reader.close()
+  })
+
+  it('keeps the last committed snapshot through failed manual retries until a new project arrives', async () => {
+    const h = harness()
+    h.fetchSnapshot.mockResolvedValueOnce(success('test', snapshot))
+    const reader = h.start()
+    await vi.advanceTimersByTimeAsync(0)
+    const updated: StateSnapshot = { ...snapshot, revision: 2 }
+    h.push([{ revision: 2, patch: { type: 'project.opened', project: shop } }])
+
+    h.fetchSnapshot.mockResolvedValue(failure('test', 'INTERNAL_ERROR', 'unavailable'))
+    reader.retry()
+    expect(h.onChange).toHaveBeenLastCalledWith({ status: 'fetching', snapshot: updated })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(h.onChange).toHaveBeenLastCalledWith({
+      status: 'error',
+      snapshot: updated,
+      message: 'INTERNAL_ERROR: unavailable'
+    })
+
+    const store = createProject('/repos/store')
+    const switched: StateSnapshot = {
+      revision: 3,
+      cursor: 0,
+      project: store,
+      panes: paneStatusesFor(store, {})
+    }
+    h.fetchSnapshot.mockResolvedValueOnce(success('test', switched))
+    reader.retry()
+    expect(h.onChange).toHaveBeenLastCalledWith({ status: 'fetching', snapshot: updated })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(h.onChange).toHaveBeenLastCalledWith({ status: 'live', snapshot: switched })
     reader.close()
   })
 })

@@ -11,7 +11,7 @@ import { useSnapshot } from '@renderer/hooks/use-snapshot'
 // table, no UI-only route (ADR-0005). It goes away with the real toolbar.
 export default function App(): React.JSX.Element {
   const state = useSnapshot()
-  const snapshot = state.status === 'live' ? state.snapshot : null
+  const snapshot = state.snapshot
   const project = snapshot?.project ?? null
 
   return (
@@ -35,21 +35,30 @@ export default function App(): React.JSX.Element {
               {project.startUrl}
             </span>
           </>
-        ) : state.status === 'error' ? (
+        ) : (
+          <span className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
+            {state.status === 'fetching' ? 'Loading project…' : 'No project open'}
+          </span>
+        )}
+        {state.status === 'error' && (
           <>
             <span
               role="alert"
               className="truncate text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
             >
-              Could not load project: {state.message}
+              Could not {snapshot ? 'refresh' : 'load'} project: {state.message}
             </span>
             <Button size="sm" variant="outline" onClick={state.retry}>
               Retry
             </Button>
           </>
-        ) : (
-          <span className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-            {state.status === 'fetching' ? 'Loading project…' : 'No project open'}
+        )}
+        {state.status === 'fetching' && snapshot && (
+          <span
+            role="status"
+            className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]"
+          >
+            Refreshing project…
           </span>
         )}
         <Button

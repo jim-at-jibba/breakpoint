@@ -1,5 +1,6 @@
-import type { App, WebContents, WebPreferences } from 'electron'
+import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
+import { isWebUrl } from '../shared/urls'
 import type { PaneService } from './services/pane-service'
 
 /**
@@ -27,8 +28,25 @@ interface PendingGuest {
   src: string
 }
 
+interface GuestBinding extends PendingGuest {
+  guest: WebContents
+}
+
+interface GuestAttachment {
+  pane: string
+  guest: WebContents
+  attempt: 1 | 2
+}
+
+interface WebviewAttachment {
+  event: Electron.Event
+  preferences: WebPreferences
+  params: Record<string, string>
+}
+
 export class PaneHost {
   private readonly hosts = new WeakSet<WebContents>()
+  private readonly sessions = new WeakSet<Session>()
   private readonly guests = new Map<string, WebContents>()
   private pending: PendingGuest | null = null
 
@@ -44,18 +62,42 @@ export class PaneHost {
         // Before anything else can run in it: `window.open` and `target=_blank` never
         // spawn a window, whatever the page or the element asked for.
         contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+        this.secureSession(contents.session)
+        contents.on('will-navigate', (event) => {
+          if (!isWebUrl(event.url)) event.preventDefault()
+        })
+        contents.on('will-redirect', (event) => {
+          if (event.isMainFrame && !isWebUrl(event.url)) event.preventDefault()
+        })
+        // Electron dispatches webview.src/loadURL through this method, bypassing
+        // will-navigate. Reject before navigation starts: stop() inside
+        // did-start-navigation crashes Electron 44; deferring it risks a commit.
+        const loadURL = contents.loadURL.bind(contents)
+        contents.loadURL = (url: string, options?: LoadURLOptions): Promise<void> => {
+          if (!isWebUrl(url)) {
+            return Promise.reject(new Error('Pane navigation requires an http: or https: URL'))
+          }
+          return loadURL(url, options)
+        }
       }
       contents.on('will-attach-webview', (event, preferences, params) => {
         if (!this.hosts.has(contents)) {
           event.preventDefault()
           return
         }
-        this.willAttach(event, preferences, params)
+        this.willAttach({ event, preferences, params })
       })
       contents.on('did-attach-webview', (_attached, guest) => {
         if (this.hosts.has(contents)) this.didAttach(guest)
       })
     })
+  }
+
+  private secureSession(session: Session): void {
+    if (this.sessions.has(session)) return
+    session.setPermissionCheckHandler(() => false)
+    session.setPermissionRequestHandler((_contents, _permission, respond) => respond(false))
+    this.sessions.add(session)
   }
 
   /** Lets a window's web contents host panes. Only the app window is ever adopted. */
@@ -73,11 +115,7 @@ export class PaneHost {
    * any answer other than these is wrong. A guest for no pane of the open project is
    * refused outright.
    */
-  private willAttach(
-    event: Electron.Event,
-    preferences: WebPreferences,
-    params: Record<string, string>
-  ): void {
+  private willAttach({ event, preferences, params }: WebviewAttachment): void {
     // A guest refused after this point never reaches `did-attach-webview`, so a slot
     // left over from it must not be read as the next guest's pane.
     this.pending = null
@@ -91,14 +129,16 @@ export class PaneHost {
     preferences.nodeIntegrationInSubFrames = false
     preferences.nodeIntegrationInWorker = false
     preferences.webviewTag = false
+    preferences.webSecurity = true
+    preferences.allowRunningInsecureContent = false
 
-    if (pane === null || !this.panes.has(pane)) {
+    if (pane === null || !this.panes.has(pane) || !isWebUrl(params.src)) {
       event.preventDefault()
       return
     }
     // `did-attach-webview` for this guest fires in this same task, before any other
     // guest's `will-attach-webview` can, so one slot is enough to carry the pane across.
-    this.pending = { pane, src: params.src ?? '' }
+    this.pending = { pane, src: params.src }
   }
 
   private didAttach(guest: WebContents): void {
@@ -110,10 +150,10 @@ export class PaneHost {
       guest.close()
       return
     }
-    this.bind(pending.pane, guest, pending.src)
+    this.bind({ ...pending, guest })
   }
 
-  private bind(pane: string, guest: WebContents, src: string): void {
+  private bind({ pane, guest, src }: GuestBinding): void {
     this.guests.set(pane, guest)
     const current = (): boolean => this.isCurrent(pane, guest)
 
@@ -131,16 +171,16 @@ export class PaneHost {
     guest.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
       if (!isMainFrame || code === ERR_ABORTED) return
       failed = true
-      if (current()) this.panes.loadFailed(pane, url, code, description)
+      if (current()) this.panes.loadFailed({ pane, url, code, message: description })
     })
     guest.once('destroyed', () => {
       const wasCurrent = current()
       if (wasCurrent) this.guests.delete(pane)
-      this.panes.guestDestroyed(pane, wasCurrent)
+      this.panes.guestDestroyed({ pane, current: wasCurrent })
     })
 
     this.panes.guestCreated(pane, src)
-    this.attach(pane, guest, 1)
+    this.attach({ pane, guest, attempt: 1 })
   }
 
   /** Whether `guest` is still the pane's, rather than one it has since replaced. */
@@ -152,16 +192,18 @@ export class PaneHost {
    * Attachment failure never fails the pane: it renders, degraded, with the reason
    * recorded. One retry once the page has loaded, then stop — no backoff loop.
    */
-  private attach(pane: string, guest: WebContents, attempt: 1 | 2): void {
+  private attach({ pane, guest, attempt }: GuestAttachment): void {
     try {
       guest.debugger.attach(CDP_VERSION)
     } catch (error) {
       const retrying = attempt === 1
       const message = error instanceof Error ? error.message : String(error)
-      this.panes.attachFailed(pane, attempt, retrying, message)
+      this.panes.attachFailed({ pane, attempt, retrying, message })
       if (retrying) {
         guest.once('did-stop-loading', () => {
-          if (!guest.isDestroyed() && this.isCurrent(pane, guest)) this.attach(pane, guest, 2)
+          if (!guest.isDestroyed() && this.isCurrent(pane, guest)) {
+            this.attach({ pane, guest, attempt: 2 })
+          }
         })
       }
       return

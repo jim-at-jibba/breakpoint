@@ -55,6 +55,17 @@ describe('readProjectFile', () => {
     expect(readProjectFile(raw)).toEqual({ ok: true, project: stored })
   })
 
+  it.each(['file:///tmp/page.html', 'data:text/html,test', 'javascript:alert(1)', '/relative'])(
+    'refuses a project that starts on %s',
+    (startUrl: string): void => {
+      expect(readProjectFile(writeProjectFile({ ...stored, startUrl }))).toEqual({
+        ok: false,
+        reason: 'corrupt',
+        message: 'the project inside the file is not a project'
+      })
+    }
+  )
+
   it('refuses a file whose version is higher than the build, and says which', () => {
     const raw = { ...writeProjectFile(stored), version: PROJECT_FILE_VERSION + 1 }
     expect(readProjectFile(raw)).toEqual({
