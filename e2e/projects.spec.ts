@@ -262,7 +262,8 @@ test('a project file with another repo identity is refused without changing the 
   })
   expect(readFileSync(file, 'utf8')).toBe(written)
   const state = await runCli(sandbox, ['state', '--json'])
-  expect(JSON.parse(state.stdout)).toEqual(before)
+  // The open is untouched. Only the cursor moved: the refusal is itself an observation.
+  expect(JSON.parse(state.stdout)).toEqual({ ...before, cursor: before.cursor + 1 })
   await expect(page.getByTestId('project-name')).toHaveText('shop')
 })
 
@@ -310,8 +311,9 @@ test('state with nothing open says so on both outputs', async () => {
   const text = await runCli(sandbox, ['state'])
 
   expect(json.code).toBe(0)
-  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, project: null })
-  expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\n')
+  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, cursor: 0, project: null })
+  // The cursor is printed with nothing open: that is when the log matters most.
+  expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
 })
 
 test('the renderer renders from a snapshot plus patches, and re-fetches on a desync', async () => {

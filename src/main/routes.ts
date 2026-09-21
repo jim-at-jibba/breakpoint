@@ -1,3 +1,4 @@
+import { isCursorPosition, type EventLog } from '../shared/event-log'
 import { failure, success, type RouteRequest, type RouteResponse } from '../shared/protocol'
 import { isRouteName, type RouteName, type RouteParams, type RoutePayload } from '../shared/routes'
 import { RouteError } from './route-error'
@@ -59,6 +60,19 @@ function expectPath(raw: unknown): ParamsOk<'project.open'> | ParamsBad {
   return { ok: true, params: { path } }
 }
 
+function expectSince(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
+  if (raw === undefined || raw === null) return { ok: true, params: {} }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { ok: false, message: 'this route takes { since }' }
+  }
+  const { since } = raw as { since?: unknown }
+  if (since === undefined) return { ok: true, params: {} }
+  if (!isCursorPosition(since)) {
+    return { ok: false, message: 'since must be a cursor position: an integer of 0 or more' }
+  }
+  return { ok: true, params: { since } }
+}
+
 export interface DispatchResult {
   response: RouteResponse
   afterRespond?: () => void
@@ -66,8 +80,14 @@ export interface DispatchResult {
 
 export type Dispatch = (request: RouteRequest) => Promise<DispatchResult>
 
+/**
+ * Keyed by the route noun. The log is a store rather than one of PRD 8.1's services and
+ * reaches the table as it is: a service over it would hold no behaviour of its own,
+ * which is the thing the boundary exists to prevent ([ADR-0005]).
+ */
 export interface Services {
   app: AppService
+  log: EventLog
   project: ProjectService
 }
 
@@ -76,6 +96,10 @@ export function createRouteTable(services: Services): RouteTable {
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })
+    },
+    'log.read': {
+      parseParams: expectSince,
+      handle: (params) => ({ payload: services.log.read(params) })
     },
     'project.open': {
       parseParams: expectPath,

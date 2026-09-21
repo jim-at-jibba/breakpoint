@@ -9,12 +9,13 @@
  * renderer, the main process and the CLI all see at once.
  */
 
+import type { LogRead, ReadParams } from './event-log'
 import type { StateSnapshot } from './state'
 
 /** A route is a dotted `noun.verb`. The noun is the service, the verb is the method. */
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
-export const ROUTE_NAMES = ['app.quit', 'project.open', 'project.state'] as const
+export const ROUTE_NAMES = ['app.quit', 'log.read', 'project.open', 'project.state'] as const
 
 export type RouteName = (typeof ROUTE_NAMES)[number]
 
@@ -24,6 +25,12 @@ export type RouteName = (typeof ROUTE_NAMES)[number]
  */
 export interface RouteSignatures {
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Everything the event log holds after a cursor position. Omitting `since` reads from
+   * the beginning, which is everything the ring buffers still hold rather than
+   * everything that ever happened.
+   */
+  'log.read': { params: ReadParams; payload: LogRead }
   /**
    * Opens the project for a repo, creating it the first time. `path` is absolute: the
    * caller resolves it against its own working directory, which the app cannot know.

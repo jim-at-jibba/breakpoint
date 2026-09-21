@@ -5,7 +5,7 @@ import type { PatchBatch, StateSnapshot } from '../../../shared/state'
 import { createSnapshotReader, type SnapshotReader, type SnapshotState } from './snapshot-reader'
 
 const shop = createProject('/repos/shop')
-const snapshot: StateSnapshot = { revision: 1, project: shop }
+const snapshot: StateSnapshot = { revision: 1, cursor: 0, project: shop }
 
 interface SnapshotHarness {
   fetchSnapshot: Mock<() => Promise<RouteResponse<StateSnapshot>>>
@@ -70,7 +70,7 @@ describe('snapshot recovery', () => {
       expect(h.fetchSnapshot).toHaveBeenCalledTimes(2)
       expect(h.onChange).toHaveBeenLastCalledWith({
         status: 'live',
-        snapshot: { revision: 2, project: { ...shop, name: 'updated' } }
+        snapshot: { revision: 2, cursor: 0, project: { ...shop, name: 'updated' } }
       })
       reader.close()
     }
