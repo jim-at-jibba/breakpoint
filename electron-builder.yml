@@ -9,6 +9,11 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # Nothing outside the built app ships. docs/ is the PRD, ADRs and design
+  # reference; prototypes/ is throwaway spike code kept as a primary source;
+  # site/ is the marketing and docs site, deployed separately.
+  - '!{docs,prototypes,site}/**'
+  - '!{AGENTS.md,CONTEXT.md,CONTEXT-MAP.md,components.json}'
 asarUnpack:
   - resources/**
 win:
