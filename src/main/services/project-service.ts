@@ -1,7 +1,9 @@
 import { realpath, stat } from 'node:fs/promises'
 import type { EventLog } from '../../shared/event-log'
 import type { EmulationChanges } from '../../shared/emulation'
-import { createProject, type Pane, type Project } from '../../shared/project'
+import { clampZoom } from '../../shared/canvas'
+import { createProject, type Pane, type Project, type Zoom } from '../../shared/project'
+import type { LayoutSetting, LayoutState } from '../../shared/routes'
 import type { StateSnapshot } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
@@ -35,13 +37,21 @@ export class ProjectService {
    * slash — so every route to the same repo is the same project.
    */
   open(path: string): Promise<StateSnapshot> {
-    const opened = this.queue.then(() => this.openNext(path))
-    // The caller receives the rejection; later opens must still get their turn.
-    this.queue = opened.then(
+    return this.enqueue(() => this.openNext(path))
+  }
+
+  /**
+   * One at a time, in the order they were asked for, so a change can never land on the
+   * project an open is replacing. The caller receives the rejection; whatever is waiting
+   * still gets its turn.
+   */
+  private enqueue<T>(work: () => Promise<T>): Promise<T> {
+    const done = this.queue.then(work)
+    this.queue = done.then(
       () => undefined,
       () => undefined
     )
-    return opened
+    return done
   }
 
   private async openNext(path: string): Promise<StateSnapshot> {
@@ -93,12 +103,24 @@ export class ProjectService {
    * announced for them.
    */
   updatePane(id: string, changes: EmulationChanges): Promise<PaneUpdate> {
-    const updated = this.queue.then(() => this.replacePane(id, changes))
-    this.queue = updated.then(
-      () => undefined,
-      () => undefined
-    )
-    return updated
+    return this.enqueue(() => this.replacePane(id, changes))
+  }
+
+  /**
+   * Arranges the open project's panes, and names the pane Focus draws at 100%. Naming
+   * no pane leaves the focused one as it was, so changing the layout and changing which
+   * pane is focused are the same call with different arguments.
+   */
+  setLayout(setting: LayoutSetting): Promise<LayoutState> {
+    return this.enqueue(() => this.replaceLayout(setting))
+  }
+
+  /**
+   * Sets the zoom the project reopens at. Fit is one of its values, not a mode beside
+   * the layouts ([ADR-0009]); what Fit draws to is the renderer's, and never stored.
+   */
+  setZoom(zoom: Zoom): Promise<{ zoom: Zoom }> {
+    return this.enqueue(() => this.replaceZoom(zoom))
   }
 
   private async replacePane(id: string, changes: EmulationChanges): Promise<PaneUpdate> {
@@ -115,17 +137,53 @@ export class ProjectService {
     if (Object.keys(changed).length === 0) return { pane, changes: changed }
 
     const next: Pane = { ...pane, ...changed }
-    const updated: Project = {
+    await this.save({
       ...project,
       panes: project.panes.map((candidate) => (candidate.id === id ? next : candidate))
-    }
-    // Saved first: a change that could not be kept is not made.
-    await this.store.save(updated)
-    this.current = updated
-    this.panes.open(updated)
+    })
     this.panes.invalidateEmulation(id, changed)
     this.feed.publish({ type: 'pane.changed', pane: next })
     return { pane: next, changes: changed }
+  }
+
+  private async replaceLayout({ layout, focusedPane }: LayoutSetting): Promise<LayoutState> {
+    const project = this.requireOpen()
+    if (focusedPane !== undefined && !project.panes.some((pane) => pane.id === focusedPane)) {
+      throw new RouteError('PANE_NOT_FOUND', `no pane ${focusedPane} in the open project`)
+    }
+
+    const next: LayoutState = { layout, focusedPane: focusedPane ?? project.focusedPane }
+    // The layout it already has is not a change: nothing is saved, logged or announced.
+    if (project.layout === next.layout && project.focusedPane === next.focusedPane) return next
+
+    await this.save({ ...project, ...next })
+    this.log.append(null, { type: 'project.layoutChanged', ...next })
+    this.feed.publish({ type: 'project.layout', ...next })
+    return next
+  }
+
+  private async replaceZoom(requested: Zoom): Promise<{ zoom: Zoom }> {
+    const project = this.requireOpen()
+    // The ends of the control are not an error: a zoom past them is clamped, not refused.
+    const zoom: Zoom = requested === 'fit' ? 'fit' : clampZoom(requested)
+    if (project.zoom === zoom) return { zoom }
+
+    await this.save({ ...project, zoom })
+    this.log.append(null, { type: 'project.zoomChanged', zoom })
+    this.feed.publish({ type: 'project.zoom', zoom })
+    return { zoom }
+  }
+
+  private requireOpen(): Project {
+    if (!this.current) throw new RouteError('PROJECT_NOT_OPEN', 'no project is open')
+    return this.current
+  }
+
+  /** Saved first: a change that could not be kept is not made. */
+  private async save(project: Project): Promise<void> {
+    await this.store.save(project)
+    this.current = project
+    this.panes.open(project)
   }
 
   snapshot(): StateSnapshot {

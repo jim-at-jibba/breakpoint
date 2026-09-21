@@ -19,7 +19,9 @@ export const WIRE_ERROR_CODES = [
   /** The project's file is on disk but this build will not load it: corrupt, or newer. */
   'PROJECT_UNREADABLE',
   /** No pane with that id in the open project, or no project open. */
-  'PANE_NOT_FOUND'
+  'PANE_NOT_FOUND',
+  /** The route changes the open project and there is no project open. */
+  'PROJECT_NOT_OPEN'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

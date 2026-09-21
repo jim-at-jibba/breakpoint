@@ -46,6 +46,11 @@ export interface Project {
   panes: Pane[]
   layout: Layout
   zoom: Zoom
+  /**
+   * The pane Focus draws at 100%, or null for whichever is first. Stored, so a project
+   * reopens on the pane it was left on, and named by id so nothing else has to be.
+   */
+  focusedPane: string | null
   sessions: Session[]
 }
 
@@ -96,6 +101,7 @@ export function createProject(repoPath: string): Project {
     })),
     layout: 'horizontal',
     zoom: 'fit',
+    focusedPane: null,
     sessions: [DEFAULT_SESSION]
   }
 }
@@ -110,7 +116,7 @@ export function createProject(repoPath: string): Project {
  * a later build added, and then saving over them, is how a downgrade quietly corrupts a
  * project.
  */
-export const PROJECT_FILE_VERSION = 1
+export const PROJECT_FILE_VERSION = 2
 
 export interface ProjectFile {
   version: number
@@ -122,8 +128,17 @@ export type ProjectMigration = (file: Record<string, unknown>) => Record<string,
 
 export type ProjectMigrations = Readonly<Record<number, ProjectMigration>>
 
-/** Empty until version 2 exists. The machinery is exercised in tests with injected steps. */
-export const PROJECT_MIGRATIONS: ProjectMigrations = {}
+/**
+ * Version 2 added `focusedPane`. A version 1 project named no focused pane, and null is
+ * what that means: Focus shows the first pane until one is chosen.
+ */
+const addFocusedPane: ProjectMigration = (file) => {
+  const project = asRecord(file.project)
+  if (!project) return file
+  return { ...file, project: { focusedPane: null, ...project } }
+}
+
+export const PROJECT_MIGRATIONS: ProjectMigrations = { 1: addFocusedPane }
 
 /** Why a file on disk is refused. Reported to the caller as `details.reason`. */
 export type RefusalReason = 'newer' | 'corrupt'
@@ -192,6 +207,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 const LAYOUTS: ReadonlySet<string> = new Set<Layout>(['horizontal', 'focus'])
 const COLOR_SCHEMES: ReadonlySet<string> = new Set<ColorScheme>(['light', 'dark', 'system'])
 
+export function isLayout(value: unknown): value is Layout {
+  return typeof value === 'string' && LAYOUTS.has(value)
+}
+
 export function isColorScheme(value: unknown): value is ColorScheme {
   return typeof value === 'string' && COLOR_SCHEMES.has(value)
 }
@@ -248,7 +267,7 @@ export function parseProject(value: unknown): Project | undefined {
   if (!raw) return undefined
   if (!isString(raw.name) || !isString(raw.repoPath) || !isWebUrl(raw.startUrl)) return undefined
   if (!isStringArray(raw.allowedOrigins)) return undefined
-  if (!isString(raw.layout) || !LAYOUTS.has(raw.layout)) return undefined
+  if (!isLayout(raw.layout)) return undefined
   const zoom = parseZoom(raw.zoom)
   if (zoom === undefined) return undefined
 
@@ -269,14 +288,22 @@ export function parseProject(value: unknown): Project | undefined {
     panes.push(pane)
   }
 
+  // A focused pane naming a pane that has gone reads as null, which is what the field
+  // already means elsewhere: Focus shows the first pane. Losing which pane was focused is
+  // not a reason to refuse the project.
+  const { focusedPane } = raw
+  if (focusedPane !== null && !isString(focusedPane)) return undefined
+  const focused = panes.some((pane) => pane.id === focusedPane) ? focusedPane : null
+
   return {
     name: raw.name,
     repoPath: raw.repoPath,
     startUrl: raw.startUrl,
     allowedOrigins: [...raw.allowedOrigins],
     panes,
-    layout: raw.layout as Layout,
+    layout: raw.layout,
     zoom,
+    focusedPane: focused,
     sessions
   }
 }

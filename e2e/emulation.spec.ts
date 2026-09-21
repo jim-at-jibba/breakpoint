@@ -48,6 +48,8 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   const project: Project = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
+    // Drawn at 100% unless a test says otherwise: what emulation does is not the canvas's.
+    zoom: 100,
     ...changes
   }
   const projects = join(sandbox.userDataDir, 'projects')

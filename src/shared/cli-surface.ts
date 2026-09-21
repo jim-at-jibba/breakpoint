@@ -1,8 +1,9 @@
 import { resolve } from 'node:path'
+import { focusedPaneOf } from './canvas'
 import { isCursorPosition, type Entry, type LogRead } from './event-log'
 import { describeDegradation } from './panes'
 import { looksLikePath } from './paths'
-import type { Project } from './project'
+import type { Project, Zoom } from './project'
 import type { RouteName, RouteParams } from './routes'
 import type { StateSnapshot } from './state'
 
@@ -125,11 +126,23 @@ function renderSnapshot(data: unknown, verb: string): string {
   return [
     `${verb} ${project.name} (${project.repoPath})`,
     `  ${project.startUrl}`,
+    `  ${describeLayout(project)}, zoom ${describeZoom(project.zoom)}`,
     'Panes:',
     ...panes,
     // The position to hand to `logs --since`, which is the point of printing it.
     cursor
   ].join('\n')
+}
+
+/** `Fit` where the project says Fit: what Fit draws to is the window's, and not stored. */
+function describeZoom(zoom: Zoom): string {
+  return zoom === 'fit' ? 'Fit' : `${zoom}%`
+}
+
+function describeLayout(project: Project): string {
+  if (project.layout === 'horizontal') return 'Horizontal'
+  const focused = focusedPaneOf(project.panes, project.focusedPane)
+  return `Focus on ${focused?.name ?? 'no pane'}`
 }
 
 function renderLog(data: unknown): string {
@@ -153,6 +166,10 @@ function describeEntry(entry: Entry): string {
   switch (entry.type) {
     case 'project.openFailed':
       return `could not open ${entry.path}: ${entry.code}: ${entry.message}`
+    case 'project.layoutChanged':
+      return `layout ${entry.layout}${entry.focusedPane ? `, focused pane ${entry.focusedPane}` : ''}`
+    case 'project.zoomChanged':
+      return `zoom ${describeZoom(entry.zoom)}`
     case 'pane.created':
       return `created, loading ${entry.url}`
     case 'pane.attached':

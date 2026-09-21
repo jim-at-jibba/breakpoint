@@ -1,6 +1,9 @@
 import { Canvas } from '@renderer/components/canvas'
+import { CanvasControls } from '@renderer/components/canvas-controls'
 import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
+import { useState } from 'react'
+import { MAX_ZOOM } from '../../shared/canvas'
 
 // The shell, ahead of the real toolbar. The toolbar strip is the window's drag region
 // and clears the traffic lights; it names the open project and its start URL. The body
@@ -13,6 +16,9 @@ export default function App(): React.JSX.Element {
   const state = useSnapshot()
   const snapshot = state.snapshot
   const project = snapshot?.project ?? null
+  // What the canvas draws at is the canvas's to settle and the toolbar's to show, so it
+  // is held here between them. It is never stored: only the value `Fit` is (ADR-0009).
+  const [zoom, setZoom] = useState(MAX_ZOOM)
 
   return (
     <div className="flex h-screen flex-col">
@@ -61,17 +67,22 @@ export default function App(): React.JSX.Element {
             Refreshing project…
           </span>
         )}
+        {project && (
+          <div className="ml-auto">
+            <CanvasControls project={project} zoom={zoom} />
+          </div>
+        )}
         <Button
           size="sm"
           variant="outline"
-          className="ml-auto mr-[var(--bp-space-4)]"
+          className={project ? 'mr-[var(--bp-space-4)]' : 'ml-auto mr-[var(--bp-space-4)]'}
           onClick={() => void window.breakpoint.invoke('app.quit')}
         >
           Quit
         </Button>
       </header>
       {project && snapshot ? (
-        <Canvas project={project} statuses={snapshot.panes} />
+        <Canvas project={project} statuses={snapshot.panes} onZoom={setZoom} />
       ) : (
         <main className="bg-background text-foreground flex flex-1 flex-col items-center justify-center gap-4">
           <div className="flex items-center gap-2">

@@ -18,6 +18,7 @@ describe('createProject', () => {
     expect(project.allowedOrigins).toEqual(['http://localhost:3000'])
     expect(project.layout).toBe('horizontal')
     expect(project.zoom).toBe('fit')
+    expect(project.focusedPane).toBeNull()
   })
 
   it('gives a new project the PRD 6.2 default pane set on one shared session', () => {
@@ -128,6 +129,26 @@ describe('readProjectFile', () => {
 
     expect(steps).toEqual([1, 2])
     expect(result).toEqual({ ok: true, project: { ...stored, name: 'old' } })
+  })
+
+  it('reads a focused pane the project no longer has as focusing none', () => {
+    const raw = writeProjectFile({ ...stored, focusedPane: 'ghost' })
+
+    expect(readProjectFile(raw)).toEqual({ ok: true, project: { ...stored, focusedPane: null } })
+  })
+
+  it('still refuses a focused pane that is not a pane id at all', () => {
+    const raw = writeProjectFile({ ...stored, focusedPane: 7 as unknown as string })
+
+    expect(readProjectFile(raw).ok).toBe(false)
+  })
+
+  it('reads a file from before Focus remembered its pane as focusing none', () => {
+    const before: Record<string, unknown> = { ...stored }
+    delete before.focusedPane
+    const result = readProjectFile({ version: 1, project: before })
+
+    expect(result).toEqual({ ok: true, project: { ...stored, focusedPane: null } })
   })
 
   it('treats a missing migration step as corruption rather than skipping it', () => {
