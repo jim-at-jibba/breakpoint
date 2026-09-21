@@ -6,8 +6,13 @@ import { createProject, writeProjectFile, type Project } from '../../shared/proj
 import { EventLog } from '../../shared/event-log'
 import type { RevisionedPatch } from '../../shared/state'
 import { StateFeed } from '../state-feed'
+import { PaneService } from './pane-service'
 import { ProjectService } from './project-service'
 import { ProjectStore } from './project-store'
+
+function openedRepo({ patch }: RevisionedPatch): string | undefined {
+  return patch.type === 'project.opened' ? patch.project.repoPath : undefined
+}
 
 let root: string
 let shop: string
@@ -29,7 +34,7 @@ beforeEach(async () => {
     patches.push(patch)
   })
   log = new EventLog()
-  service = new ProjectService(store, feed, log)
+  service = new ProjectService(store, feed, log, new PaneService(feed, log))
 })
 
 afterEach(async () => {
@@ -65,7 +70,7 @@ describe('an open that fails', () => {
 
     const [entry] = log.read().entries
     expect(entry).toMatchObject({ code: 'PROJECT_UNREADABLE', pane: null })
-    expect(entry.message).toContain('file version 99')
+    expect(entry.type === 'project.openFailed' && entry.message).toContain('file version 99')
   })
 
   it('leaves the log alone when an open succeeds', async () => {
@@ -110,7 +115,7 @@ describe('async project opens', () => {
     const second = service.open(other)
     await started
     await new Promise<void>((resolve) => setImmediate(resolve))
-    expect(service.snapshot()).toEqual({ revision: 0, cursor: 0, project: null })
+    expect(service.snapshot()).toEqual({ revision: 0, cursor: 0, project: null, panes: {} })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
 
@@ -118,10 +123,7 @@ describe('async project opens', () => {
     const [openedShop, openedOther] = await Promise.all([first, second])
     expect(openedShop.revision).toBe(1)
     expect(openedOther.revision).toBe(2)
-    expect(patches.map((patch: RevisionedPatch) => patch.patch.project.repoPath)).toEqual([
-      shop,
-      other
-    ])
+    expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, other])
     expect(service.snapshot()).toEqual(openedOther)
     expect(await store.load(shop)).toEqual({ status: 'loaded', project: openedShop.project })
     expect(await store.load(other)).toEqual({ status: 'loaded', project: openedOther.project })
@@ -136,11 +138,13 @@ describe('async project opens', () => {
     await expect(failed).rejects.toThrow('disk full')
     expect(service.snapshot()).toEqual({ ...before, cursor: 1 })
     expect(await store.load(other)).toEqual({ status: 'missing' })
-    await expect(reopened).resolves.toEqual({ revision: 2, cursor: 1, project: before.project })
-    expect(patches.map((patch: RevisionedPatch) => patch.patch.project.repoPath)).toEqual([
-      shop,
-      shop
-    ])
+    await expect(reopened).resolves.toEqual({
+      revision: 2,
+      cursor: 1,
+      project: before.project,
+      panes: before.panes
+    })
+    expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, shop])
   })
 
   it('creates one persistent identity for overlapping opens of the same repo', async () => {

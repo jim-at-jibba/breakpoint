@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { PATCH_CHANNEL, ROUTE_CHANNEL } from '../src/shared/ipc'
 import { PROJECT_FILE_VERSION, projectFileName, type Project } from '../src/shared/project'
+import type { LogRead } from '../src/shared/event-log'
 import type { PatchBatch, StateSnapshot } from '../src/shared/state'
 import {
   closeApp,
@@ -262,8 +263,16 @@ test('a project file with another repo identity is refused without changing the 
   })
   expect(readFileSync(file, 'utf8')).toBe(written)
   const state = await runCli(sandbox, ['state', '--json'])
-  // The open is untouched. Only the cursor moved: the refusal is itself an observation.
-  expect(JSON.parse(state.stdout)).toEqual({ ...before, cursor: before.cursor + 1 })
+  // The open is untouched. The refusal is itself an observation, logged against no pane;
+  // the panes keep observing too, so the cursor is not asserted to have moved by one.
+  const after = JSON.parse(state.stdout) as StateSnapshot
+  expect(after.project).toEqual(before.project)
+  expect(Object.keys(after.panes)).toEqual(Object.keys(before.panes))
+  const logs = await runCli(sandbox, ['logs', '--since', String(before.cursor), '--json'])
+  const refusals = (JSON.parse(logs.stdout) as LogRead).entries.filter(
+    (entry) => entry.type === 'project.openFailed'
+  )
+  expect(refusals).toEqual([expect.objectContaining({ pane: null, path: other })])
   await expect(page.getByTestId('project-name')).toHaveText('shop')
 })
 
@@ -311,7 +320,7 @@ test('state with nothing open says so on both outputs', async () => {
   const text = await runCli(sandbox, ['state'])
 
   expect(json.code).toBe(0)
-  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, cursor: 0, project: null })
+  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, cursor: 0, project: null, panes: {} })
   // The cursor is printed with nothing open: that is when the log matters most.
   expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
 })

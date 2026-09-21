@@ -1,3 +1,4 @@
+import type { Size } from './panes'
 import {
   jsonByteLength,
   MAX_FRAME_BYTES,
@@ -29,10 +30,13 @@ export const MAX_ENTRY_TEXT_BYTES = 16 * 1024
 
 /**
  * What an entry says. One kind per producer, and a kind arrives with the ticket that
- * produces it — pane lifecycle, navigation and emulation are the next ones, and the
- * console's kinds are Phase 2.
+ * produces it — navigation and emulation are the next ones, and the console's kinds are
+ * Phase 2.
  */
-export type EntryBody = {
+export type EntryBody = ProjectEntryBody | PaneEntryBody
+
+/** The app's own: untagged. */
+export type ProjectEntryBody = {
   readonly type: 'project.openFailed'
   /** As the caller asked for it: canonicalising the path is one of the things that fails. */
   readonly path: string
@@ -41,20 +45,61 @@ export type EntryBody = {
   readonly message: string
 }
 
-type TruncatedField = 'path' | 'message'
+/**
+ * A pane's lifecycle, tagged with the pane. The log's first pane-tagged producer: a
+ * guest created for the pane, its attachment made or refused, its page loaded or not,
+ * its host-side geometry check failing and recovering, and the guest going away.
+ */
+export type PaneEntryBody =
+  | { readonly type: 'pane.created'; readonly url: string }
+  | { readonly type: 'pane.attached'; readonly attempt: number }
+  | {
+      readonly type: 'pane.attachFailed'
+      readonly attempt: number
+      /** Whether one more attempt follows the next load. The second failure is final. */
+      readonly retrying: boolean
+      readonly message: string
+    }
+  | { readonly type: 'pane.loaded'; readonly url: string }
+  | {
+      readonly type: 'pane.loadFailed'
+      readonly url: string
+      /** Chromium's net error code, negative, as `did-fail-load` reports it. */
+      readonly code: number
+      readonly message: string
+    }
+  | {
+      readonly type: 'pane.geometryMismatch'
+      /** Screen pixels: declared size times the canvas zoom. */
+      readonly expected: Readonly<Size>
+      /** Screen pixels: the pane element's own rendered box. */
+      readonly measured: Readonly<Size>
+      readonly message: string
+    }
+  | { readonly type: 'pane.geometryMatched' }
+  | { readonly type: 'pane.destroyed' }
+
+type TruncatedField = 'path' | 'message' | 'url'
+
+const TEXT_FIELDS: readonly TruncatedField[] = ['path', 'url', 'message']
 
 /**
  * One record in the log. `pane` is the pane it came from, or `null` when the app itself
  * produced it — a required field, because "which pane" is never a question an entry
  * leaves open.
  */
-export type Entry = {
+export type EntryMeta = {
   readonly cursor: number
   /** Milliseconds since the epoch, taken when the entry was appended. */
   readonly time: number
   readonly pane: string | null
   readonly truncated?: readonly TruncatedField[]
-} & EntryBody
+}
+
+export type Entry = EntryMeta & EntryBody
+
+/** An entry of one kind, for a reader that has already checked `type`. */
+export type EntryOf<T extends EntryBody['type']> = EntryMeta & Extract<EntryBody, { type: T }>
 
 export interface LogRead {
   readonly entries: readonly Entry[]
@@ -121,17 +166,14 @@ export class EventLog {
   }
 
   /** `pane` is positional and required: an untagged entry is a decision, not an omission. */
-  append(pane: string | null, body: EntryBody): Entry {
+  append<B extends EntryBody>(pane: string | null, body: B): EntryOf<B['type']> {
     this.position += 1
-    const entry: Entry = Object.freeze({
+    const entry = Object.freeze({
       cursor: this.position,
       time: this.now(),
       pane,
-      type: body.type,
-      path: body.path,
-      code: body.code,
-      message: body.message
-    })
+      ...copyBody(body)
+    }) as EntryOf<B['type']>
 
     const ring = this.ringFor(pane)
     ring.entries.push(entry)
@@ -184,14 +226,55 @@ export class EventLog {
   }
 }
 
+/**
+ * The body's own fields and nothing else, frozen. `append` is handed entries as bodies
+ * too, and their cursor, time and truncation marker must not ride along.
+ */
+function copyBody(body: EntryBody): EntryBody {
+  switch (body.type) {
+    case 'project.openFailed':
+      return { type: body.type, path: body.path, code: body.code, message: body.message }
+    case 'pane.created':
+    case 'pane.loaded':
+      return { type: body.type, url: body.url }
+    case 'pane.attached':
+      return { type: body.type, attempt: body.attempt }
+    case 'pane.attachFailed':
+      return {
+        type: body.type,
+        attempt: body.attempt,
+        retrying: body.retrying,
+        message: body.message
+      }
+    case 'pane.loadFailed':
+      return { type: body.type, url: body.url, code: body.code, message: body.message }
+    case 'pane.geometryMismatch':
+      return {
+        type: body.type,
+        expected: Object.freeze({ width: body.expected.width, height: body.expected.height }),
+        measured: Object.freeze({ width: body.measured.width, height: body.measured.height }),
+        message: body.message
+      }
+    case 'pane.geometryMatched':
+    case 'pane.destroyed':
+      return { type: body.type }
+  }
+}
+
 function entryForRead(entry: Entry): Entry {
-  const path = truncateText(entry.path)
-  const message = truncateText(entry.message)
+  const shortened: Partial<Record<TruncatedField, string>> = {}
   const truncated: TruncatedField[] = []
-  if (path !== entry.path) truncated.push('path')
-  if (message !== entry.message) truncated.push('message')
+  const fields = entry as Partial<Record<TruncatedField, unknown>>
+  for (const field of TEXT_FIELDS) {
+    const text = fields[field]
+    if (typeof text !== 'string') continue
+    const short = truncateText(text)
+    if (short === text) continue
+    shortened[field] = short
+    truncated.push(field)
+  }
   if (truncated.length === 0) return entry
-  return Object.freeze({ ...entry, path, message, truncated: Object.freeze(truncated) })
+  return Object.freeze({ ...entry, ...shortened, truncated: Object.freeze(truncated) })
 }
 
 function truncateText(text: string): string {

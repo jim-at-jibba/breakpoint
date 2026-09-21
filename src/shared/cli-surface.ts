@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { isCursorPosition, type Entry, type LogRead } from './event-log'
+import { describeDegradation } from './panes'
 import { looksLikePath } from './paths'
 import type { Project } from './project'
 import type { RouteName, RouteParams } from './routes'
@@ -114,9 +115,13 @@ function renderSnapshot(data: unknown, verb: string): string {
   if (!project) {
     return ['No project is open. Run `breakpoint .` in a repo.', cursor].join('\n')
   }
-  const panes = project.panes.map(
-    (pane) => `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} @${pane.dpr}x`
-  )
+  const panes = project.panes.map((pane) => {
+    const line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} @${pane.dpr}x`
+    const degraded = snapshot?.panes?.[pane.id]?.degraded ?? []
+    if (degraded.length === 0) return line
+    const reasons = degraded.map(describeDegradation).join('; ')
+    return `${line}  degraded: ${reasons}`
+  })
   return [
     `${verb} ${project.name} (${project.repoPath})`,
     `  ${project.startUrl}`,
@@ -148,6 +153,22 @@ function describeEntry(entry: Entry): string {
   switch (entry.type) {
     case 'project.openFailed':
       return `could not open ${entry.path}: ${entry.code}: ${entry.message}`
+    case 'pane.created':
+      return `created, loading ${entry.url}`
+    case 'pane.attached':
+      return `attached (attempt ${entry.attempt})`
+    case 'pane.attachFailed':
+      return `attachment failed (attempt ${entry.attempt}, ${entry.retrying ? 'retrying after load' : 'not retrying'}): ${entry.message}`
+    case 'pane.loaded':
+      return `loaded ${entry.url}`
+    case 'pane.loadFailed':
+      return `could not load ${entry.url}: ${entry.code} ${entry.message}`
+    case 'pane.geometryMismatch':
+      return `degraded: ${entry.message}`
+    case 'pane.geometryMatched':
+      return 'drawn at its declared size again'
+    case 'pane.destroyed':
+      return 'destroyed'
   }
 }
 

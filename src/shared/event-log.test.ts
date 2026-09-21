@@ -1,14 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { ENTRIES_PER_READ, EventLog, MAX_ENTRY_TEXT_BYTES, type Entry } from './event-log'
+import {
+  ENTRIES_PER_READ,
+  EventLog,
+  MAX_ENTRY_TEXT_BYTES,
+  type Entry,
+  type EntryOf,
+  type ProjectEntryBody
+} from './event-log'
 import { encodeLine, LineBuffer, MAX_FRAME_BYTES, MAX_REQUEST_ID_BYTES, success } from './protocol'
 
-function failure(path: string): Parameters<EventLog['append']>[1] {
+function failure(path: string): ProjectEntryBody {
   return {
     type: 'project.openFailed',
     path,
     code: 'PROJECT_UNREADABLE',
     message: `${path}: written by a newer Breakpoint`
   }
+}
+
+/** The failures these tests append, read back as what they are. */
+function asFailure(entry: Entry | undefined): EntryOf<'project.openFailed'> {
+  if (entry?.type !== 'project.openFailed') throw new Error(`not a failure: ${entry?.type}`)
+  return entry
 }
 
 function cursors(entries: readonly Entry[]): number[] {
@@ -75,7 +88,7 @@ describe('an entry', () => {
     const appended = log.append(null, failure('/shop'))
     expect(Reflect.set(appended, 'cursor', 9000)).toBe(false)
     const read = log.read()
-    expect(Reflect.set(read.entries[0], 'message', 'rewritten')).toBe(false)
+    expect(Reflect.set(asFailure(read.entries[0]), 'message', 'rewritten')).toBe(false)
     expect(Reflect.set(read.entries, '0', appended)).toBe(false)
     expect(Reflect.set(read, 'cursor', 9000)).toBe(false)
     expect(log.read()).toEqual({ entries: [appended], cursor: 1 })
@@ -111,7 +124,7 @@ describe('a read too large to carry', () => {
     const log = new EventLog()
     const path = 'x'.repeat(MAX_ENTRY_TEXT_BYTES - 2)
     log.append(null, { ...failure(path), message: `${path}x` })
-    const [entry] = log.read().entries
+    const entry = asFailure(log.read().entries[0])
     expect(entry.path).toBe(path)
     expect(entry.message).toBe(path)
     expect(entry.truncated).toEqual(['message'])
@@ -153,7 +166,7 @@ describe('a read too large to carry', () => {
       const log = new EventLog()
       const original = log.append(null, failure(`/${text.repeat(600_000)}`))
       const read = log.read()
-      const [entry] = read.entries
+      const entry = asFailure(read.entries[0])
       expect(entry.truncated).toEqual(['path', 'message'])
       expect(Buffer.byteLength(JSON.stringify(entry.path))).toBeLessThanOrEqual(
         MAX_ENTRY_TEXT_BYTES
@@ -282,5 +295,60 @@ describe('eviction', () => {
     const after = log.read({ since: 0 })
     expect(after.entries[0].cursor).toBe(2)
     expect(after.droppedBefore).toBe(2)
+  })
+})
+
+describe('pane lifecycle entries', () => {
+  it('carry the pane they came from and what happened to it', () => {
+    const log = new EventLog({ now: () => 1_700_000_000_000 })
+    expect(log.append('pane-1', { type: 'pane.loaded', url: 'http://127.0.0.1:5173/' })).toEqual({
+      cursor: 1,
+      time: 1_700_000_000_000,
+      pane: 'pane-1',
+      type: 'pane.loaded',
+      url: 'http://127.0.0.1:5173/'
+    })
+    expect(
+      log.append('pane-1', {
+        type: 'pane.attachFailed',
+        attempt: 1,
+        retrying: true,
+        message: 'Debugger is already attached to the target'
+      })
+    ).toMatchObject({ cursor: 2, pane: 'pane-1', attempt: 1, retrying: true })
+  })
+
+  it('copy only their own fields when another entry supplies the body', () => {
+    const log = new EventLog()
+    const long = log.append('pane-1', { type: 'pane.loaded', url: `/${'x'.repeat(600_000)}` })
+    const [read] = log.read().entries
+    const again = log.append('pane-2', read)
+    expect(again).not.toHaveProperty('truncated')
+    expect(again).toMatchObject({ cursor: 2, pane: 'pane-2', type: 'pane.loaded' })
+    expect(Object.keys(long).sort()).toEqual(['cursor', 'pane', 'time', 'type', 'url'])
+  })
+
+  it('shorten a long URL on read and say so', () => {
+    const log = new EventLog()
+    log.append('pane-1', {
+      type: 'pane.loadFailed',
+      url: `http://127.0.0.1/${'x'.repeat(600_000)}`,
+      code: -102,
+      message: 'ERR_CONNECTION_REFUSED'
+    })
+    const [entry] = log.read().entries
+    expect(entry.truncated).toEqual(['url'])
+    expect(entry).toMatchObject({ code: -102, message: 'ERR_CONNECTION_REFUSED' })
+  })
+
+  it('keep a geometry mismatch immutable down to the sizes it reports', () => {
+    const log = new EventLog()
+    const entry = log.append('pane-1', {
+      type: 'pane.geometryMismatch',
+      expected: { width: 390, height: 844 },
+      measured: { width: 390, height: 150 },
+      message: 'drawn 390×150, declared 390×844 at this zoom'
+    })
+    expect(entry.type === 'pane.geometryMismatch' && Object.isFrozen(entry.measured)).toBe(true)
   })
 })

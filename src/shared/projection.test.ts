@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createProject } from './project'
 import { startProjection, receiveBatch, receiveSnapshot, type Projection } from './projection'
-import type { RevisionedPatch, StateSnapshot } from './state'
+import { paneStatusesFor, type RevisionedPatch, type StateSnapshot } from './state'
 
 const shop = createProject('/repos/shop')
 const store = createProject('/repos/store')
@@ -15,7 +15,7 @@ function opened(revision: number, project = shop): RevisionedPatch {
  * has to carry it through untouched, because the log is a channel of its own.
  */
 function snap(revision: number, project: StateSnapshot['project'], cursor = 12): StateSnapshot {
-  return { revision, cursor, project }
+  return { revision, cursor, project, panes: project ? paneStatusesFor(project, {}) : {} }
 }
 
 function live(snapshot: StateSnapshot): Projection {

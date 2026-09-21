@@ -14,8 +14,10 @@ import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
 import { EventLog } from '../shared/event-log'
 import { repoPathFromArguments } from './launch-arguments'
+import { HOST_WINDOW_PREFERENCES, PaneHost } from './pane-host'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
+import { PaneService } from './services/pane-service'
 import { ProjectService } from './services/project-service'
 import { ProjectStore } from './services/project-store'
 import { StateFeed } from './state-feed'
@@ -36,6 +38,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 let socketAdapter: SocketAdapter | undefined
 let patchAdapter: PatchAdapter | undefined
 let dispatch: Dispatch | undefined
+let paneHost: PaneHost | undefined
 let launchReady = false
 const pendingRepoPaths: string[] = []
 
@@ -79,9 +82,11 @@ function createWindow(): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      ...HOST_WINDOW_PREFERENCES
     }
   })
+  paneHost?.adopt(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -149,11 +154,15 @@ if (!hasSingleInstanceLock) {
     const feed = new StateFeed()
     const log = new EventLog()
     const projectStore = new ProjectStore(join(userDataDir, 'projects'))
+    const panes = new PaneService(feed, log)
+    paneHost = new PaneHost(panes)
+    paneHost.install(app)
     dispatch = createDispatch(
       createRouteTable({
         app: new AppService(),
         log,
-        project: new ProjectService(projectStore, feed, log)
+        panes,
+        project: new ProjectService(projectStore, feed, log, panes)
       })
     )
     registerIpcAdapter(dispatch)

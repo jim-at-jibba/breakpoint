@@ -1,14 +1,14 @@
+import { Canvas } from '@renderer/components/canvas'
 import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
 
-// The shell, ahead of the real toolbar and canvas. The toolbar strip is the window's
-// drag region and clears the traffic lights; it names the open project and its start
-// URL, which is the first real state the renderer projects. The body says what to do
-// when nothing is open, and otherwise waits for the canvas (#10).
+// The shell, ahead of the real toolbar. The toolbar strip is the window's drag region
+// and clears the traffic lights; it names the open project and its start URL. The body
+// is the canvas once a project is open, and says what to do when nothing is.
 //
-// Quit stays here as the renderer's end of the route table: the button causes `app.quit`
-// over typed IPC and a terminal causes the same route over the socket — one table, no
-// UI-only route (ADR-0005). It goes away with the real toolbar.
+// Quit stays in the toolbar as the renderer's end of the route table: the button causes
+// `app.quit` over typed IPC and a terminal causes the same route over the socket — one
+// table, no UI-only route (ADR-0005). It goes away with the real toolbar.
 export default function App(): React.JSX.Element {
   const state = useSnapshot()
   const snapshot = state.status === 'live' ? state.snapshot : null
@@ -52,29 +52,34 @@ export default function App(): React.JSX.Element {
             {state.status === 'fetching' ? 'Loading project…' : 'No project open'}
           </span>
         )}
-      </header>
-      <main className="bg-background text-foreground flex flex-1 flex-col items-center justify-center gap-4">
-        <div className="flex items-center gap-2">
-          <span
-            className="size-2 rounded-xs"
-            style={{ background: 'var(--bp-pane-1)' }}
-            aria-hidden
-          />
-          <span className="font-mono text-[length:var(--bp-text-lg)]">breakpoint</span>
-        </div>
-        {!project && snapshot && (
-          <p className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-            Run <code className="font-mono">breakpoint .</code> in a repo to open a project.
-          </p>
-        )}
         <Button
           size="sm"
           variant="outline"
+          className="ml-auto mr-[var(--bp-space-4)]"
           onClick={() => void window.breakpoint.invoke('app.quit')}
         >
           Quit
         </Button>
-      </main>
+      </header>
+      {project && snapshot ? (
+        <Canvas project={project} statuses={snapshot.panes} />
+      ) : (
+        <main className="bg-background text-foreground flex flex-1 flex-col items-center justify-center gap-4">
+          <div className="flex items-center gap-2">
+            <span
+              className="size-2 rounded-xs"
+              style={{ background: 'var(--bp-pane-1)' }}
+              aria-hidden
+            />
+            <span className="font-mono text-[length:var(--bp-text-lg)]">breakpoint</span>
+          </div>
+          {!project && snapshot && (
+            <p className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
+              Run <code className="font-mono">breakpoint .</code> in a repo to open a project.
+            </p>
+          )}
+        </main>
+      )}
     </div>
   )
 }

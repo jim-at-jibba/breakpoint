@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { failure, success, type RouteResponse } from '../../../shared/protocol'
 import { createProject } from '../../../shared/project'
-import type { PatchBatch, StateSnapshot } from '../../../shared/state'
+import { paneStatusesFor, type PatchBatch, type StateSnapshot } from '../../../shared/state'
 import { createSnapshotReader, type SnapshotReader, type SnapshotState } from './snapshot-reader'
 
 const shop = createProject('/repos/shop')
-const snapshot: StateSnapshot = { revision: 1, cursor: 0, project: shop }
+const snapshot: StateSnapshot = {
+  revision: 1,
+  cursor: 0,
+  project: shop,
+  panes: paneStatusesFor(shop, {})
+}
 
 interface SnapshotHarness {
   fetchSnapshot: Mock<() => Promise<RouteResponse<StateSnapshot>>>
@@ -70,7 +75,12 @@ describe('snapshot recovery', () => {
       expect(h.fetchSnapshot).toHaveBeenCalledTimes(2)
       expect(h.onChange).toHaveBeenLastCalledWith({
         status: 'live',
-        snapshot: { revision: 2, cursor: 0, project: { ...shop, name: 'updated' } }
+        snapshot: {
+          revision: 2,
+          cursor: 0,
+          project: { ...shop, name: 'updated' },
+          panes: paneStatusesFor(shop, {})
+        }
       })
       reader.close()
     }
