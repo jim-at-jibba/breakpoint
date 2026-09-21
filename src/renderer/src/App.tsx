@@ -10,7 +10,8 @@ import { useSnapshot } from '@renderer/hooks/use-snapshot'
 // over typed IPC and a terminal causes the same route over the socket — one table, no
 // UI-only route (ADR-0005). It goes away with the real toolbar.
 export default function App(): React.JSX.Element {
-  const snapshot = useSnapshot()
+  const state = useSnapshot()
+  const snapshot = state.status === 'live' ? state.snapshot : null
   const project = snapshot?.project ?? null
 
   return (
@@ -34,9 +35,21 @@ export default function App(): React.JSX.Element {
               {project.startUrl}
             </span>
           </>
+        ) : state.status === 'error' ? (
+          <>
+            <span
+              role="alert"
+              className="truncate text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
+            >
+              Could not load project: {state.message}
+            </span>
+            <Button size="sm" variant="outline" onClick={state.retry}>
+              Retry
+            </Button>
+          </>
         ) : (
           <span className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-            No project open
+            {state.status === 'fetching' ? 'Loading project…' : 'No project open'}
           </span>
         )}
       </header>

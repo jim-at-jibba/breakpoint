@@ -1,4 +1,4 @@
-import { realpathSync, statSync } from 'node:fs'
+import { realpath, stat } from 'node:fs/promises'
 import { createProject, type Project } from '../../shared/project'
 import type { StateSnapshot } from '../../shared/state'
 import { RouteError } from '../route-error'
@@ -12,6 +12,7 @@ import type { ProjectStore } from './project-store'
  */
 export class ProjectService {
   private current: Project | null = null
+  private pendingOpen: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly store: ProjectStore,
@@ -22,10 +23,20 @@ export class ProjectService {
    * `path` must exist and be a directory. It is canonicalised — symlinks, `..`, a trailing
    * slash — so every route to the same repo is the same project.
    */
-  open(path: string): StateSnapshot {
-    const repoPath = canonicalRepoPath(path)
+  open(path: string): Promise<StateSnapshot> {
+    const opened = this.pendingOpen.then(() => this.openNext(path))
+    // The caller receives the rejection; later opens must still get their turn.
+    this.pendingOpen = opened.then(
+      () => undefined,
+      () => undefined
+    )
+    return opened
+  }
 
-    const loaded = this.store.load(repoPath)
+  private async openNext(path: string): Promise<StateSnapshot> {
+    const repoPath = await canonicalRepoPath(path)
+
+    const loaded = await this.store.load(repoPath)
     if (loaded.status === 'refused') {
       // Left untouched on disk: rewriting a file we could not read is how a downgrade
       // or a bad byte becomes permanent.
@@ -40,7 +51,7 @@ export class ProjectService {
       project = loaded.project
     } else {
       project = createProject(repoPath)
-      this.store.save(project)
+      await this.store.save(project)
     }
 
     this.current = project
@@ -53,17 +64,21 @@ export class ProjectService {
   }
 }
 
-function canonicalRepoPath(path: string): string {
+async function canonicalRepoPath(path: string): Promise<string> {
   let repoPath: string
   try {
-    repoPath = realpathSync.native(path)
+    repoPath = await realpath(path)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+    ) {
       throw new RouteError('INVALID_PARAMS', `no such directory: ${path}`)
     }
     throw error
   }
-  if (!statSync(repoPath).isDirectory()) {
+  if (!(await stat(repoPath)).isDirectory()) {
     throw new RouteError('INVALID_PARAMS', `not a directory: ${path}`)
   }
   return repoPath

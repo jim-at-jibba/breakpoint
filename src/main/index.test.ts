@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import type { Dispatch } from './routes'
 
 const mocks = vi.hoisted(() => ({
+  listeners: new Map<string, (...args: unknown[]) => void>(),
   app: {
     setName: vi.fn(),
     setPath: vi.fn(),
@@ -11,6 +13,15 @@ const mocks = vi.hoisted(() => ({
     exit: vi.fn()
   },
   createWindow: vi.fn(),
+  window: {
+    on: vi.fn(),
+    webContents: { setWindowOpenHandler: vi.fn() },
+    loadFile: vi.fn(),
+    isMinimized: (): boolean => false,
+    show: vi.fn(),
+    focus: vi.fn()
+  },
+  dispatch: vi.fn<Dispatch>(),
   closeSocket: vi.fn(),
   startSocket: vi.fn()
 }))
@@ -19,8 +30,16 @@ vi.mock('electron', () => ({
   app: mocks.app,
   shell: {},
   BrowserWindow: class {
+    on = mocks.window.on
+    webContents = mocks.window.webContents
+    loadFile = mocks.window.loadFile
+
     constructor() {
       mocks.createWindow()
+    }
+
+    static getAllWindows(): (typeof mocks.window)[] {
+      return [mocks.window]
     }
   }
 }))
@@ -32,10 +51,17 @@ vi.mock('@electron-toolkit/utils', () => ({
 vi.mock('../../resources/icon.png?asset', () => ({ default: 'icon.png' }))
 vi.mock('./adapters/ipc', () => ({ registerIpcAdapter: vi.fn() }))
 vi.mock('./adapters/socket', () => ({ startSocketAdapter: mocks.startSocket }))
+vi.mock('./routes', () => ({ createRouteTable: vi.fn(), createDispatch: () => mocks.dispatch }))
 
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
+  mocks.createWindow.mockReset()
+  mocks.listeners.clear()
+  mocks.app.on.mockImplementation((event: string, listener: (...args: unknown[]) => void): void => {
+    mocks.listeners.set(event, listener)
+  })
+  mocks.dispatch.mockResolvedValue({ response: { id: 'launch', ok: true, data: null } })
   mocks.startSocket.mockResolvedValue({ socketPath: 'test.sock', close: mocks.closeSocket })
   vi.spyOn(console, 'log').mockImplementation((): void => {})
   vi.spyOn(console, 'error').mockImplementation((): void => {})
@@ -84,4 +110,54 @@ it('also handles a readiness rejection before initializing the socket', async ()
   await vi.waitFor(() => expect(mocks.app.exit).toHaveBeenCalledWith(1))
   expect(console.error).toHaveBeenCalledWith('[breakpoint] startup failed:', failure)
   expect(mocks.startSocket).not.toHaveBeenCalled()
+})
+
+it('queues native opens before readiness and dispatches them in order after creating the window', async () => {
+  let ready: () => void = (): void => {
+    throw new Error('readiness promise not initialized')
+  }
+  mocks.app.whenReady.mockReturnValueOnce(
+    new Promise<void>((resolve) => {
+      ready = resolve
+    })
+  )
+  await import('./index')
+
+  const preventDefault = vi.fn()
+  const listener = mocks.listeners.get('open-file')
+  expect(listener).toBeDefined()
+  listener?.({ preventDefault }, '/repos/shop')
+  listener?.({ preventDefault }, '/repos/other')
+  expect(preventDefault).toHaveBeenCalledTimes(2)
+  expect(mocks.dispatch).not.toHaveBeenCalled()
+  expect(mocks.createWindow).not.toHaveBeenCalled()
+
+  ready()
+  await vi.waitFor(() => expect(mocks.dispatch).toHaveBeenCalledTimes(2))
+  expect(mocks.createWindow).toHaveBeenCalledOnce()
+  expect(mocks.dispatch).toHaveBeenNthCalledWith(1, {
+    id: 'launch',
+    route: 'project.open',
+    params: { path: '/repos/shop' }
+  })
+  expect(mocks.dispatch).toHaveBeenNthCalledWith(2, {
+    id: 'launch',
+    route: 'project.open',
+    params: { path: '/repos/other' }
+  })
+})
+
+it('opens a native request in the ready app and focuses its window', async () => {
+  await import('./index')
+  await vi.waitFor(() => expect(mocks.createWindow).toHaveBeenCalledOnce())
+
+  const preventDefault = vi.fn()
+  mocks.listeners.get('open-file')?.({ preventDefault }, '/repos/shop')
+  expect(preventDefault).toHaveBeenCalledOnce()
+  expect(mocks.dispatch).toHaveBeenCalledWith({
+    id: 'launch',
+    route: 'project.open',
+    params: { path: '/repos/shop' }
+  })
+  expect(mocks.window.focus).toHaveBeenCalledOnce()
 })

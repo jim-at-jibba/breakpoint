@@ -13,7 +13,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import { PATCH_CHANNEL } from '../src/shared/ipc'
+import { PATCH_CHANNEL, ROUTE_CHANNEL } from '../src/shared/ipc'
 import { PROJECT_FILE_VERSION, projectFileName, type Project } from '../src/shared/project'
 import type { PatchBatch, StateSnapshot } from '../src/shared/state'
 import {
@@ -244,6 +244,65 @@ test('a path that is not a directory is INVALID_PARAMS, not a new project', asyn
   expect(projectFiles()).toEqual([])
 })
 
+test('a project file with another repo identity is refused without changing the open project', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const other = makeRepo('other')
+  const before = await openProject(shop)
+  const written = readFileSync(join(projectsDir(), projectFileName(shop)), 'utf8')
+  const file = join(projectsDir(), projectFileName(other))
+  writeFileSync(file, written)
+
+  const refused = await runCli(sandbox, ['.', '--json'], other)
+  expect(refused.code).toBe(1)
+  expect(JSON.parse(refused.stderr).error).toMatchObject({
+    code: 'PROJECT_UNREADABLE',
+    details: { reason: 'corrupt', file }
+  })
+  expect(readFileSync(file, 'utf8')).toBe(written)
+  const state = await runCli(sandbox, ['state', '--json'])
+  expect(JSON.parse(state.stdout)).toEqual(before)
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+})
+
+test('the renderer shows a snapshot failure and recovers over the real preload bridge', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  const snapshot = await openProject(makeRepo('shop'))
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+  await app.evaluate(
+    ({ ipcMain, BrowserWindow }, { route, patch, snapshot }) => {
+      ipcMain.removeHandler(route)
+      ipcMain.handle(route, () => ({
+        id: 'test',
+        ok: false,
+        error: { code: 'INTERNAL_ERROR', message: 'snapshot unavailable' }
+      }))
+      BrowserWindow.getAllWindows()[0].webContents.send(patch, [
+        {
+          revision: snapshot.revision + 2,
+          patch: { type: 'project.opened', project: snapshot.project }
+        }
+      ])
+    },
+    { route: ROUTE_CHANNEL, patch: PATCH_CHANNEL, snapshot }
+  )
+  await expect(page.getByRole('alert')).toContainText('snapshot unavailable')
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible()
+
+  await app.evaluate(
+    ({ ipcMain }, { route, snapshot }) => {
+      ipcMain.removeHandler(route)
+      ipcMain.handle(route, () => ({ id: 'test', ok: true, data: snapshot }))
+    },
+    { route: ROUTE_CHANNEL, snapshot }
+  )
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
 test('state with nothing open says so on both outputs', async () => {
   launched = await launchApp(sandbox)
 
@@ -303,4 +362,39 @@ test('a second launch pointed at a repo opens that project in the running app', 
   await expect(page.getByTestId('project-name')).toHaveText('shop')
   const state = await runCli(sandbox, ['state', '--json'])
   expect((JSON.parse(state.stdout) as StateSnapshot).project?.repoPath).toBe(shop)
+})
+
+test('a native macOS open-file request opens the repo and recreates a closed window', async () => {
+  test.skip(process.platform !== 'darwin', 'macOS keeps the app alive after its window closes')
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const shop = makeRepo('shop')
+  await app.evaluate(
+    ({ BrowserWindow }) =>
+      new Promise<void>((resolve) => {
+        const window = BrowserWindow.getAllWindows()[0]
+        window.once('closed', () => resolve())
+        window.close()
+      })
+  )
+  const [page, prevented] = await Promise.all([
+    app.waitForEvent('window'),
+    app.evaluate(({ app }, path) => {
+      let prevented = false
+      app.emit(
+        'open-file',
+        {
+          preventDefault: (): void => {
+            prevented = true
+          }
+        },
+        path
+      )
+      return prevented
+    }, shop)
+  ])
+  expect(prevented).toBe(true)
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+  const state = await runCli(sandbox, ['state', '--json'])
+  expect(JSON.parse(state.stdout).project.repoPath).toBe(shop)
 })

@@ -27,30 +27,35 @@ const userDataDir = resolveUserDataDir(pathEnvironment)
 app.setPath('userData', userDataDir)
 
 /**
- * Two launch problems, two mechanisms. This lock is Finder and Dock double-launch: a
- * second copy of the app hands its argv over and exits. The CLI never comes through
- * here — it talks to the socket, and only spawns the app when there is no socket to talk
- * to.
+ * A second executable hands its argv over and exits. Native macOS opens arrive through
+ * `open-file` instead. The CLI talks to the socket and only spawns the app if needed.
  */
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 let socketAdapter: SocketAdapter | undefined
 let patchAdapter: PatchAdapter | undefined
 let dispatch: Dispatch | undefined
+let launchReady = false
+const pendingRepoPaths: string[] = []
 
-/**
- * A launch pointed at a repo — Finder, Dock, `open -a Breakpoint .` — opens that project.
- * Through the route table, so it is the same `project.open` the CLI and the window use.
- */
 function openFromArguments(argv: readonly string[], workingDirectory: string): void {
   const mode = { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
   const path = repoPathFromArguments(argv, mode, workingDirectory)
-  if (!path || !dispatch) return
-  void dispatch({ id: 'argv', route: 'project.open', params: { path } }).then(({ response }) => {
-    if (!response.ok) {
-      console.error(`[breakpoint] could not open ${path}: ${response.error.message}`)
-    }
-  })
+  if (path) openProject(path)
+}
+
+function openProject(path: string): void {
+  if (!launchReady || !dispatch) {
+    pendingRepoPaths.push(path)
+    return
+  }
+  void dispatch({ id: 'launch', route: 'project.open', params: { path } })
+    .then(({ response }) => {
+      if (!response.ok) {
+        console.error(`[breakpoint] could not open ${path}: ${response.error.message}`)
+      }
+    })
+    .catch((error: unknown) => console.error(`[breakpoint] could not open ${path}:`, error))
 }
 
 function createWindow(): void {
@@ -111,12 +116,20 @@ if (!hasSingleInstanceLock) {
   // lock, so there is nothing left to do but get out of the way.
   app.quit()
 } else {
+  app.on('open-file', (event, path) => {
+    event.preventDefault()
+    openProject(path)
+    if (launchReady) focusExistingWindow()
+  })
+
   app.on('second-instance', (_event, argv, workingDirectory) => {
     // Announced so the hand-off is observable from outside the process.
     console.log(`[breakpoint] second-instance ${JSON.stringify({ argv, workingDirectory })}`)
     openFromArguments(argv, workingDirectory)
-    focusExistingWindow()
+    if (launchReady) focusExistingWindow()
   })
+
+  openFromArguments(process.argv, process.cwd())
 
   // This method will be called when Electron has finished
   // initialization and is ready to create browser windows.
@@ -154,7 +167,8 @@ if (!hasSingleInstanceLock) {
     }
 
     createWindow()
-    openFromArguments(process.argv, process.cwd())
+    launchReady = true
+    for (const path of pendingRepoPaths.splice(0)) openProject(path)
 
     app.on('activate', function () {
       // On macOS it's common to re-create a window in the app when the

@@ -79,7 +79,7 @@ export function createRouteTable(services: Services): RouteTable {
     },
     'project.open': {
       parseParams: expectPath,
-      handle: ({ path }) => ({ payload: services.project.open(path) })
+      handle: async ({ path }) => ({ payload: await services.project.open(path) })
     },
     'project.state': {
       parseParams: expectNoParams,

@@ -1,47 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  receiveBatch,
-  receiveSnapshot,
-  startProjection,
-  type Projection,
-  type ProjectionStep
-} from '@shared/projection'
-import type { StateSnapshot } from '@shared/state'
+  createSnapshotReader,
+  type SnapshotReader,
+  type SnapshotState
+} from '@renderer/lib/snapshot-reader'
 
-/**
- * The renderer's read path. Fetches the snapshot over `project.state`, folds in the
- * patch batches the main process pushes, and on any gap re-fetches wholesale. The rules
- * live in the shared projection module; this only runs them against the bridge.
- */
-export function useSnapshot(): StateSnapshot | null {
-  const [projection, setProjection] = useState<Projection>(startProjection)
-  const current = useRef(projection)
+type SnapshotView = SnapshotState & { retry(): void }
+
+const INITIAL_STATE: SnapshotState = { status: 'fetching' }
+
+export function useSnapshot(): SnapshotView {
+  const [state, setState] = useState<SnapshotState>(INITIAL_STATE)
+  const reader = useRef<SnapshotReader | null>(null)
 
   useEffect(() => {
-    let disposed = false
-
-    const step = (result: ProjectionStep): void => {
-      current.current = result.projection
-      setProjection(result.projection)
-      if (result.refetch) void fetchSnapshot()
-    }
-
-    const fetchSnapshot = async (): Promise<void> => {
-      const response = await window.breakpoint.invoke('project.state')
-      if (disposed || !response.ok) return
-      step(receiveSnapshot(current.current, response.data))
-    }
-
-    const unsubscribe = window.breakpoint.onPatches((batch) => {
-      if (!disposed) step(receiveBatch(current.current, batch))
+    const subscription = createSnapshotReader({
+      fetchSnapshot: () => window.breakpoint.invoke('project.state'),
+      subscribe: (listener) => window.breakpoint.onPatches(listener),
+      onChange: setState
     })
-    void fetchSnapshot()
+    reader.current = subscription
 
     return () => {
-      disposed = true
-      unsubscribe()
+      subscription.close()
+      reader.current = null
     }
   }, [])
 
-  return projection.status === 'live' ? projection.snapshot : null
+  return { ...state, retry: (): void => reader.current?.retry() }
 }

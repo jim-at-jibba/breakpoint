@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   projectFileName,
@@ -27,13 +27,15 @@ export class ProjectStore {
     return join(this.directory, projectFileName(repoPath))
   }
 
-  load(repoPath: string): LoadResult {
+  async load(repoPath: string): Promise<LoadResult> {
     const file = this.fileFor(repoPath)
     let text: string
     try {
-      text = readFileSync(file, 'utf8')
+      text = await readFile(file, 'utf8')
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { status: 'missing' }
+      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+        return { status: 'missing' }
+      }
       throw error
     }
 
@@ -46,6 +48,14 @@ export class ProjectStore {
 
     const read: ReadProjectResult = readProjectFile(raw)
     if (!read.ok) return { status: 'refused', reason: read.reason, message: read.message, file }
+    if (read.project.repoPath !== repoPath) {
+      return {
+        status: 'refused',
+        reason: 'corrupt',
+        message: `stored repo path ${read.project.repoPath} does not match ${repoPath}`,
+        file
+      }
+    }
     return { status: 'loaded', project: read.project }
   }
 
@@ -53,11 +63,11 @@ export class ProjectStore {
    * Written beside the target and renamed over it, so a crash mid-write leaves the old
    * file rather than half of the new one.
    */
-  save(project: Project): void {
-    mkdirSync(this.directory, { recursive: true })
+  async save(project: Project): Promise<void> {
+    await mkdir(this.directory, { recursive: true })
     const file = this.fileFor(project.repoPath)
     const partial = `${file}.${process.pid}.tmp`
-    writeFileSync(partial, `${JSON.stringify(writeProjectFile(project), null, 2)}\n`)
-    renameSync(partial, file)
+    await writeFile(partial, `${JSON.stringify(writeProjectFile(project), null, 2)}\n`)
+    await rename(partial, file)
   }
 }
