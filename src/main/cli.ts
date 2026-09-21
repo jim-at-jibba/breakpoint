@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { connect, type Socket } from 'node:net'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { helpText, parseArgv, type CliOptions } from '../shared/cli-surface'
+import { helpText, parseArgv, type CliCommandSpec, type CliOptions } from '../shared/cli-surface'
 import {
   LineBuffer,
   encodeLine,
@@ -45,16 +45,16 @@ function main(): void {
 
   if (parsed.kind === 'error') {
     process.stderr.write(`breakpoint: ${parsed.message}\n\n${helpText()}`)
-    process.exit(exitCodeFor('invalid_usage'))
+    process.exit(exitCodeFor('INVALID_USAGE'))
   }
 
   const { command, options } = parsed
   const diagnose = createDiagnose(options)
 
-  run(command.route, command.launch, options, diagnose)
-    .then((response) => process.exit(report(response, options)))
+  run(command.route, options, diagnose)
+    .then((response) => process.exit(report(command, response, options)))
     .catch((error: unknown) => {
-      const code: ErrorCode = error instanceof CliError ? error.code : 'internal_error'
+      const code: ErrorCode = error instanceof CliError ? error.code : 'INTERNAL_ERROR'
       const message = error instanceof Error ? error.message : String(error)
       process.stderr.write(`breakpoint: ${message}\n`)
       process.exit(exitCodeFor(code))
@@ -69,7 +69,6 @@ function createDiagnose(options: CliOptions): (message: string) => void {
 
 async function run(
   route: string,
-  launch: 'if-needed' | 'never',
   options: CliOptions,
   diagnose: (message: string) => void
 ): Promise<RouteResponse> {
@@ -79,11 +78,8 @@ async function run(
   try {
     return await request(socketPath, route, diagnose)
   } catch (error) {
-    if (!(error instanceof CliError) || error.code !== 'app_not_running') throw error
-
-    if (options.noLaunch || launch === 'never') {
-      throw new CliError('app_not_running', 'the app is not running')
-    }
+    if (!(error instanceof CliError) || error.code !== 'APP_NOT_RUNNING') throw error
+    if (options.noLaunch) throw error
 
     diagnose('no socket — starting the app')
     await launchApp()
@@ -93,13 +89,10 @@ async function run(
 }
 
 /** Writes the payload, and only the payload, to stdout. Returns the exit code. */
-function report(response: RouteResponse, options: CliOptions): number {
+function report(command: CliCommandSpec, response: RouteResponse, options: CliOptions): number {
   if (response.ok) {
-    if (options.json) {
-      process.stdout.write(`${JSON.stringify(response.payload)}\n`)
-    } else {
-      process.stdout.write(`${describe(response.payload)}\n`)
-    }
+    const text = options.json ? JSON.stringify(response.data) : command.render(response.data)
+    process.stdout.write(`${text}\n`)
     return 0
   }
 
@@ -109,12 +102,6 @@ function report(response: RouteResponse, options: CliOptions): number {
   const text = options.json ? JSON.stringify({ error: { code, message } }) : `${code}: ${message}`
   process.stderr.write(`breakpoint: ${text}\n`)
   return exitCodeFor(code)
-}
-
-function describe(payload: unknown): string {
-  if (payload && typeof payload === 'object' && 'quitting' in payload)
-    return 'Breakpoint is quitting.'
-  return JSON.stringify(payload)
 }
 
 function request(
@@ -130,9 +117,7 @@ function request(
     socket.setEncoding('utf8')
 
     const timer = setTimeout(() => {
-      fail(
-        new CliError('transport_error', `no response from the app after ${REQUEST_TIMEOUT_MS}ms`)
-      )
+      fail(new CliError('TIMEOUT', `no response from the app after ${REQUEST_TIMEOUT_MS}ms`))
     }, REQUEST_TIMEOUT_MS)
 
     function finish(): void {
@@ -159,7 +144,7 @@ function request(
         settled = true
         finish()
         if (parsed.ok) resolve(parsed.response)
-        else reject(new CliError('transport_error', parsed.error.message))
+        else reject(new CliError('TRANSPORT_ERROR', parsed.error.message))
         return
       }
     })
@@ -168,13 +153,13 @@ function request(
       const missing = error.code === 'ENOENT' || error.code === 'ECONNREFUSED'
       fail(
         missing
-          ? new CliError('app_not_running', 'the app is not running')
-          : new CliError('transport_error', error.message)
+          ? new CliError('APP_NOT_RUNNING', 'the app is not running')
+          : new CliError('TRANSPORT_ERROR', error.message)
       )
     })
 
     socket.on('close', () => {
-      fail(new CliError('transport_error', 'the app closed the connection without replying'))
+      fail(new CliError('TRANSPORT_ERROR', 'the app closed the connection without replying'))
     })
   })
 }
@@ -197,7 +182,7 @@ function launchApp(): Promise<void> {
       stdio: 'ignore',
       env: environment
     })
-    child.once('error', (error) => reject(new CliError('launch_failed', error.message)))
+    child.once('error', (error) => reject(new CliError('LAUNCH_FAILED', error.message)))
     child.once('spawn', () => {
       child.unref()
       resolve()
@@ -222,7 +207,7 @@ async function waitForSocket(
   }
 
   throw new CliError(
-    'launch_failed',
+    'LAUNCH_FAILED',
     `the app did not open its socket within ${LAUNCH_TIMEOUT_MS}ms`
   )
 }

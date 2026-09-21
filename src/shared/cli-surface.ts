@@ -1,22 +1,19 @@
 import type { RouteName } from './routes'
 
 /**
- * Everything the `breakpoint` command accepts, declared once. The CLI parses from this,
- * the help text is printed from it, and the docs site's reference is checked against it
- * (#21), so the binary and the documentation cannot drift.
+ * Everything the `breakpoint` command accepts, declared once: the parser reads it, the
+ * help text is printed from it, and the docs site's reference is checked against it. A
+ * flag that is not in this file is a flag the CLI does not accept.
  *
- * Only what exists is declared here. Commands from later phases are absent until they ship.
+ * Only what exists is declared. Commands from later phases are absent until they ship.
  */
 
 export interface CliCommandSpec {
   name: string
   route: RouteName
   summary: string
-  /**
-   * `if-needed` connects to the socket first and starts the app only if that fails;
-   * `--no-launch` turns it into a failure instead. `never` would refuse outright.
-   */
-  launch: 'if-needed' | 'never'
+  /** How the route's payload reads on a terminal, when `--json` was not asked for. */
+  render(data: unknown): string
 }
 
 export const CLI_COMMANDS: readonly CliCommandSpec[] = [
@@ -24,20 +21,46 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
     name: 'quit',
     route: 'app.quit',
     summary: 'Shut the app down cleanly, releasing the single-instance lock',
-    launch: 'if-needed'
+    render: () => 'Breakpoint is quitting.'
   }
 ]
+
+export interface CliOptions {
+  json: boolean
+  noLaunch: boolean
+  verbose: boolean
+}
 
 export interface CliFlagSpec {
   name: string
   summary: string
+  aliases?: readonly string[]
+  /** The option this flag turns on, or `help`, which ends the run instead. */
+  sets: keyof CliOptions | 'help'
 }
 
 export const CLI_FLAGS: readonly CliFlagSpec[] = [
-  { name: '--json', summary: 'Print the route payload as JSON on stdout and nothing else' },
-  { name: '--no-launch', summary: 'Exit 3 rather than starting the app if it is not running' },
-  { name: '--verbose', summary: 'Print diagnostics on stderr, where they cannot pollute stdout' },
-  { name: '--help', summary: 'Print this help and exit 0' }
+  {
+    name: '--json',
+    summary: 'Print the route payload as JSON on stdout and nothing else',
+    sets: 'json'
+  },
+  {
+    name: '--no-launch',
+    summary: 'Exit 3 rather than starting the app if it is not running',
+    sets: 'noLaunch'
+  },
+  {
+    name: '--verbose',
+    summary: 'Print diagnostics on stderr, where they cannot pollute stdout',
+    sets: 'verbose'
+  },
+  {
+    name: '--help',
+    aliases: ['-h'],
+    summary: 'Print this help and exit 0',
+    sets: 'help'
+  }
 ]
 
 export interface ExitCodeSpec {
@@ -66,18 +89,14 @@ export const EXIT_CODES: readonly ExitCodeSpec[] = [
   { code: 5, name: 'paused', summary: 'Reserved for the Phase 6 stop control', status: 'reserved' }
 ]
 
-export interface CliOptions {
-  json: boolean
-  noLaunch: boolean
-  verbose: boolean
-}
-
 export type ArgvParse =
   | { kind: 'command'; command: CliCommandSpec; options: CliOptions }
   | { kind: 'help'; options: CliOptions }
   | { kind: 'error'; message: string }
 
-const FLAG_NAMES: ReadonlySet<string> = new Set(CLI_FLAGS.map((flag) => flag.name))
+const FLAGS_BY_NAME: ReadonlyMap<string, CliFlagSpec> = new Map(
+  CLI_FLAGS.flatMap((flag) => [flag.name, ...(flag.aliases ?? [])].map((name) => [name, flag]))
+)
 
 export function parseArgv(argv: readonly string[]): ArgvParse {
   const options: CliOptions = { json: false, noLaunch: false, verbose: false }
@@ -85,15 +104,11 @@ export function parseArgv(argv: readonly string[]): ArgvParse {
   let help = false
 
   for (const argument of argv) {
-    if (argument === '--help' || argument === '-h') {
-      help = true
-      continue
-    }
     if (argument.startsWith('-')) {
-      if (!FLAG_NAMES.has(argument)) return { kind: 'error', message: `unknown flag ${argument}` }
-      if (argument === '--json') options.json = true
-      if (argument === '--no-launch') options.noLaunch = true
-      if (argument === '--verbose') options.verbose = true
+      const flag = FLAGS_BY_NAME.get(argument)
+      if (!flag) return { kind: 'error', message: `unknown flag ${argument}` }
+      if (flag.sets === 'help') help = true
+      else options[flag.sets] = true
       continue
     }
     if (commandName !== undefined) {
@@ -114,6 +129,8 @@ export function parseArgv(argv: readonly string[]): ArgvParse {
 /** Short and example-led, per PRD 7.3. */
 export function helpText(): string {
   const pad = (text: string): string => text.padEnd(14)
+  const flagLabel = (flag: CliFlagSpec): string => [flag.name, ...(flag.aliases ?? [])].join(', ')
+
   return [
     'breakpoint — a multi-viewport dev browser, driven from the terminal',
     '',
@@ -123,7 +140,7 @@ export function helpText(): string {
     ...CLI_COMMANDS.map((command) => `  ${pad(command.name)}${command.summary}`),
     '',
     'Flags:',
-    ...CLI_FLAGS.map((flag) => `  ${pad(flag.name)}${flag.summary}`),
+    ...CLI_FLAGS.map((flag) => `  ${pad(flagLabel(flag))}${flag.summary}`),
     '',
     'Examples:',
     '  breakpoint quit',

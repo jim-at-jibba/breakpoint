@@ -4,31 +4,47 @@
  * response; IPC passes the same objects structured-cloned.
  */
 
-/** Codes a route call can come back with. These travel over the wire. */
+/**
+ * Codes a route call can come back with. These travel over the wire.
+ *
+ * Stable strings in the spelling #6 settled: the message beside them is for humans and
+ * may be reworded freely, the code may not. Codes for things Phase 1 cannot yet fail at
+ * — `PROJECT_NOT_FOUND`, `PANE_NOT_FOUND` — are declared by the tickets that can raise
+ * them, not guessed at here.
+ */
 export const WIRE_ERROR_CODES = [
-  'unknown_route',
-  'invalid_request',
-  'invalid_params',
-  'internal_error'
+  'UNKNOWN_ROUTE',
+  'INVALID_REQUEST',
+  'INVALID_PARAMS',
+  'INTERNAL_ERROR'
 ] as const
 
-/** Codes the CLI raises on its own side, before or instead of a route call. */
-export const CLIENT_ERROR_CODES = [
-  'invalid_usage',
-  'app_not_running',
-  'launch_failed',
-  'transport_error'
+/** Codes a surface raises on its own side, before or instead of a route call. */
+export const SURFACE_ERROR_CODES = [
+  'INVALID_USAGE',
+  'APP_NOT_RUNNING',
+  'LAUNCH_FAILED',
+  'TIMEOUT',
+  'TRANSPORT_ERROR'
 ] as const
 
-export const ERROR_CODES = [...WIRE_ERROR_CODES, ...CLIENT_ERROR_CODES] as const
+export const ERROR_CODES = [...WIRE_ERROR_CODES, ...SURFACE_ERROR_CODES] as const
 
 export type WireErrorCode = (typeof WIRE_ERROR_CODES)[number]
-export type ClientErrorCode = (typeof CLIENT_ERROR_CODES)[number]
+export type SurfaceErrorCode = (typeof SURFACE_ERROR_CODES)[number]
 export type ErrorCode = (typeof ERROR_CODES)[number]
+
+/**
+ * Stands in for the id of a request we could not read one from. A reply still has to be
+ * addressed, and refusing to answer at all would leave the caller waiting.
+ */
+export const UNADDRESSED_ID = '0'
 
 export interface RouteError {
   code: ErrorCode
+  /** For humans. Nothing should branch on it; that is what the code is for. */
   message: string
+  details?: unknown
 }
 
 export interface RouteRequest {
@@ -40,7 +56,8 @@ export interface RouteRequest {
 export interface RouteSuccess {
   id: string
   ok: true
-  payload: unknown
+  /** The route's payload. Named `data` on the wire, per the contract #6 settled. */
+  data: unknown
 }
 
 export interface RouteFailure {
@@ -51,12 +68,21 @@ export interface RouteFailure {
 
 export type RouteResponse = RouteSuccess | RouteFailure
 
-export function success(id: string, payload: unknown): RouteSuccess {
-  return { id, ok: true, payload }
+export function success(id: string, data: unknown): RouteSuccess {
+  return { id, ok: true, data }
 }
 
-export function failure(id: string, code: ErrorCode, message: string): RouteFailure {
-  return { id, ok: false, error: { code, message } }
+export function failure(
+  id: string,
+  code: ErrorCode,
+  message: string,
+  details?: unknown
+): RouteFailure {
+  return {
+    id,
+    ok: false,
+    error: details === undefined ? { code, message } : { code, message, details }
+  }
 }
 
 /**
@@ -78,31 +104,37 @@ export class LineBuffer {
   }
 }
 
-export type ParseResult<T, K extends string> =
-  ({ ok: true } & Record<K, T>) | { ok: false; error: RouteError }
+export type ParsedRequest = { ok: true; request: RouteRequest } | { ok: false; error: RouteError }
+
+export type ParsedResponse =
+  { ok: true; response: RouteResponse } | { ok: false; error: RouteError }
 
 function malformed(message: string): { ok: false; error: RouteError } {
-  return { ok: false, error: { code: 'invalid_request', message } }
+  return { ok: false, error: { code: 'INVALID_REQUEST', message } }
 }
 
-function asObject(line: string): Record<string, unknown> | undefined {
-  let parsed: unknown
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  return value as Record<string, unknown>
+}
+
+function parseJson(line: string): unknown {
   try {
-    parsed = JSON.parse(line)
+    return JSON.parse(line)
   } catch {
     return undefined
   }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
-  return parsed as Record<string, unknown>
 }
 
 /**
  * Validates the envelope only. An undeclared route name parses fine here and is refused
- * by the table, so the two failures stay distinguishable: `invalid_request` means the
- * caller sent nonsense, `unknown_route` means it asked for something that is not there.
+ * by the table, so the two failures stay distinguishable: `INVALID_REQUEST` means the
+ * caller sent nonsense, `UNKNOWN_ROUTE` means it asked for something that is not there.
+ *
+ * Both adapters go through this, so a socket call and an IPC call fail identically.
  */
-export function parseRequestLine(line: string): ParseResult<RouteRequest, 'request'> {
-  const object = asObject(line)
+export function parseRequest(value: unknown): ParsedRequest {
+  const object = asObject(value)
   if (!object) return malformed('request is not a JSON object')
   if (typeof object.id !== 'string' || object.id.length === 0) {
     return malformed('request has no id')
@@ -113,12 +145,16 @@ export function parseRequestLine(line: string): ParseResult<RouteRequest, 'reque
   return { ok: true, request: { id: object.id, route: object.route, params: object.params } }
 }
 
-export function parseResponseLine(line: string): ParseResult<RouteResponse, 'response'> {
-  const object = asObject(line)
+export function parseRequestLine(line: string): ParsedRequest {
+  return parseRequest(parseJson(line))
+}
+
+export function parseResponseLine(line: string): ParsedResponse {
+  const object = asObject(parseJson(line))
   if (!object) return malformed('response is not a JSON object')
   if (typeof object.id !== 'string') return malformed('response has no id')
   if (object.ok === true) {
-    return { ok: true, response: { id: object.id, ok: true, payload: object.payload } }
+    return { ok: true, response: { id: object.id, ok: true, data: object.data } }
   }
   if (object.ok === false) {
     const error = object.error as RouteError | undefined
@@ -135,7 +171,7 @@ export function parseResponseLine(line: string): ParseResult<RouteResponse, 'res
  * 4 (denied by permission tier) and 5 (paused by user) belong to Phase 6 and stay unused.
  */
 export function exitCodeFor(code: ErrorCode): 1 | 2 | 3 {
-  if (code === 'invalid_usage') return 2
-  if (code === 'app_not_running') return 3
+  if (code === 'INVALID_USAGE') return 2
+  if (code === 'APP_NOT_RUNNING') return 3
   return 1
 }

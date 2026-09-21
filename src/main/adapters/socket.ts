@@ -1,7 +1,13 @@
 import { chmodSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
-import { LineBuffer, encodeLine, failure, parseRequestLine } from '../../shared/protocol'
+import {
+  LineBuffer,
+  UNADDRESSED_ID,
+  encodeLine,
+  failure,
+  parseRequestLine
+} from '../../shared/protocol'
 import type { Dispatch } from '../routes'
 
 /**
@@ -80,7 +86,7 @@ function handleConnection(connection: Socket, dispatch: Dispatch): void {
 async function respond(connection: Socket, dispatch: Dispatch, line: string): Promise<void> {
   const parsed = parseRequestLine(line)
   if (!parsed.ok) {
-    write(connection, failure('0', parsed.error.code, parsed.error.message))
+    write(connection, failure(UNADDRESSED_ID, parsed.error.code, parsed.error.message))
     return
   }
 

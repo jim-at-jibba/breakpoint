@@ -62,7 +62,7 @@ export function createDispatch(table: RouteTable) {
     const { id, route } = request
 
     if (!isRouteName(route)) {
-      return { response: failure(id, 'unknown_route', `no route named ${route}`) }
+      return { response: failure(id, 'UNKNOWN_ROUTE', `no route named ${route}`) }
     }
 
     // The table is keyed by the whole union, so every entry's parse and handle agree on
@@ -71,7 +71,7 @@ export function createDispatch(table: RouteTable) {
 
     const params = entry.parseParams(request.params)
     if (!params.ok) {
-      return { response: failure(id, 'invalid_params', params.message) }
+      return { response: failure(id, 'INVALID_PARAMS', params.message) }
     }
 
     try {
@@ -79,7 +79,7 @@ export function createDispatch(table: RouteTable) {
       return { response: success(id, result.payload), afterRespond: result.afterRespond }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      return { response: failure(id, 'internal_error', message) }
+      return { response: failure(id, 'INTERNAL_ERROR', message) }
     }
   }
 }

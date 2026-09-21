@@ -51,7 +51,9 @@ test('quit --no-launch with nothing running exits 3 and starts nothing', async (
   expect(run.code).toBe(3)
   expect(run.stdout).toBe('')
   expect(run.stderr).toContain('not running')
+  // "never starts the app" is the half of this that a socket check alone would miss.
   expect(existsSync(sandbox.socketPath)).toBe(false)
+  expect(isRunning(sandbox)).toBe(false)
 })
 
 test('quit with nothing running starts the app, then quits it', async () => {
@@ -63,32 +65,32 @@ test('quit with nothing running starts the app, then quits it', async () => {
   await waitFor(() => !isRunning(sandbox), 'the launched app to exit')
 })
 
-test('an unknown route comes back as unknown_route over the socket', async () => {
+test('an unknown route comes back as UNKNOWN_ROUTE over the socket', async () => {
   launched = await launchApp(sandbox)
 
   const response = await sendRaw(sandbox.socketPath, requestLine('nope.nope'))
 
   expect(response.ok).toBe(false)
-  expect(response.ok === false && response.error.code).toBe('unknown_route')
+  expect(response.ok === false && response.error.code).toBe('UNKNOWN_ROUTE')
 })
 
-test('a malformed envelope comes back as invalid_request, not as a crash', async () => {
+test('a malformed envelope comes back as INVALID_REQUEST, not as a crash', async () => {
   launched = await launchApp(sandbox)
 
   const response = await sendRaw(sandbox.socketPath, '{ not json')
 
-  expect(response.ok === false && response.error.code).toBe('invalid_request')
+  expect(response.ok === false && response.error.code).toBe('INVALID_REQUEST')
   // The connection survived it well enough to answer a real request afterwards.
   const after = await sendRaw(sandbox.socketPath, requestLine('nope.nope'))
-  expect(after.ok === false && after.error.code).toBe('unknown_route')
+  expect(after.ok === false && after.error.code).toBe('UNKNOWN_ROUTE')
 })
 
-test('params a route does not take come back as invalid_params', async () => {
+test('params a route does not take come back as INVALID_PARAMS', async () => {
   launched = await launchApp(sandbox)
 
   const response = await sendRaw(sandbox.socketPath, requestLine('app.quit', { force: true }))
 
-  expect(response.ok === false && response.error.code).toBe('invalid_params')
+  expect(response.ok === false && response.error.code).toBe('INVALID_PARAMS')
 })
 
 test('an unparseable argument exits 2 without reaching the app', async () => {
@@ -161,7 +163,7 @@ test('the renderer reaches the same route table over typed IPC', async () => {
   const overSocket = await sendRaw(sandbox.socketPath, requestLine('nope.nope'))
 
   expect(overIpc.ok).toBe(false)
-  expect(overIpc.ok === false && overIpc.error.code).toBe('unknown_route')
+  expect(overIpc.ok === false && overIpc.error.code).toBe('UNKNOWN_ROUTE')
   expect(overIpc.ok === false && overIpc.error.code).toBe(
     overSocket.ok === false ? overSocket.error.code : undefined
   )

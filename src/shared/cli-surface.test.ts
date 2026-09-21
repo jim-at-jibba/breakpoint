@@ -22,10 +22,30 @@ describe('the declared surface', () => {
     ])
   })
 
-  it('mentions every command and flag in the help text', () => {
+  it('mentions every command, flag and alias in the help text', () => {
     const help = helpText()
     for (const command of CLI_COMMANDS) expect(help).toContain(command.name)
-    for (const flag of CLI_FLAGS) expect(help).toContain(flag.name)
+    for (const flag of CLI_FLAGS) {
+      expect(help).toContain(flag.name)
+      for (const alias of flag.aliases ?? []) expect(help).toContain(alias)
+    }
+  })
+
+  it('names every alias with a dash, so the parser can tell it from a command', () => {
+    for (const flag of CLI_FLAGS) {
+      for (const alias of flag.aliases ?? []) expect(alias).toMatch(/^-[a-zA-Z]$/)
+    }
+  })
+
+  it('gives every flag something to set, so the declaration is what the parser reads', () => {
+    const optionKeys = new Set(['json', 'noLaunch', 'verbose', 'help'])
+    for (const flag of CLI_FLAGS) expect(optionKeys).toContain(flag.sets)
+  })
+
+  it('renders every route payload without asking what shape it is', () => {
+    for (const command of CLI_COMMANDS) {
+      expect(typeof command.render({})).toBe('string')
+    }
   })
 })
 
@@ -57,7 +77,7 @@ describe('parseArgv', () => {
     })
   })
 
-  it('treats --help as help, wherever it appears', () => {
+  it('treats --help and its -h alias as help, wherever they appear', () => {
     expect(parseArgv(['--help']).kind).toBe('help')
     expect(parseArgv(['-h']).kind).toBe('help')
     expect(parseArgv(['quit', '--help']).kind).toBe('help')

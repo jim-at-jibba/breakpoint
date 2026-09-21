@@ -39,7 +39,7 @@ breakpoint quit --no-launch   # exits 3 if the app is not running, and starts no
 | `--json` | Prints the route's payload object on stdout and nothing else |
 | `--no-launch` | Exits 3 rather than starting the app if it is not running |
 | `--verbose` | Prints diagnostics on stderr, where they cannot pollute stdout |
-| `--help` | Prints the help and exits 0 |
+| `--help`, `-h` | Prints the help and exits 0 |
 
 `--json` has to be passed explicitly today. Turning it on automatically when stdout is
 not a terminal arrives with the commands that print state worth piping.
@@ -80,14 +80,15 @@ first four come back from the app; the rest are raised by the command itself.
 
 | Code | Exit | Meaning |
 | --- | --- | --- |
-| `unknown_route` | `1` | There is no route by that name |
-| `invalid_request` | `1` | The request was not a route envelope |
-| `invalid_params` | `1` | The params were not what the route takes |
-| `internal_error` | `1` | The route failed |
-| `invalid_usage` | `2` | The arguments could not be parsed |
-| `app_not_running` | `3` | Nothing is listening, and `--no-launch` was passed |
-| `launch_failed` | `1` | The app could not be started, or never opened its socket |
-| `transport_error` | `1` | The connection failed, or the reply could not be read |
+| `UNKNOWN_ROUTE` | `1` | There is no route by that name |
+| `INVALID_REQUEST` | `1` | The request was not a route envelope |
+| `INVALID_PARAMS` | `1` | The params were not what the route takes |
+| `INTERNAL_ERROR` | `1` | The route failed |
+| `INVALID_USAGE` | `2` | The arguments could not be parsed |
+| `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
+| `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
+| `TIMEOUT` | `1` | The app accepted the connection but did not answer in time |
+| `TRANSPORT_ERROR` | `1` | The connection failed, or the reply could not be read |
 
 ## Routes
 
@@ -97,6 +98,21 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | Route | Payload | Reached by |
 | --- | --- | --- |
 | `app.quit` | `{ "quitting": true }` | `breakpoint quit` |
+
+On the socket the exchange is one line of JSON each way:
+
+```json
+{ "id": "1", "route": "app.quit" }
+{ "id": "1", "ok": true, "data": { "quitting": true } }
+```
+
+and a failure carries the code instead:
+
+```json
+{ "id": "1", "ok": false, "error": { "code": "UNKNOWN_ROUTE", "message": "no route named nope.nope" } }
+```
+
+`--json` prints the `data` object alone — never the envelope around it.
 
 ## Using it from an agent
 

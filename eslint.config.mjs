@@ -7,8 +7,12 @@ import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
   // prototypes/ is throwaway spike code kept as a primary source, and docs/ holds
-  // generated design artefacts. Neither is ours to lint.
-  { ignores: ['**/node_modules', '**/dist', '**/out', 'prototypes/**', 'docs/**'] },
+  // generated design artefacts. Neither is ours to lint. .astro/ is Astro's generated
+  // types for the site, which appear the first time the site is built and would
+  // otherwise fail this lint with errors in code nobody wrote.
+  {
+    ignores: ['**/node_modules', '**/dist', '**/out', '**/.astro', 'prototypes/**', 'docs/**']
+  },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
