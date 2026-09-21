@@ -12,6 +12,7 @@ import {
 import { registerIpcAdapter } from './adapters/ipc'
 import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
+import { EventLog } from '../shared/event-log'
 import { repoPathFromArguments } from './launch-arguments'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
@@ -146,11 +147,13 @@ if (!hasSingleInstanceLock) {
     })
 
     const feed = new StateFeed()
+    const log = new EventLog()
     const projectStore = new ProjectStore(join(userDataDir, 'projects'))
     dispatch = createDispatch(
       createRouteTable({
         app: new AppService(),
-        project: new ProjectService(projectStore, feed)
+        log,
+        project: new ProjectService(projectStore, feed, log)
       })
     )
     registerIpcAdapter(dispatch)

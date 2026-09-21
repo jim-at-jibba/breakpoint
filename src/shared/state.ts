@@ -12,6 +12,14 @@ import type { Project } from './project'
 export interface StateSnapshot {
   /** The revision of the last patch folded into this snapshot. */
   revision: number
+  /**
+   * The event log position this snapshot was taken at, for a reader that wants to ask
+   * the log what has happened since ([ADR-0006]). Patches never move it: the log is a
+   * separate channel, and one patch per appended entry would be a flood. A projection
+   * therefore carries the cursor of the snapshot it was fetched with, which is exactly
+   * what a caller wanting "everything since I looked" should ask from.
+   */
+  cursor: number
   project: Project | null
 }
 
@@ -26,11 +34,11 @@ export interface RevisionedPatch {
 export type PatchBatch = RevisionedPatch[]
 
 export function applyPatch(
-  _before: StateSnapshot,
+  before: StateSnapshot,
   { revision, patch }: RevisionedPatch
 ): StateSnapshot {
   switch (patch.type) {
     case 'project.opened':
-      return { revision, project: patch.project }
+      return { revision, cursor: before.cursor, project: patch.project }
   }
 }

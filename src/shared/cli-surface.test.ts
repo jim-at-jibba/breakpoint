@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ROUTE_NAMES } from './routes'
 import { CLI_COMMANDS, CLI_FLAGS, EXIT_CODES, helpText, parseArgv } from './cli-surface'
+import type { LogRead } from './event-log'
 
 describe('the declared surface', () => {
   it('points every command at a declared route', () => {
@@ -40,6 +41,24 @@ describe('the declared surface', () => {
   it('gives every flag something to set, so the declaration is what the parser reads', () => {
     const optionKeys = new Set(['json', 'noLaunch', 'verbose', 'help'])
     for (const flag of CLI_FLAGS) expect(optionKeys).toContain(flag.sets)
+  })
+
+  it('names every value flag with a double dash and shows what it takes', () => {
+    for (const command of CLI_COMMANDS) {
+      for (const flag of command.flags ?? []) {
+        expect(flag.name).toMatch(/^--[a-z][a-z-]*$/)
+        expect(flag.placeholder).toMatch(/^<.+>$/)
+      }
+    }
+  })
+
+  it('mentions every value flag in the help text, beside the command that takes it', () => {
+    const help = helpText()
+    for (const command of CLI_COMMANDS) {
+      for (const flag of command.flags ?? []) {
+        expect(help).toContain(`${flag.name} ${flag.placeholder}`)
+      }
+    }
   })
 
   it('renders every route payload without asking what shape it is', () => {
@@ -177,5 +196,100 @@ describe('opening a project from the command line', () => {
     const result = parseArgv(['state'], cwd)
     expect(result.kind === 'command' && result.command.route).toBe('project.state')
     expect(result.kind === 'command' && result.params).toBeUndefined()
+  })
+})
+
+describe('reading the event log from a terminal', () => {
+  const read = (argv: string[]): ReturnType<typeof parseArgv> => parseArgv(argv, '/cwd')
+
+  it('reads logs as the log route, with no cursor asked for', () => {
+    const result = read(['logs'])
+    expect(result.kind === 'command' && result.command.route).toBe('log.read')
+    expect(result.kind === 'command' && result.params).toEqual({})
+  })
+
+  it('takes the cursor as a value, spelled either way', () => {
+    for (const argv of [
+      ['logs', '--since', '12'],
+      ['logs', '--since=12']
+    ]) {
+      expect(read(argv).kind === 'command' && (read(argv) as { params: unknown }).params).toEqual({
+        since: 12
+      })
+    }
+  })
+
+  it('takes the cursor with the other flags around it', () => {
+    const result = read(['--json', 'logs', '--since', '12', '--verbose'])
+    expect(result.kind === 'command' && result.params).toEqual({ since: 12 })
+    expect(result.kind === 'command' && result.options).toEqual({
+      json: true,
+      noLaunch: false,
+      verbose: true
+    })
+  })
+
+  it('refuses a cursor that is not a position', () => {
+    for (const given of ['later', '-1', '1.5', '']) {
+      const result = read(['logs', `--since=${given}`])
+      expect(result.kind, given).toBe('error')
+    }
+  })
+
+  it('refuses a cursor with nothing after it', () => {
+    const result = read(['logs', '--since'])
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toContain('--since')
+  })
+
+  it('never reads the cursor as a second positional', () => {
+    const result = read(['logs', '--since', '12'])
+    expect(result.kind).toBe('command')
+  })
+
+  it('refuses the cursor on a command that does not take one, a path included', () => {
+    for (const argv of [
+      ['state', '--since', '12'],
+      ['.', '--since', '12']
+    ]) {
+      const result = read(argv)
+      expect(result.kind, argv.join(' ')).toBe('error')
+      expect(result.kind === 'error' && result.message).toContain('--since')
+    }
+  })
+})
+
+describe('the log as a terminal reads it', () => {
+  const logs = CLI_COMMANDS.find((command) => command.route === 'log.read')
+
+  function render(read: LogRead): string {
+    return logs?.render(read) ?? ''
+  }
+
+  it('says the log is quiet rather than printing nothing', () => {
+    expect(render({ entries: [], cursor: 7 })).toContain('7')
+  })
+
+  it('says what was evicted before what it is about to print', () => {
+    const text = render({
+      entries: [
+        {
+          cursor: 41,
+          time: 0,
+          pane: null,
+          type: 'project.openFailed',
+          path: '/repos/shop',
+          code: 'PROJECT_UNREADABLE',
+          message: '/repos/shop: corrupt'
+        }
+      ],
+      cursor: 41,
+      droppedBefore: 40
+    })
+    const [first, second] = text.split('\n')
+    expect(first).toContain('40')
+    expect(second).toContain('41')
+    expect(second).toContain('/repos/shop')
+    expect(second).toContain('PROJECT_UNREADABLE')
   })
 })

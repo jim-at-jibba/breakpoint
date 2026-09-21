@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProject, writeProjectFile, type Project } from '../../shared/project'
+import { EventLog, type Entry } from '../../shared/event-log'
 import type { RevisionedPatch } from '../../shared/state'
 import { StateFeed } from '../state-feed'
 import { ProjectService } from './project-service'
@@ -13,6 +14,7 @@ let shop: string
 let other: string
 let store: ProjectStore
 let service: ProjectService
+let log: EventLog
 let patches: RevisionedPatch[]
 
 beforeEach(async () => {
@@ -26,12 +28,51 @@ beforeEach(async () => {
   feed.subscribe((patch: RevisionedPatch): void => {
     patches.push(patch)
   })
-  service = new ProjectService(store, feed)
+  log = new EventLog()
+  service = new ProjectService(store, feed, log)
 })
 
 afterEach(async () => {
   vi.restoreAllMocks()
   await rm(root, { recursive: true, force: true })
+})
+
+describe('an open that fails', () => {
+  it('writes an untagged entry a reader can find from its cursor, and still throws', async () => {
+    const before = service.snapshot()
+
+    await expect(service.open(join(root, 'nowhere'))).rejects.toMatchObject({
+      code: 'INVALID_PARAMS'
+    })
+
+    const { entries } = log.read({ since: before.cursor })
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      cursor: 1,
+      pane: null,
+      type: 'project.openFailed',
+      path: join(root, 'nowhere'),
+      code: 'INVALID_PARAMS'
+    })
+    expect(service.snapshot().cursor).toBe(1)
+  })
+
+  it('records the same code the caller was refused with', async () => {
+    await mkdir(join(root, 'projects'), { recursive: true })
+    await writeFile(store.fileFor(shop), JSON.stringify({ version: 99, project: {} }))
+
+    await expect(service.open(shop)).rejects.toMatchObject({ code: 'PROJECT_UNREADABLE' })
+
+    const [entry] = log.read().entries as Entry[]
+    expect(entry).toMatchObject({ code: 'PROJECT_UNREADABLE', pane: null })
+    expect(entry.message).toContain('file version 99')
+  })
+
+  it('leaves the log alone when an open succeeds', async () => {
+    await service.open(shop)
+    expect(log.read().entries).toEqual([])
+    expect(service.snapshot().cursor).toBe(0)
+  })
 })
 
 describe('async project opens', () => {
@@ -45,7 +86,8 @@ describe('async project opens', () => {
       details: { reason: 'corrupt', file: store.fileFor(other) }
     })
     expect(await readFile(store.fileFor(other), 'utf8')).toBe(written)
-    expect(service.snapshot()).toEqual(before)
+    // The open is untouched; only the log moved, because the refusal is an observation.
+    expect(service.snapshot()).toEqual({ ...before, cursor: 1 })
     expect(patches).toHaveLength(1)
   })
 
@@ -68,7 +110,7 @@ describe('async project opens', () => {
     const second = service.open(other)
     await started
     await new Promise<void>((resolve) => setImmediate(resolve))
-    expect(service.snapshot()).toEqual({ revision: 0, project: null })
+    expect(service.snapshot()).toEqual({ revision: 0, cursor: 0, project: null })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
 
@@ -92,9 +134,9 @@ describe('async project opens', () => {
     const failed = service.open(other)
     const reopened = service.open(shop)
     await expect(failed).rejects.toThrow('disk full')
-    expect(service.snapshot()).toEqual(before)
+    expect(service.snapshot()).toEqual({ ...before, cursor: 1 })
     expect(await store.load(other)).toEqual({ status: 'missing' })
-    await expect(reopened).resolves.toEqual({ revision: 2, project: before.project })
+    await expect(reopened).resolves.toEqual({ revision: 2, cursor: 1, project: before.project })
     expect(patches.map((patch: RevisionedPatch) => patch.patch.project.repoPath)).toEqual([
       shop,
       shop

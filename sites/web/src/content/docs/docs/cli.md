@@ -9,9 +9,9 @@ the same state.
 
 :::note[Only what exists]
 Every command, flag, exit code, error code and route on this page is one the binary
-accepts today. Commands from later phases — `open`, `logs`, `nav`, `shot`, `check`, and
-the rest — are deliberately absent until they ship, and this page grows in the same
-change that ships them.
+accepts today. Commands from later phases — `open`, `nav`, `shot`, `check`, and the
+rest — are deliberately absent until they ship, and this page grows in the same change
+that ships them.
 :::
 
 ## Commands
@@ -44,15 +44,83 @@ left exactly as it was.
 
 ### `breakpoint state`
 
-Prints the open project: name, repo path, start URL and panes. With `--json` this is the
-snapshot the window itself renders from.
+Prints the open project: name, repo path, start URL, panes, and the event log cursor the
+snapshot was taken at. With `--json` this is the snapshot the window itself renders from.
 
 ```sh
 breakpoint state
 breakpoint state --json | jq .project.panes
+breakpoint state --json | jq .cursor        # hand this to `logs --since`
 ```
 
-If nothing is open, `project` is `null` and the text output says so.
+If nothing is open, `project` is `null` and the text output says so. The JSON payload
+carries `cursor` either way.
+
+### `breakpoint logs`
+
+Prints what the event log holds after a cursor position. The log is one append-only
+record of everything Breakpoint observes, and every entry carries a position on a single
+monotonic cursor.
+
+```sh
+breakpoint logs                      # everything the log still holds
+breakpoint logs --since 12           # only what followed position 12
+breakpoint logs --since 12 --json | jq .entries
+```
+
+Take the cursor from `breakpoint state`, do some work, and ask from it: an agent reading
+this way is told what happened and nothing it has already seen.
+
+Every entry is tagged with the pane it came from, or with `null` when Breakpoint itself
+produced it. The app's own failures are in here — a project that refuses to load is an
+untagged entry — which is what makes the log the one channel worth polling.
+
+```json
+{
+  "entries": [
+    {
+      "cursor": 1,
+      "time": 1763731200000,
+      "pane": null,
+      "type": "project.openFailed",
+      "path": "/Users/you/code/shop",
+      "code": "PROJECT_UNREADABLE",
+      "message": "/Users/you/code/shop: written by a newer Breakpoint"
+    }
+  ],
+  "cursor": 1
+}
+```
+
+`cursor` at the top level is the position to ask from next, whether or not anything was
+read. It is there even when `entries` is empty, so a poll never has to read the last
+entry to know where it got to.
+
+Entries are ring-buffered per pane at 10,000, so a busy pane cannot push every other
+pane's history out of the log. That means positions are ordered but **not contiguous**,
+and a reader that falls far enough behind can be asking from a position whose entries
+have been evicted. Then, and only then, the payload carries `droppedBefore`:
+
+```json
+{ "entries": [ … ], "cursor": 11481, "droppedBefore": 10482 }
+```
+
+From `droppedBefore` on, the read is everything there was. Below it, some entries are
+gone and others are still returned — a quiet pane keeps its history while a busy one
+evicts — so it marks where the read becomes complete and is never a line to trim the
+entries at. No `droppedBefore` at all means the read is complete, which is what makes an
+empty read genuinely quiet rather than possibly truncated. A read that is asking from a
+position whose own entry was evicted has missed nothing and is not marked: the read
+starts *after* that position.
+
+One read carries at most 1,000 entries, because a response is one line of at most 1 MiB.
+When there is more, `cursor` is the last entry returned rather than the head of the log,
+so asking again from it continues where the last read stopped. Reading until `entries`
+comes back empty is the way to drain it.
+
+What the log carries today is the app's own failures. Every other producer — pane
+lifecycle, navigation, the console, network — arrives with the feature that observes it,
+in this same payload and on this same cursor.
 
 ### `breakpoint quit`
 
@@ -75,6 +143,7 @@ breakpoint quit --no-launch   # exits 3 if the app is not running, and starts no
 | Flag | What it does |
 | --- | --- |
 | `--json` | Prints the route's payload object on stdout and nothing else |
+| `--since <cursor>` | `logs` only. Reads what followed that cursor position. `--since=12` is the same flag |
 | `--no-launch` | Exits 3 rather than starting the app if it is not running |
 | `--verbose` | Prints diagnostics on stderr, where they cannot pollute stdout |
 | `--help`, `-h` | Prints the help and exits 0 |
@@ -141,15 +210,20 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | Route | Params | Payload | Reached by |
 | --- | --- | --- | --- |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
+| `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
 | `project.open` | `{ "path": "/abs/repo" }` | the state snapshot | `breakpoint .`, `breakpoint <path>` |
 | `project.state` | none | the state snapshot | `breakpoint state` |
 
-The state snapshot is `{ "revision": n, "project": … }`, where `project` is `null`
-until one is opened, and otherwise carries `name`, `repoPath`, `startUrl`,
+The state snapshot is `{ "revision": n, "cursor": n, "project": … }`, where `project` is
+`null` until one is opened, and otherwise carries `name`, `repoPath`, `startUrl`,
 `allowedOrigins`, `panes`, `layout`, `zoom` and `sessions`. Each pane has an `id`,
 `name`, `width`, `height`, `dpr`, `mobile` flag, `colorScheme`, `session` and the
 `preset` it was made from. `revision` counts the changes the app has announced to its
-window; a script can ignore it.
+window; a script can ignore it. `cursor` is the event log position the snapshot was
+taken at.
+
+`since` must be an integer of 0 or more; anything else is `INVALID_PARAMS` from the
+route and a usage error from the command, which never sends it.
 
 On the socket the exchange is one line of JSON each way. Each request or response line
 is limited to 1 MiB of UTF-8, excluding the terminating newline. An oversized request
@@ -159,7 +233,7 @@ For example:
 
 ```json
 { "id": "1", "route": "project.open", "params": { "path": "/Users/you/code/shop" } }
-{ "id": "1", "ok": true, "data": { "revision": 1, "project": { "name": "shop", … } } }
+{ "id": "1", "ok": true, "data": { "revision": 1, "cursor": 0, "project": { "name": "shop", … } } }
 ```
 
 and a failure carries the code instead:
@@ -173,6 +247,9 @@ and a failure carries the code instead:
 ## Using it from an agent
 
 The socket lives in Breakpoint's own data directory with owner-only permissions, and it
-is on by default — there is no configuration step and no first command that fails. The
-observe-and-verify commands that make this genuinely useful — reading the console,
-taking screenshots, running layout checks — arrive in later phases.
+is on by default — there is no configuration step and no first command that fails.
+
+The shape a harness wants is already here: take `cursor` from `breakpoint state`, do the
+work, then `breakpoint logs --since <cursor> --json`. What the log carries grows with
+each phase — the console, network and layout producers arrive with the features that
+observe them — and the cursor it is read by does not change.

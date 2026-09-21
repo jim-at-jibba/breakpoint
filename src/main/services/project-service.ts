@@ -1,4 +1,5 @@
 import { realpath, stat } from 'node:fs/promises'
+import type { EventLog } from '../../shared/event-log'
 import { createProject, type Project } from '../../shared/project'
 import type { StateSnapshot } from '../../shared/state'
 import { RouteError } from '../route-error'
@@ -9,6 +10,11 @@ import type { ProjectStore } from './project-store'
  * Projects: the repo the developer is working on and everything Breakpoint remembers
  * about it. Opening one loads it from the store or creates it, and announces it on the
  * feed so every window follows.
+ *
+ * An open that fails is written to the event log as well as thrown, so "the project
+ * failed to open" reaches an agent through the channel it already polls rather than
+ * through a dialog only a human sees ([ADR-0006]). That covers the launch path too,
+ * where there is no caller holding the rejection.
  */
 export class ProjectService {
   private current: Project | null = null
@@ -16,7 +22,8 @@ export class ProjectService {
 
   constructor(
     private readonly store: ProjectStore,
-    private readonly feed: StateFeed
+    private readonly feed: StateFeed,
+    private readonly log: EventLog
   ) {}
 
   /**
@@ -34,6 +41,21 @@ export class ProjectService {
   }
 
   private async openNext(path: string): Promise<StateSnapshot> {
+    try {
+      return await this.openOrCreate(path)
+    } catch (error) {
+      // Untagged: no pane produced it, and saying so is the entry's job.
+      this.log.append(null, {
+        type: 'project.openFailed',
+        path,
+        code: error instanceof RouteError ? error.code : 'INTERNAL_ERROR',
+        message: error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
+  }
+
+  private async openOrCreate(path: string): Promise<StateSnapshot> {
     const repoPath = await canonicalRepoPath(path)
 
     const loaded = await this.store.load(repoPath)
@@ -60,7 +82,7 @@ export class ProjectService {
   }
 
   snapshot(): StateSnapshot {
-    return { revision: this.feed.revision, project: this.current }
+    return { revision: this.feed.revision, cursor: this.log.cursor, project: this.current }
   }
 }
 
