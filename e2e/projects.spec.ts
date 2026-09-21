@@ -60,6 +60,25 @@ async function openProject(path: string): Promise<StateSnapshot> {
   return JSON.parse(run.stdout) as StateSnapshot
 }
 
+/**
+ * The snapshot once every pane has been attached to or given up on and has been measured,
+ * after which nothing announces a change on its own. Tests that forge patches number them
+ * from this revision; one taken at open is overtaken by the panes' own status patches.
+ */
+async function quietSnapshot(): Promise<StateSnapshot> {
+  let snapshot: StateSnapshot | undefined
+  await expect
+    .poll(async () => {
+      const run = await runCli(sandbox, ['state', '--json'])
+      snapshot = JSON.parse(run.stdout) as StateSnapshot
+      return Object.values(snapshot.panes).every(
+        (status) => status.attachment !== 'pending' && status.geometry !== 'unchecked'
+      )
+    })
+    .toBe(true)
+  return snapshot as StateSnapshot
+}
+
 async function shownProject(page: Page): Promise<{ name: string; url: string }> {
   return {
     name: (await page.getByTestId('project-name').textContent()) ?? '',
@@ -280,8 +299,9 @@ test('the renderer shows a snapshot failure and recovers over the real preload b
   launched = await launchApp(sandbox)
   const { app } = launched
   const page = await app.firstWindow()
-  const snapshot = await openProject(makeRepo('shop'))
+  await openProject(makeRepo('shop'))
   await expect(page.getByTestId('project-name')).toHaveText('shop')
+  const snapshot = await quietSnapshot()
   await app.evaluate(
     ({ ipcMain, BrowserWindow }, { route, patch, snapshot }) => {
       ipcMain.removeHandler(route)
@@ -330,8 +350,9 @@ test('the renderer renders from a snapshot plus patches, and re-fetches on a des
   const { app } = launched
   const page = await app.firstWindow()
   const shop = makeRepo('shop')
-  const snapshot = await openProject(shop)
+  await openProject(shop)
   await expect(page.getByTestId('project-name')).toHaveText('shop')
+  const snapshot = await quietSnapshot()
 
   const phantom: Project = { ...(snapshot.project as Project), name: 'phantom' }
   const push = (batch: PatchBatch): Promise<void> =>

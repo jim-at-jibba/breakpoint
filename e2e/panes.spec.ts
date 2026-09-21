@@ -1,4 +1,6 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
+import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
@@ -510,4 +512,31 @@ test('the fixture serves two loopback sites, a known-size hit target and hairlin
     bottom: page.viewportHeight
   })
   expect(page.rules.match(/repeating-linear-gradient/g)).toHaveLength(2)
+})
+
+test('a pane whose page cannot load logs that it failed, and never that it loaded', async () => {
+  launched = await launchApp(sandbox)
+  // A port that was just free and is now closed: nothing will answer on it.
+  const closed = await new Promise<number>((resolve) => {
+    const server = createServer().listen(0, '127.0.0.1', () => {
+      const { port } = server.address() as AddressInfo
+      server.close(() => resolve(port))
+    })
+  })
+  const shop = makeRepo('shop', `http://127.0.0.1:${closed}/`)
+
+  await open(shop)
+  await expect
+    .poll(async () => ofType(await logs(), 'pane.loadFailed').length, { timeout: 10_000 })
+    .toBe(3)
+  // Chromium finishes loading its own error page after a failure. That is not the pane loading.
+  await delay(1_000)
+
+  const entries = await logs()
+  for (const pane of shop.panes) {
+    expect(ofType(entries, 'pane.loadFailed', pane.id)).toEqual([
+      expect.objectContaining({ url: `http://127.0.0.1:${closed}/`, code: -102 })
+    ])
+    expect(ofType(entries, 'pane.loaded', pane.id)).toEqual([])
+  }
 })

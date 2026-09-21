@@ -119,13 +119,19 @@ export class PaneHost {
 
     // Listeners before the attachment, so a refused attachment cannot cost the pane
     // its lifecycle (#4).
+    // A failed load is followed by `did-finish-load` for Chromium's own error page, which
+    // is not the pane's page loading. Each load starts clean.
+    let failed = false
+    guest.on('did-start-loading', () => {
+      failed = false
+    })
     guest.on('did-finish-load', () => {
-      if (current()) this.panes.loaded(pane, guest.getURL())
+      if (!failed && current()) this.panes.loaded(pane, guest.getURL())
     })
     guest.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
-      if (isMainFrame && code !== ERR_ABORTED && current()) {
-        this.panes.loadFailed(pane, url, code, description)
-      }
+      if (!isMainFrame || code === ERR_ABORTED) return
+      failed = true
+      if (current()) this.panes.loadFailed(pane, url, code, description)
     })
     guest.once('destroyed', () => {
       const wasCurrent = current()
