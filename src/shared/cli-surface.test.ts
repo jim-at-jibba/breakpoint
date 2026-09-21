@@ -1,9 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { ROUTE_NAMES } from './routes'
-import { CLI_COMMANDS, CLI_FLAGS, EXIT_CODES, helpText, parseArgv } from './cli-surface'
-import type { LogRead } from './event-log'
+import {
+  CLI_COMMANDS,
+  CLI_FLAGS,
+  EXIT_CODES,
+  helpText,
+  parseArgv,
+  type CliCommandSpec,
+  type ParsedValue
+} from './cli-surface'
+import type { LogRead, ReadParams } from './event-log'
 
 describe('the declared surface', () => {
+  it('checks command parsers against their route parameters', () => {
+    expectTypeOf<CliCommandSpec<'log.read'>['parseParams']>().returns.toEqualTypeOf<
+      ParsedValue<ReadParams>
+    >()
+    expectTypeOf<CliCommandSpec<'project.open'>['parseParams']>().returns.toEqualTypeOf<
+      ParsedValue<{ path: string }>
+    >()
+    expectTypeOf<CliCommandSpec<'app.quit'>['parseParams']>().returns.toEqualTypeOf<
+      ParsedValue<undefined>
+    >()
+  })
+
   it('points every command at a declared route', () => {
     for (const command of CLI_COMMANDS) {
       expect(ROUTE_NAMES).toContain(command.route)
@@ -213,7 +233,8 @@ describe('reading the event log from a terminal', () => {
       ['logs', '--since', '12'],
       ['logs', '--since=12']
     ]) {
-      expect(read(argv).kind === 'command' && (read(argv) as { params: unknown }).params).toEqual({
+      const result = read(argv)
+      expect(result.kind === 'command' && result.params).toEqual({
         since: 12
       })
     }
@@ -242,6 +263,24 @@ describe('reading the event log from a terminal', () => {
     expect(result.kind === 'error' && result.message).toContain('--since')
   })
 
+  it.each(['--json', '--no-launch', '--verbose', '--help', '-h', '--since=12'])(
+    'does not consume %s as a missing cursor value',
+    (flag: string) => {
+      const result = read(['logs', '--since', flag])
+      expect(result.kind).toBe('error')
+      expect(result.kind === 'error' && result.message).toBe('--since needs <cursor>')
+      if (flag === '--json') expect(result.options.json).toBe(true)
+      if (flag === '--no-launch') expect(result.options.noLaunch).toBe(true)
+      if (flag === '--verbose') expect(result.options.verbose).toBe(true)
+    }
+  )
+
+  it('validates every repeated cursor value and uses the last valid one', () => {
+    const valid = read(['logs', '--since=1', '--since', '2'])
+    expect(valid.kind === 'command' && valid.params).toEqual({ since: 2 })
+    expect(read(['logs', '--since=invalid', '--since=2']).kind).toBe('error')
+  })
+
   it('never reads the cursor as a second positional', () => {
     const result = read(['logs', '--since', '12'])
     expect(result.kind).toBe('command')
@@ -268,6 +307,26 @@ describe('the log as a terminal reads it', () => {
 
   it('says the log is quiet rather than printing nothing', () => {
     expect(render({ entries: [], cursor: 7 })).toContain('7')
+  })
+
+  it('marks shortened entry text in human output', () => {
+    expect(
+      render({
+        entries: [
+          {
+            cursor: 1,
+            time: 0,
+            pane: null,
+            type: 'project.openFailed',
+            path: '/shortened',
+            code: 'INVALID_PARAMS',
+            message: 'shortened',
+            truncated: ['path', 'message']
+          }
+        ],
+        cursor: 1
+      })
+    ).toContain('[truncated: path, message]')
   })
 
   it('says what was evicted before what it is about to print', () => {

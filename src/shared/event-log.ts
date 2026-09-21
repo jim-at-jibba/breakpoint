@@ -1,4 +1,9 @@
-import type { WireErrorCode } from './protocol'
+import {
+  jsonByteLength,
+  MAX_FRAME_BYTES,
+  MAX_REQUEST_ID_BYTES,
+  type WireErrorCode
+} from './protocol'
 
 /**
  * The event log: one append-only record of everything Breakpoint observes, with one
@@ -10,20 +15,17 @@ import type { WireErrorCode } from './protocol'
  * contiguous, and a read whose start was evicted says so rather than coming back short
  * and letting the reader conclude the app was quiet.
  *
- * Pure: no clock of its own unless it is given one, no I/O, no Electron. The main
+ * No I/O or Electron; the clock can be supplied by the caller. The main
  * process owns the one instance; the CLI and the renderer import the types.
  */
 
 /** PRD 8.6. The app's own entries are a ring of the same size, keyed by no pane. */
 export const ENTRIES_PER_PANE = 10_000
 
-/**
- * Entries one read will return. PRD 8.6 asks for truncation at read time, and the
- * socket makes it compulsory: a response is one line of at most `MAX_FRAME_BYTES`, so
- * an untruncated read of a full log could not be delivered at all. A truncated read
- * says so by where it leaves its cursor, and the reader asks again from there.
- */
 export const ENTRIES_PER_READ = 1_000
+// Reserve the largest accepted id plus the success envelope around the payload.
+export const MAX_LOG_READ_BYTES = MAX_FRAME_BYTES - MAX_REQUEST_ID_BYTES - 64
+export const MAX_ENTRY_TEXT_BYTES = 16 * 1024
 
 /**
  * What an entry says. One kind per producer, and a kind arrives with the ticket that
@@ -31,13 +33,15 @@ export const ENTRIES_PER_READ = 1_000
  * console's kinds are Phase 2.
  */
 export type EntryBody = {
-  type: 'project.openFailed'
+  readonly type: 'project.openFailed'
   /** As the caller asked for it: canonicalising the path is one of the things that fails. */
-  path: string
+  readonly path: string
   /** The same stable code the route call failed with, so both surfaces branch alike. */
-  code: WireErrorCode
-  message: string
+  readonly code: WireErrorCode
+  readonly message: string
 }
+
+type TruncatedField = 'path' | 'message'
 
 /**
  * One record in the log. `pane` is the pane it came from, or `null` when the app itself
@@ -45,27 +49,28 @@ export type EntryBody = {
  * leaves open.
  */
 export type Entry = {
-  cursor: number
+  readonly cursor: number
   /** Milliseconds since the epoch, taken when the entry was appended. */
-  time: number
-  pane: string | null
+  readonly time: number
+  readonly pane: string | null
+  readonly truncated?: readonly TruncatedField[]
 } & EntryBody
 
 export interface LogRead {
-  entries: Entry[]
+  readonly entries: readonly Entry[]
   /**
    * The position to ask from next, whether or not anything was read: the log's head,
    * or the last entry returned when there was more than one read could carry. A reader
    * that asks again from here and gets nothing has caught up.
    */
-  cursor: number
+  readonly cursor: number
   /**
    * Present only when entries after the position asked from had already been evicted.
    * From this position on the read is everything there was; below it, entries may be
    * missing. Absent means the read is complete, so an empty read with no marker is a
    * quiet log rather than a reader that fell behind.
    */
-  droppedBefore?: number
+  readonly droppedBefore?: number
 }
 
 /**
@@ -118,7 +123,15 @@ export class EventLog {
   /** `pane` is positional and required: an untagged entry is a decision, not an omission. */
   append(pane: string | null, body: EntryBody): Entry {
     this.position += 1
-    const entry: Entry = { cursor: this.position, time: this.now(), pane, ...body }
+    const entry: Entry = Object.freeze({
+      cursor: this.position,
+      time: this.now(),
+      pane,
+      type: body.type,
+      path: body.path,
+      code: body.code,
+      message: body.message
+    })
 
     const ring = this.ringFor(pane)
     ring.entries.push(entry)
@@ -142,16 +155,24 @@ export class EventLog {
     }
     entries.sort((left, right) => left.cursor - right.cursor)
 
-    // Truncated from the far end, so what is returned still starts where the reader
-    // asked and the rest is the next read rather than a hole.
-    const carried = entries.slice(0, ENTRIES_PER_READ)
+    const dropped = since < evictedThrough ? { droppedBefore: evictedThrough + 1 } : {}
+    const carried: Entry[] = []
+    let bytes = jsonByteLength({ entries: [], cursor: this.position, ...dropped })
+    for (const entry of entries) {
+      if (carried.length === ENTRIES_PER_READ) break
+      const readable = entryForRead(entry)
+      const addedBytes = jsonByteLength(readable) + (carried.length > 0 ? 1 : 0)
+      if (carried.length === 0 && bytes + addedBytes > MAX_LOG_READ_BYTES) {
+        throw new RangeError('entry metadata exceeds the log read byte limit')
+      }
+      if (bytes + addedBytes > MAX_LOG_READ_BYTES) break
+      carried.push(readable)
+      bytes += addedBytes
+    }
     const last = carried.at(-1)
     const cursor = carried.length < entries.length && last ? last.cursor : this.position
 
-    const read: LogRead = { entries: carried, cursor }
-    // Everything the reader asked for is intact from one past the last eviction onwards.
-    if (since < evictedThrough) read.droppedBefore = evictedThrough + 1
-    return read
+    return Object.freeze({ entries: Object.freeze(carried), cursor, ...dropped })
   }
 
   private ringFor(pane: string | null): Ring {
@@ -161,4 +182,29 @@ export class EventLog {
     this.rings.set(pane, ring)
     return ring
   }
+}
+
+function entryForRead(entry: Entry): Entry {
+  const path = truncateText(entry.path)
+  const message = truncateText(entry.message)
+  const truncated: TruncatedField[] = []
+  if (path !== entry.path) truncated.push('path')
+  if (message !== entry.message) truncated.push('message')
+  if (truncated.length === 0) return entry
+  return Object.freeze({ ...entry, path, message, truncated: Object.freeze(truncated) })
+}
+
+function truncateText(text: string): string {
+  if (jsonByteLength(text) <= MAX_ENTRY_TEXT_BYTES) return text
+  let start = 0
+  let end = Math.min(text.length, MAX_ENTRY_TEXT_BYTES)
+  while (start < end) {
+    const middle = Math.ceil((start + end) / 2)
+    if (jsonByteLength(text.slice(0, middle)) <= MAX_ENTRY_TEXT_BYTES) start = middle
+    else end = middle - 1
+  }
+  // Do not split a supplementary Unicode character at the truncation boundary.
+  const last = text.charCodeAt(start - 1)
+  if (last >= 0xd800 && last <= 0xdbff) start -= 1
+  return text.slice(0, start)
 }

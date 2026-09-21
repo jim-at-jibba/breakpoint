@@ -4,6 +4,7 @@ import {
   FrameTooLargeError,
   LineBuffer,
   MAX_FRAME_BYTES,
+  MAX_REQUEST_ID_BYTES,
   encodeLine,
   exitCodeFor,
   failure,
@@ -86,6 +87,19 @@ describe('the error codes', () => {
 })
 
 describe('parseRequestLine', () => {
+  it.each(['x', 'é', '"'])('bounds JSON-encoded request ids including %s', (character: string) => {
+    const width = Buffer.byteLength(JSON.stringify(character)) - 2
+    const id = character.repeat((MAX_REQUEST_ID_BYTES - 2) / width)
+    expect(parseRequestLine(encodeLine({ id, route: 'log.read' })).ok).toBe(true)
+    expect(parseRequestLine(encodeLine({ id: `${id}${character}`, route: 'log.read' }))).toEqual({
+      ok: false,
+      error: {
+        code: 'INVALID_REQUEST',
+        message: `request id exceeds the ${MAX_REQUEST_ID_BYTES}-byte JSON limit`
+      }
+    })
+  })
+
   it('accepts a well-formed request', () => {
     const result = parseRequestLine('{"id":"1","route":"app.quit"}')
     expect(result).toEqual({ ok: true, request: { id: '1', route: 'app.quit', params: undefined } })

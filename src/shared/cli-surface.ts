@@ -13,10 +13,16 @@ import type { StateSnapshot } from './state'
  * Only what exists is declared. Commands from later phases are absent until they ship.
  */
 
-export interface CliCommandSpec {
+interface CliCommandInput {
+  positional: string
+  cwd: string
+  values: ReadonlyMap<string, readonly string[]>
+}
+
+interface CommandSpec<N extends RouteName> {
   /** What is typed. `<path>` is the one command with no name: a path stands in for it. */
   name: string
-  route: RouteName
+  route: N
   summary: string
   /**
    * The value-carrying flags this command takes, which are the route's params by
@@ -24,45 +30,40 @@ export interface CliCommandSpec {
    * usage error rather than a param the app has to refuse.
    */
   flags?: readonly CliValueFlagSpec[]
+  parseParams(input: CliCommandInput): ParsedValue<RouteParams<N>>
   /** How the route's payload reads on a terminal, when `--json` was not asked for. */
   render(data: unknown): string
 }
 
-export type ParsedValue = { ok: true; value: unknown } | { ok: false; message: string }
+export type CliCommandSpec<N extends RouteName = RouteName> = {
+  [R in N]: CommandSpec<R>
+}[N]
 
-/**
- * A flag that fills one key of its command's params. `--since 12` and `--since=12` are
- * the same flag, because both spellings are typed and neither is worth refusing.
- */
+export type ParsedValue<T> = { ok: true; value: T } | { ok: false; message: string }
+
 export interface CliValueFlagSpec {
   name: string
   /** How the value reads in the help text: `--since <cursor>`. */
   placeholder: string
-  summary: string
-  /** The params key it fills. */
-  key: string
-  parse(raw: string): ParsedValue
 }
 
 const SINCE_FLAG: CliValueFlagSpec = {
   name: '--since',
-  placeholder: '<cursor>',
-  summary: 'Read only what followed that cursor position',
-  key: 'since',
-  parse: (raw) => {
-    const value = raw.trim() === '' ? Number.NaN : Number(raw)
-    if (!isCursorPosition(value)) {
-      return { ok: false, message: `--since takes a cursor position, not ${raw}` }
-    }
-    return { ok: true, value }
-  }
+  placeholder: '<cursor>'
 }
 
 /** The command a path invokes. `breakpoint .` and `breakpoint <path>` are both this. */
-export const OPEN_COMMAND: CliCommandSpec = {
+export const OPEN_COMMAND: CliCommandSpec<'project.open'> = {
   name: '<path>',
   route: 'project.open',
   summary: 'Open the project for that repo, creating it the first time',
+  parseParams: ({
+    cwd,
+    positional
+  }: CliCommandInput): ParsedValue<RouteParams<'project.open'>> => ({
+    ok: true,
+    value: { path: resolve(cwd, positional) }
+  }),
   render: (data) => renderSnapshot(data, 'Opened')
 }
 
@@ -73,21 +74,36 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
     route: 'log.read',
     summary: 'Print what the event log holds after a cursor position',
     flags: [SINCE_FLAG],
+    parseParams: parseLogParams,
     render: renderLog
   },
   {
     name: 'state',
     route: 'project.state',
     summary: 'Print the open project: name, repo, start URL and panes',
+    parseParams: (): ParsedValue<RouteParams<'project.state'>> => ({ ok: true, value: undefined }),
     render: (data) => renderSnapshot(data, 'Open')
   },
   {
     name: 'quit',
     route: 'app.quit',
     summary: 'Shut the app down cleanly, releasing the single-instance lock',
+    parseParams: (): ParsedValue<RouteParams<'app.quit'>> => ({ ok: true, value: undefined }),
     render: () => 'Breakpoint is quitting.'
   }
 ]
+
+function parseLogParams({ values }: CliCommandInput): ParsedValue<RouteParams<'log.read'>> {
+  const params: RouteParams<'log.read'> = {}
+  for (const raw of values.get(SINCE_FLAG.name) ?? []) {
+    const since = raw.trim() === '' ? Number.NaN : Number(raw)
+    if (!isCursorPosition(since)) {
+      return { ok: false, message: `--since takes a cursor position, not ${raw}` }
+    }
+    params.since = since
+  }
+  return { ok: true, value: params }
+}
 
 function renderSnapshot(data: unknown, verb: string): string {
   const snapshot = data as Partial<StateSnapshot> | undefined
@@ -120,7 +136,8 @@ function renderLog(data: unknown): string {
     lines.push(`Entries before cursor ${read.droppedBefore} were evicted and are gone.`)
   }
   for (const entry of entries) {
-    lines.push(`${entry.cursor}  ${entry.pane ?? 'app'}  ${describeEntry(entry)}`)
+    const marker = entry.truncated ? ` [truncated: ${entry.truncated.join(', ')}]` : ''
+    lines.push(`${entry.cursor}  ${entry.pane ?? 'app'}  ${describeEntry(entry)}${marker}`)
   }
   if (entries.length === 0) lines.push(`Nothing after cursor ${read?.cursor ?? 0}.`)
 
@@ -249,14 +266,18 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
           given.push({ flag: valueFlag, raw: argument.slice(separator + 1) })
           continue
         }
-        // The value is the next token, and is consumed here so it is never read as the
-        // command or as a path.
-        index += 1
-        if (index >= argv.length) {
+        const next = argv[index + 1]
+        const nextName = next?.split('=', 1)[0]
+        if (
+          next === undefined ||
+          (nextName !== undefined &&
+            (FLAGS_BY_NAME.has(nextName) || VALUE_FLAGS_BY_NAME.has(nextName)))
+        ) {
           error ??= `${valueFlag.name} needs ${valueFlag.placeholder}`
           continue
         }
-        given.push({ flag: valueFlag, raw: argv[index] })
+        index += 1
+        given.push({ flag: valueFlag, raw: next })
         continue
       }
 
@@ -282,50 +303,33 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
     return { kind: 'error', message: 'no command or path given', options }
   }
 
-  if (looksLikePath(positional)) {
-    const checked = readValueFlags(OPEN_COMMAND, given)
-    if (!checked.ok) return { kind: 'error', message: checked.message, options }
-    return {
-      kind: 'command',
-      command: OPEN_COMMAND,
-      options,
-      params: { path: resolve(cwd, positional) }
-    }
-  }
-
-  const command = CLI_COMMANDS.find((candidate) => candidate.name === positional)
+  const command = looksLikePath(positional)
+    ? OPEN_COMMAND
+    : CLI_COMMANDS.find((candidate) => candidate.name === positional)
   if (!command) return { kind: 'error', message: `unknown command ${positional}`, options }
 
-  const params = readValueFlags(command, given)
+  const values = readValueFlags(command, given)
+  if (!values.ok) return { kind: 'error', message: values.message, options }
+  const params = command.parseParams({ cwd, positional, values: values.value })
   if (!params.ok) return { kind: 'error', message: params.message, options }
 
-  return { kind: 'command', command, options, params: params.params }
+  return { kind: 'command', command, options, params: params.value }
 }
 
 function readValueFlags(
   command: CliCommandSpec,
   given: readonly GivenValueFlag[]
-): { ok: true; params: RouteParams<RouteName> } | { ok: false; message: string } {
-  if (!command.flags) {
-    const unwanted = given[0]
-    if (unwanted) {
-      return { ok: false, message: `${unwanted.flag.name} is not a flag of ${command.name}` }
-    }
-    return { ok: true, params: undefined }
-  }
-
-  const params: Record<string, unknown> = {}
+): ParsedValue<ReadonlyMap<string, readonly string[]>> {
+  const values = new Map<string, string[]>()
   for (const { flag, raw } of given) {
-    if (!command.flags.includes(flag)) {
+    if (!command.flags?.includes(flag)) {
       return { ok: false, message: `${flag.name} is not a flag of ${command.name}` }
     }
-    const parsed = flag.parse(raw)
-    if (!parsed.ok) return { ok: false, message: parsed.message }
-    params[flag.key] = parsed.value
+    const previous = values.get(flag.name) ?? []
+    previous.push(raw)
+    values.set(flag.name, previous)
   }
-  // The keys are the flags the command declared, which are the route's params by
-  // construction; the signature is what makes that true, and it is checked in tests.
-  return { ok: true, params: params as RouteParams<RouteName> }
+  return { ok: true, value: values }
 }
 
 /** Short and example-led, per PRD 7.3. */

@@ -101,8 +101,13 @@ export function encodeLine(value: unknown): string {
 }
 
 export const MAX_FRAME_BYTES = 1024 * 1024
+export const MAX_REQUEST_ID_BYTES = 1024
 
 const UTF8_ENCODER = new TextEncoder()
+
+export function jsonByteLength(value: unknown): number {
+  return UTF8_ENCODER.encode(JSON.stringify(value)).byteLength
+}
 
 export class FrameTooLargeError extends Error {
   constructor() {
@@ -181,6 +186,9 @@ export function parseRequest(value: unknown): ParsedRequest {
   if (!object) return malformed('request is not a JSON object')
   if (typeof object.id !== 'string' || object.id.length === 0) {
     return malformed('request has no id')
+  }
+  if (jsonByteLength(object.id) > MAX_REQUEST_ID_BYTES) {
+    return malformed(`request id exceeds the ${MAX_REQUEST_ID_BYTES}-byte JSON limit`)
   }
   if (typeof object.route !== 'string' || object.route.length === 0) {
     return malformed('request has no route')

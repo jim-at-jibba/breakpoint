@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProject, writeProjectFile, type Project } from '../../shared/project'
-import { EventLog, type Entry } from '../../shared/event-log'
+import { EventLog } from '../../shared/event-log'
 import type { RevisionedPatch } from '../../shared/state'
 import { StateFeed } from '../state-feed'
 import { ProjectService } from './project-service'
@@ -63,7 +63,7 @@ describe('an open that fails', () => {
 
     await expect(service.open(shop)).rejects.toMatchObject({ code: 'PROJECT_UNREADABLE' })
 
-    const [entry] = log.read().entries as Entry[]
+    const [entry] = log.read().entries
     expect(entry).toMatchObject({ code: 'PROJECT_UNREADABLE', pane: null })
     expect(entry.message).toContain('file version 99')
   })

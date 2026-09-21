@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
 import type { LogRead } from '../src/shared/event-log'
 import { PROJECT_FILE_VERSION, projectFileName } from '../src/shared/project'
+import { encodeLine, MAX_FRAME_BYTES, MAX_REQUEST_ID_BYTES } from '../src/shared/protocol'
 import type { StateSnapshot } from '../src/shared/state'
 import {
   closeApp,
@@ -100,6 +101,50 @@ test('a project that refuses to load reaches a terminal reading from a cursor', 
   expect(await logsSince(read.cursor)).toEqual({ entries: [], cursor: 1 })
 })
 
+test('a single oversized failure remains readable and can be passed by cursor', async () => {
+  launched = await launchApp(sandbox)
+  const path = join(repos, 'x'.repeat(600_000))
+  const request = requestLine('project.open', { path })
+  expect(Buffer.byteLength(request) - 1).toBeLessThan(MAX_FRAME_BYTES)
+  const failed = await sendRaw(sandbox.socketPath, request)
+  expect(failed.ok).toBe(false)
+
+  const read = await logsSince(0)
+  expect(read.entries).toHaveLength(1)
+  expect(read.entries[0]).toMatchObject({ cursor: 1, truncated: ['path', 'message'] })
+  expect(read.cursor).toBe(1)
+  expect(await logsSince(read.cursor)).toEqual({ entries: [], cursor: 1 })
+})
+
+test('byte-limited pages drain through the CLI without losing entries', async () => {
+  launched = await launchApp(sandbox)
+  for (let index = 0; index < 80; index += 1) {
+    const failed = await sendRaw(
+      sandbox.socketPath,
+      requestLine('project.open', { path: join(repos, `${index}-${'x'.repeat(10_000)}`) })
+    )
+    expect(failed.ok).toBe(false)
+  }
+
+  const first = await logsSince(0)
+  expect(first.entries.length).toBeGreaterThan(0)
+  expect(first.entries.length).toBeLessThan(80)
+  expect(first.cursor).toBe(first.entries.at(-1)?.cursor)
+  const id = 'x'.repeat(MAX_REQUEST_ID_BYTES - 2)
+  const overSocket = await sendRaw(sandbox.socketPath, encodeLine({ id, route: 'log.read' }))
+  expect(overSocket).toMatchObject({ id, ok: true, data: { cursor: first.cursor } })
+  expect(Buffer.byteLength(encodeLine(overSocket)) - 1).toBeLessThanOrEqual(MAX_FRAME_BYTES)
+
+  const refused = await sendRaw(sandbox.socketPath, encodeLine({ id: `${id}x`, route: 'log.read' }))
+  expect(refused).toMatchObject({ id: '0', ok: false, error: { code: 'INVALID_REQUEST' } })
+  const second = await logsSince(first.cursor)
+  expect([...first.entries, ...second.entries].map((entry): number => entry.cursor)).toEqual(
+    Array.from({ length: 80 }, (_, index: number): number => index + 1)
+  )
+  expect(second.cursor).toBe(80)
+  expect(await logsSince(second.cursor)).toEqual({ entries: [], cursor: 80 })
+})
+
 test('a launch argument that cannot be opened is logged too, with no one to throw at', async () => {
   launched = await launchApp(sandbox)
   const shop = makeRepo('shop')
@@ -155,4 +200,13 @@ test('a cursor that is not a position is refused by the terminal and by the rout
   // The route refuses it on its own account, for a surface that is not the CLI.
   const overSocket = await sendRaw(sandbox.socketPath, requestLine('log.read', { since: -3 }))
   expect(overSocket.ok === false && overSocket.error.code).toBe('INVALID_PARAMS')
+})
+
+test('a missing cursor preserves JSON error output and never launches the app', async () => {
+  const run = await runCli(sandbox, ['logs', '--since', '--json', '--no-launch'])
+  expect(run.code).toBe(2)
+  expect(run.stdout).toBe('')
+  expect(JSON.parse(run.stderr)).toEqual({
+    error: { code: 'INVALID_USAGE', message: '--since needs <cursor>' }
+  })
 })

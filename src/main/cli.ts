@@ -42,7 +42,8 @@ function main(): void {
 
   if (parsed.kind === 'help') {
     process.stdout.write(helpText())
-    process.exit(0)
+    process.exitCode = 0
+    return
   }
 
   if (parsed.kind === 'error') {
@@ -51,18 +52,22 @@ function main(): void {
       options: parsed.options
     })
     if (!parsed.options.json) process.stderr.write(`\n${helpText()}`)
-    process.exit(code)
+    process.exitCode = code
+    return
   }
 
   const { command, options, params } = parsed
   const diagnose = createDiagnose(options)
 
   run(command.route, params, options, diagnose)
-    .then((response) => process.exit(report(command, response, options)))
+    .then((response) => {
+      // Let pending pipe writes drain before Node exits, including full log pages.
+      process.exitCode = report(command, response, options)
+    })
     .catch((error: unknown) => {
       const code: ErrorCode = error instanceof CliError ? error.code : 'INTERNAL_ERROR'
       const message = error instanceof Error ? error.message : String(error)
-      process.exit(reportError({ error: { code, message }, options }))
+      process.exitCode = reportError({ error: { code, message }, options })
     })
 }
 

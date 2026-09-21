@@ -113,10 +113,18 @@ empty read genuinely quiet rather than possibly truncated. A read that is asking
 position whose own entry was evicted has missed nothing and is not marked: the read
 starts *after* that position.
 
-One read carries at most 1,000 entries, because a response is one line of at most 1 MiB.
-When there is more, `cursor` is the last entry returned rather than the head of the log,
-so asking again from it continues where the last read stopped. Reading until `entries`
-comes back empty is the way to drain it.
+One read carries at most 1,000 entries and is also limited by serialized UTF-8 bytes,
+leaving room for the response envelope within the socket's 1 MiB frame limit. When
+either limit is reached, `cursor` is the last entry returned rather than the head of
+the log, so asking again from it continues where the last read stopped. Reading until
+`entries` comes back empty is the way to drain it.
+
+Each entry's `path` and `message` is limited to 16 KiB of JSON-encoded UTF-8 on reads.
+Longer text is returned as a prefix, with an explicit `truncated` array naming the
+shortened fields, such as `"truncated": ["path", "message"]`. Human output includes
+`[truncated: path, message]`. The original stored entry is unchanged. This text marker
+is separate from `droppedBefore`, which reports evicted entries, and the entry's cursor
+still lets a reader continue past it.
 
 What the log carries today is the app's own failures. Every other producer — pane
 lifecycle, navigation, the console, network — arrives with the feature that observes it,
@@ -228,6 +236,9 @@ route and a usage error from the command, which never sends it.
 On the socket the exchange is one line of JSON each way. Each request or response line
 is limited to 1 MiB of UTF-8, excluding the terminating newline. An oversized request
 closes its connection; an oversized response causes the CLI to report `TRANSPORT_ERROR`.
+Request ids are limited to 1 KiB of JSON-encoded UTF-8, including quotes and escapes,
+so log responses can reserve enough space for the envelope. A larger id is rejected
+with `INVALID_REQUEST` and the unaddressed response id `"0"`.
 
 For example:
 

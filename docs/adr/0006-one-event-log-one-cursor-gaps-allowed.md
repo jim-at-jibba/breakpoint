@@ -35,3 +35,15 @@ That is what makes an empty read unambiguously quiet.
 does not name one, and ADR-0005 asks that adapters hold no behaviour — not that every route
 noun be a service. A `LogService` over this would be pure delegation, so `log.read` calls the
 store. `AppService` is the reverse case and stays a service because quitting is behaviour.
+
+**Read limits count bytes as well as entries.** A read stops at 1,000 entries or its
+serialized UTF-8 byte budget, whichever comes first, and leaves its cursor at the last
+returned entry. The budget reserves space for the success envelope and the largest
+accepted request id (1 KiB of JSON-encoded UTF-8). Entry `path` and `message` fields are
+shortened to 16 KiB of JSON-encoded UTF-8 on reads, with `truncated` naming the shortened
+fields. This guarantees that even a single oversized project failure can be delivered
+and passed by cursor. Text truncation does not change stored history or imply eviction.
+
+**Stored entries are immutable.** Appending freezes the record; reads expose readonly,
+frozen results. Read-time truncation creates a new frozen record instead of editing the
+one retained in the log.
