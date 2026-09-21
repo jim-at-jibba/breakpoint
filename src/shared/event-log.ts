@@ -1,3 +1,4 @@
+import type { EmulationCapability, EmulationChanges } from './emulation'
 import type { Size } from './panes'
 import {
   jsonByteLength,
@@ -77,6 +78,18 @@ export type PaneEntryBody =
       readonly message: string
     }
   | { readonly type: 'pane.geometryMatched' }
+  /** The pane's declared emulation was changed through `panes.setEmulation`: the new values. */
+  | { readonly type: 'pane.emulationChanged'; readonly changes: Readonly<EmulationChanges> }
+  /**
+   * One override was refused, so that capability is not in force. Written when it starts
+   * failing or fails differently, not on every reapply that fails the same way.
+   */
+  | {
+      readonly type: 'pane.emulationFailed'
+      readonly capability: EmulationCapability
+      readonly message: string
+    }
+  | { readonly type: 'pane.emulationRecovered'; readonly capability: EmulationCapability }
   | { readonly type: 'pane.destroyed' }
 
 type TruncatedField = 'path' | 'message' | 'url'
@@ -255,6 +268,12 @@ function copyBody(body: EntryBody): EntryBody {
         measured: Object.freeze({ width: body.measured.width, height: body.measured.height }),
         message: body.message
       }
+    case 'pane.emulationChanged':
+      return { type: body.type, changes: Object.freeze({ ...body.changes }) }
+    case 'pane.emulationFailed':
+      return { type: body.type, capability: body.capability, message: body.message }
+    case 'pane.emulationRecovered':
+      return { type: body.type, capability: body.capability }
     case 'pane.geometryMatched':
     case 'pane.destroyed':
       return { type: body.type }

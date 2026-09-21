@@ -167,6 +167,14 @@ function describeEntry(entry: Entry): string {
       return `degraded: ${entry.message}`
     case 'pane.geometryMatched':
       return 'drawn at its declared size again'
+    case 'pane.emulationChanged':
+      return `emulation set: ${Object.entries(entry.changes)
+        .map(([name, value]) => `${name} ${String(value)}`)
+        .join(', ')}`
+    case 'pane.emulationFailed':
+      return `degraded: ${entry.capability} not emulated: ${entry.message}`
+    case 'pane.emulationRecovered':
+      return `${entry.capability} emulated again`
     case 'pane.destroyed':
       return 'destroyed'
   }

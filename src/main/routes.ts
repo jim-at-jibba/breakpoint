@@ -1,4 +1,5 @@
 import { isCursorPosition, type EventLog } from '../shared/event-log'
+import { isColorScheme } from '../shared/project'
 import { failure, success, type RouteRequest, type RouteResponse } from '../shared/protocol'
 import { isRouteName, type RouteName, type RouteParams, type RoutePayload } from '../shared/routes'
 import { RouteError } from './route-error'
@@ -100,6 +101,47 @@ function expectGeometryReport(raw: unknown): ParamsOk<'panes.reportGeometry'> | 
   return { ok: true, params: { pane: report.pane, expected, measured } }
 }
 
+const EMULATION_FIELDS = ['colorScheme', 'dpr', 'mobile'] as const
+
+function expectEmulationSetting(raw: unknown): ParamsOk<'panes.setEmulation'> | ParamsBad {
+  const shape = 'this route takes { pane } and at least one of colorScheme, dpr, mobile'
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, message: shape }
+  }
+  const setting = raw as Record<string, unknown>
+  if (typeof setting.pane !== 'string' || setting.pane.length === 0) {
+    return { ok: false, message: 'pane must be a non-empty string' }
+  }
+  // A misspelt field would otherwise be a change that silently changes nothing.
+  const unknown = Object.keys(setting).filter(
+    (key) => key !== 'pane' && !(EMULATION_FIELDS as readonly string[]).includes(key)
+  )
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { colorScheme, dpr, mobile } = setting
+  if (colorScheme === undefined && dpr === undefined && mobile === undefined) {
+    return { ok: false, message: shape }
+  }
+  if (colorScheme !== undefined && !isColorScheme(colorScheme)) {
+    return { ok: false, message: 'colorScheme must be light, dark or system' }
+  }
+  if (dpr !== undefined && !(typeof dpr === 'number' && Number.isFinite(dpr) && dpr > 0)) {
+    return { ok: false, message: 'dpr must be a finite number above 0' }
+  }
+  if (mobile !== undefined && typeof mobile !== 'boolean') {
+    return { ok: false, message: 'mobile must be true or false' }
+  }
+  return {
+    ok: true,
+    params: {
+      pane: setting.pane,
+      ...(colorScheme !== undefined && { colorScheme }),
+      ...(dpr !== undefined && { dpr }),
+      ...(mobile !== undefined && { mobile })
+    }
+  }
+}
+
 export interface DispatchResult {
   response: RouteResponse
   afterRespond?: () => void
@@ -136,6 +178,10 @@ export function createRouteTable(services: Services): RouteTable {
     'panes.reportGeometry': {
       parseParams: expectGeometryReport,
       handle: (report) => ({ payload: services.panes.reportGeometry(report) })
+    },
+    'panes.setEmulation': {
+      parseParams: expectEmulationSetting,
+      handle: async (setting) => ({ payload: await services.panes.setEmulation(setting) })
     },
     'project.open': {
       parseParams: expectPath,

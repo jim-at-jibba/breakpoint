@@ -1,3 +1,8 @@
+import {
+  affectedCapabilities,
+  type EmulationChanges,
+  type EmulationResult
+} from '../../shared/emulation'
 import type { EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
   compareGeometry,
@@ -5,8 +10,8 @@ import {
   type PaneObservation,
   type PaneStatus
 } from '../../shared/panes'
-import type { Project } from '../../shared/project'
-import type { GeometryReport, PaneListing } from '../../shared/routes'
+import type { Pane, Project } from '../../shared/project'
+import type { EmulationSetting, GeometryReport, PaneListing } from '../../shared/routes'
 import { paneStatusesFor } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
@@ -30,6 +35,20 @@ interface GuestDestruction {
   current: boolean
 }
 
+/** A pane after a change, and which of the asked-for values were actually different. */
+export interface PaneUpdate {
+  pane: Pane
+  changes: EmulationChanges
+}
+
+/**
+ * Where a pane's declared values are changed. The project service owns the open project
+ * and its file; this is the one thing panes need from it.
+ */
+export interface PaneProjects {
+  updatePane(pane: string, changes: EmulationChanges): Promise<PaneUpdate>
+}
+
 /**
  * Panes as the app observes them while it runs: whether each has its attachment, whether
  * it is drawn at the size it claims, and why it is degraded if it is.
@@ -45,13 +64,15 @@ export class PaneService {
 
   constructor(
     private readonly feed: StateFeed,
-    private readonly log: EventLog
+    private readonly log: EventLog,
+    private readonly projects: PaneProjects
   ) {}
 
   /**
-   * Called by the project service as a project opens, before it is announced. The feed
-   * patch that announces it carries no statuses: the window reconciles its own through
-   * the same shared function, so both sides agree without a patch per pane.
+   * Called by the project service as a project opens or one of its panes changes, before
+   * either is announced. The feed patch that announces it carries no statuses: the window
+   * reconciles its own through the same shared function, so both sides agree without a
+   * patch per pane.
    */
   open(project: Project): void {
     this.project = project
@@ -64,6 +85,11 @@ export class PaneService {
 
   has(pane: string): boolean {
     return Object.hasOwn(this.current, pane)
+  }
+
+  /** What a pane declares, for whatever emulates it. */
+  paneFor(pane: string): Pane | undefined {
+    return this.project?.panes.find((candidate) => candidate.id === pane)
   }
 
   list(): { panes: PaneListing[] } {
@@ -130,6 +156,45 @@ export class PaneService {
 
     this.observe(pane, { type: 'geometryChecked', result })
     return { status: this.current[pane] }
+  }
+
+  /**
+   * Changes what a pane emulates. The pane host follows the announcement and reapplies
+   * the overrides to the pane's guest; what it manages to apply is reported separately,
+   * through `emulated`, because a change that is saved is not yet a change in force.
+   */
+  async setEmulation({ pane, ...changes }: EmulationSetting): Promise<{ pane: PaneListing }> {
+    const update = await this.projects.updatePane(pane, changes)
+    if (Object.keys(update.changes).length > 0) {
+      this.record(pane, { type: 'pane.emulationChanged', changes: update.changes })
+    }
+    return { pane: { ...update.pane, status: this.current[pane] } }
+  }
+
+  invalidateEmulation(pane: string, changes: EmulationChanges): void {
+    this.observe(pane, { type: 'emulationPending', capabilities: affectedCapabilities(changes) })
+  }
+
+  /**
+   * What the latest application of a pane's overrides achieved, capability by capability.
+   * An entry is written when a capability starts failing, fails differently, or recovers —
+   * not on every reapply, which happens on every navigation and says nothing new.
+   */
+  emulated(pane: string, results: readonly EmulationResult[]): void {
+    if (!this.has(pane)) return
+    const before = this.current[pane]
+    for (const result of results) {
+      const { capability } = result
+      if (!result.ok) {
+        const known = before.degraded.find((degradation) => degradation.cause === capability)
+        if (known?.message !== result.message) {
+          this.record(pane, { type: 'pane.emulationFailed', capability, message: result.message })
+        }
+      } else if (before.degraded.some((degradation) => degradation.cause === capability)) {
+        this.record(pane, { type: 'pane.emulationRecovered', capability })
+      }
+    }
+    this.observe(pane, { type: 'emulated', results })
   }
 
   private record(pane: string, body: PaneEntryBody): void {

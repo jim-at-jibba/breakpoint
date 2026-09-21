@@ -34,7 +34,10 @@ beforeEach(async () => {
     patches.push(patch)
   })
   log = new EventLog()
-  service = new ProjectService(store, feed, log, new PaneService(feed, log))
+  const panes = new PaneService(feed, log, {
+    updatePane: (pane, changes) => service.updatePane(pane, changes)
+  })
+  service = new ProjectService(store, feed, log, panes)
 })
 
 afterEach(async () => {

@@ -9,6 +9,7 @@
  * renderer, the main process and the CLI all see at once.
  */
 
+import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
 import type { PaneStatus, Size } from './panes'
 import type { Pane } from './project'
@@ -22,6 +23,7 @@ export const ROUTE_NAMES = [
   'log.read',
   'panes.list',
   'panes.reportGeometry',
+  'panes.setEmulation',
   'project.open',
   'project.state'
 ] as const
@@ -50,6 +52,12 @@ export interface RouteSignatures {
    */
   'panes.reportGeometry': { params: GeometryReport; payload: { status: PaneStatus } }
   /**
+   * Changes what one pane emulates — DPR, the mobile flag, colour scheme — and keeps it
+   * with the project. The payload is the pane as now declared; whether each override took
+   * is its status, which follows once the pane's guest has been told.
+   */
+  'panes.setEmulation': { params: EmulationSetting; payload: { pane: PaneListing } }
+  /**
    * Opens the project for a repo, creating it the first time. `path` is absolute: the
    * caller resolves it against its own working directory, which the app cannot know.
    */
@@ -65,6 +73,8 @@ export interface GeometryReport {
   expected: Size
   measured: Size
 }
+
+export type EmulationSetting = EmulationChanges & { pane: string }
 
 export type RouteParams<N extends RouteName> = RouteSignatures[N]['params']
 export type RoutePayload<N extends RouteName> = RouteSignatures[N]['payload']

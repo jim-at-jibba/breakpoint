@@ -154,16 +154,16 @@ if (!hasSingleInstanceLock) {
     const feed = new StateFeed()
     const log = new EventLog()
     const projectStore = new ProjectStore(join(userDataDir, 'projects'))
-    const panes = new PaneService(feed, log)
-    paneHost = new PaneHost(panes)
+    // The two services reach each other: opening a project resets its panes, and changing
+    // a pane changes the project. Neither calls the other while being constructed.
+    const panes = new PaneService(feed, log, {
+      updatePane: (pane, changes) => projects.updatePane(pane, changes)
+    })
+    const projects = new ProjectService(projectStore, feed, log, panes)
+    paneHost = new PaneHost(panes, feed)
     paneHost.install(app)
     dispatch = createDispatch(
-      createRouteTable({
-        app: new AppService(),
-        log,
-        panes,
-        project: new ProjectService(projectStore, feed, log, panes)
-      })
+      createRouteTable({ app: new AppService(), log, panes, project: projects })
     )
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)

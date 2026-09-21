@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareGeometry,
+  describeDegradation,
   foldPaneStatus,
   initialPaneStatus,
   PANE_PREFERENCE,
@@ -8,6 +9,7 @@ import {
   paneWebPreferences,
   reconcilePaneStatuses
 } from './panes'
+import type { EmulationResult } from './emulation'
 
 describe('compareGeometry', () => {
   it('passes a pane drawn at its declared size times the zoom', () => {
@@ -38,10 +40,16 @@ describe('compareGeometry', () => {
 describe('a pane status', () => {
   const mismatch = compareGeometry({ width: 390, height: 844 }, { width: 390, height: 150 })
 
-  it('starts waiting for its attachment, unchecked, and not degraded', () => {
+  it('starts waiting for its attachment, unchecked, unemulated, and not degraded', () => {
     expect(initialPaneStatus()).toEqual({
       attachment: 'pending',
       geometry: 'unchecked',
+      emulation: {
+        viewport: 'pending',
+        userAgent: 'pending',
+        touch: 'pending',
+        colorScheme: 'pending'
+      },
       degraded: []
     })
   })
@@ -52,8 +60,8 @@ describe('a pane status', () => {
       message: 'Debugger is already attached to the target'
     })
     expect(failed).toEqual({
+      ...initialPaneStatus(),
       attachment: 'failed',
-      geometry: 'unchecked',
       degraded: [{ cause: 'attachment', message: 'Debugger is already attached to the target' }]
     })
 
@@ -87,7 +95,7 @@ describe('a pane status', () => {
   it('clears a geometry mismatch when a later check passes', () => {
     let status = foldPaneStatus(initialPaneStatus(), { type: 'geometryChecked', result: mismatch })
     status = foldPaneStatus(status, { type: 'geometryChecked', result: { ok: true } })
-    expect(status).toEqual({ attachment: 'pending', geometry: 'ok', degraded: [] })
+    expect(status).toEqual({ ...initialPaneStatus(), geometry: 'ok' })
   })
 
   it('starts over when its guest is replaced, since nothing observed of the old one holds', () => {
@@ -95,6 +103,66 @@ describe('a pane status', () => {
     status = foldPaneStatus(status, { type: 'geometryChecked', result: mismatch })
     expect(foldPaneStatus(status, { type: 'guestCreated' })).toEqual(initialPaneStatus())
     expect(foldPaneStatus(status, { type: 'guestDestroyed' })).toEqual(initialPaneStatus())
+  })
+})
+
+describe('a pane status under emulation', () => {
+  const allApplied: EmulationResult[] = [
+    { capability: 'viewport', ok: true },
+    { capability: 'userAgent', ok: true },
+    { capability: 'touch', ok: true },
+    { capability: 'colorScheme', ok: true }
+  ]
+  const schemeRefused: EmulationResult[] = [
+    ...allApplied.slice(0, 3),
+    { capability: 'colorScheme', ok: false, message: 'Invalid feature' }
+  ]
+
+  it('reads applied, capability by capability, once every override is accepted', () => {
+    const status = foldPaneStatus(initialPaneStatus(), { type: 'emulated', results: allApplied })
+    expect(status.emulation).toEqual({
+      viewport: 'applied',
+      userAgent: 'applied',
+      touch: 'applied',
+      colorScheme: 'applied'
+    })
+    expect(status.degraded).toEqual([])
+  })
+
+  it('degrades only the capability that was refused, with the reason, and keeps the rest applied', () => {
+    const status = foldPaneStatus(initialPaneStatus(), { type: 'emulated', results: schemeRefused })
+    expect(status.emulation).toEqual({
+      viewport: 'applied',
+      userAgent: 'applied',
+      touch: 'applied',
+      colorScheme: 'failed'
+    })
+    expect(status.degraded).toEqual([{ cause: 'colorScheme', message: 'Invalid feature' }])
+    expect(describeDegradation(status.degraded[0])).toBe('colorScheme: Invalid feature')
+  })
+
+  it('recovers a capability a later application gets through', () => {
+    let status = foldPaneStatus(initialPaneStatus(), { type: 'emulated', results: schemeRefused })
+    status = foldPaneStatus(status, { type: 'emulated', results: allApplied })
+    expect(status.emulation.colorScheme).toBe('applied')
+    expect(status.degraded).toEqual([])
+  })
+
+  it('keeps an emulation failure alongside other causes', () => {
+    let status = foldPaneStatus(initialPaneStatus(), {
+      type: 'geometryChecked',
+      result: { ok: false, message: 'drawn 390×150, declared 390×844 at this zoom' }
+    })
+    status = foldPaneStatus(status, { type: 'emulated', results: schemeRefused })
+    expect(status.degraded.map((degradation) => degradation.cause)).toEqual([
+      'geometry',
+      'colorScheme'
+    ])
+  })
+
+  it('forgets what was emulated when its guest is replaced', () => {
+    const status = foldPaneStatus(initialPaneStatus(), { type: 'emulated', results: schemeRefused })
+    expect(foldPaneStatus(status, { type: 'guestCreated' })).toEqual(initialPaneStatus())
   })
 })
 

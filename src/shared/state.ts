@@ -1,5 +1,5 @@
 import { reconcilePaneStatuses, type PaneStatus } from './panes'
-import type { Project } from './project'
+import type { Pane, Project } from './project'
 
 /**
  * What the renderer renders from: a snapshot, kept current by patches.
@@ -33,6 +33,8 @@ export interface StateSnapshot {
 export type StatePatch =
   | { type: 'project.opened'; project: Project }
   | { type: 'pane.status'; pane: string; status: PaneStatus }
+  /** A saved declaration; any affected capabilities were marked pending before this patch. */
+  | { type: 'pane.changed'; pane: Pane }
 
 export interface RevisionedPatch {
   revision: number
@@ -57,6 +59,15 @@ export function applyPatch(
     case 'pane.status':
       if (!Object.hasOwn(before.panes, patch.pane)) return { ...before, revision }
       return { ...before, revision, panes: { ...before.panes, [patch.pane]: patch.status } }
+    case 'pane.changed': {
+      const { project } = before
+      const { pane } = patch
+      if (!project?.panes.some((candidate) => candidate.id === pane.id)) {
+        return { ...before, revision }
+      }
+      const panes = project.panes.map((candidate) => (candidate.id === pane.id ? pane : candidate))
+      return { ...before, revision, project: { ...project, panes } }
+    }
   }
 }
 

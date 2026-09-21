@@ -61,18 +61,33 @@ async function openProject(path: string): Promise<StateSnapshot> {
 }
 
 /**
- * The snapshot once every pane has been attached to or given up on and has been measured,
- * after which nothing announces a change on its own. Tests that forge patches number them
+ * The snapshot once every pane has been attached to or given up on, has been measured,
+ * and has reported its emulation if it has an attachment to emulate over, after which
+ * nothing announces a change on its own. Tests that forge patches number them
  * from this revision; one taken at open is overtaken by the panes' own status patches.
+ *
+ * The revision must also hold across two polls. Patches reach the window a frame after
+ * the app publishes them, so a snapshot read the instant the last one is published is
+ * ahead of the window, and a patch forged from it would look like a gap.
  */
 async function quietSnapshot(): Promise<StateSnapshot> {
   let snapshot: StateSnapshot | undefined
+  let previous: number | undefined
   await expect
     .poll(async () => {
       const run = await runCli(sandbox, ['state', '--json'])
       snapshot = JSON.parse(run.stdout) as StateSnapshot
-      return Object.values(snapshot.panes).every(
-        (status) => status.attachment !== 'pending' && status.geometry !== 'unchecked'
+      const held = snapshot.revision === previous
+      previous = snapshot.revision
+      return (
+        held &&
+        Object.values(snapshot.panes).every(
+          (status) =>
+            status.attachment !== 'pending' &&
+            status.geometry !== 'unchecked' &&
+            (status.attachment === 'failed' ||
+              Object.values(status.emulation).every((capability) => capability !== 'pending'))
+        )
       )
     })
     .toBe(true)

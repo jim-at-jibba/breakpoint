@@ -192,6 +192,10 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 const LAYOUTS: ReadonlySet<string> = new Set<Layout>(['horizontal', 'focus'])
 const COLOR_SCHEMES: ReadonlySet<string> = new Set<ColorScheme>(['light', 'dark', 'system'])
 
+export function isColorScheme(value: unknown): value is ColorScheme {
+  return typeof value === 'string' && COLOR_SCHEMES.has(value)
+}
+
 function isString(value: unknown): value is string {
   return typeof value === 'string'
 }
@@ -222,7 +226,7 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
   if (!isString(pane.id) || !isString(pane.name)) return undefined
   if (!isPositive(pane.width) || !isPositive(pane.height) || !isPositive(pane.dpr)) return undefined
   if (typeof pane.mobile !== 'boolean') return undefined
-  if (!isString(pane.colorScheme) || !COLOR_SCHEMES.has(pane.colorScheme)) return undefined
+  if (!isColorScheme(pane.colorScheme)) return undefined
   if (!isString(pane.session) || !sessionIds.has(pane.session)) return undefined
   if (pane.preset !== null && !isString(pane.preset)) return undefined
   return {
@@ -232,7 +236,7 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
     height: pane.height,
     dpr: pane.dpr,
     mobile: pane.mobile,
-    colorScheme: pane.colorScheme as ColorScheme,
+    colorScheme: pane.colorScheme,
     session: pane.session,
     preset: pane.preset
   }
