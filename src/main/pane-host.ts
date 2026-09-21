@@ -1,7 +1,9 @@
 import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
+import { applyEmulation, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
 import type { PaneService } from './services/pane-service'
+import type { StateFeed } from './state-feed'
 
 /**
  * `PaneHost` owns a pane's Electron side: letting its `<webview>` attach, forcing the
@@ -12,6 +14,12 @@ import type { PaneService } from './services/pane-service'
  * Pane content has no IPC channel: everything the app learns about a page arrives over
  * the attachment, which the page cannot see or spoof. What the host observes it reports
  * to the pane service by pane id.
+ *
+ * Emulation travels over the attachment too, and is applied on attach, on every
+ * main-frame navigation, and when a pane's declared values change — never on a renderer
+ * process swap, which overrides were measured surviving untouched ([ADR-0002]). Reapplying
+ * on navigation is insurance, not a fix for an observed failure, and it is invisible: no
+ * reload, no entry unless something it applies stops or starts working.
  */
 
 /** The app window's preferences for hosting panes. The tag is enabled here and nowhere else. */
@@ -48,9 +56,25 @@ export class PaneHost {
   private readonly hosts = new WeakSet<WebContents>()
   private readonly sessions = new WeakSet<Session>()
   private readonly guests = new Map<string, WebContents>()
+  /**
+   * Guests whose attachment is ours. `isAttached` cannot say: it is true of a guest some
+   * other client attached to, and that attachment is not ours to emulate over.
+   */
+  private readonly attachments = new WeakSet<WebContents>()
+  /** The latest emulation pass per guest, so a slow answer cannot report over a newer one. */
+  private readonly passes = new WeakMap<WebContents, number>()
   private pending: PendingGuest | null = null
 
-  constructor(private readonly panes: PaneService) {}
+  constructor(
+    private readonly panes: PaneService,
+    feed: StateFeed
+  ) {
+    feed.subscribe(({ patch }) => {
+      if (patch.type !== 'pane.changed') return
+      const guest = this.guests.get(patch.pane.id)
+      if (guest) this.emulate(patch.pane.id, guest)
+    })
+  }
 
   /**
    * Installs the guards every web contents gets, whether or not it hosts panes. Call once,
@@ -173,6 +197,9 @@ export class PaneHost {
       failed = true
       if (current()) this.panes.loadFailed({ pane, url, code, message: description })
     })
+    guest.on('did-navigate', () => {
+      if (current()) this.emulate(pane, guest)
+    })
     guest.once('destroyed', () => {
       const wasCurrent = current()
       if (wasCurrent) this.guests.delete(pane)
@@ -208,6 +235,28 @@ export class PaneHost {
       }
       return
     }
+    this.attachments.add(guest)
+    guest.debugger.once('detach', () => this.attachments.delete(guest))
     this.panes.attached(pane, attempt)
+    this.emulate(pane, guest)
+  }
+
+  /**
+   * Sends every override for what the pane declares now, each on its own, and reports what
+   * took. A pane with no attachment is left alone: its status already says why.
+   */
+  private emulate(pane: string, guest: WebContents): void {
+    const declared = this.panes.paneFor(pane)
+    if (!declared || guest.isDestroyed() || !this.attachments.has(guest)) return
+    const pass = (this.passes.get(guest) ?? 0) + 1
+    this.passes.set(guest, pass)
+
+    void applyEmulation(emulationFor(declared, process.versions.chrome), ({ method, params }) =>
+      guest.debugger.sendCommand(method, params)
+    ).then((results) => {
+      if (this.passes.get(guest) === pass && this.isCurrent(pane, guest)) {
+        this.panes.emulated(pane, results)
+      }
+    })
   }
 }

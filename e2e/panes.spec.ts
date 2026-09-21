@@ -177,7 +177,7 @@ test('state --json prints the pane set, each pane with what is observed of it', 
   expect(snapshot.project?.panes).toEqual(shop.panes)
   expect(Object.keys(snapshot.panes)).toEqual(shop.panes.map((pane) => pane.id))
   for (const pane of shop.panes) {
-    expect(snapshot.panes[pane.id]).toEqual({
+    expect(snapshot.panes[pane.id]).toMatchObject({
       attachment: 'attached',
       geometry: 'ok',
       degraded: []
@@ -223,6 +223,13 @@ test('a pane whose attachment fails still renders, degraded with the reason, and
     expect(snapshot.panes[pane.id]).toEqual({
       attachment: 'failed',
       geometry: 'ok',
+      // Nothing can be emulated without the attachment, so nothing claims to be.
+      emulation: {
+        viewport: 'pending',
+        userAgent: 'pending',
+        touch: 'pending',
+        colorScheme: 'pending'
+      },
       degraded: [{ cause: 'attachment', message: 'Debugger is already attached to the target' }]
     })
     expect(await webviewBox(page, pane.id)).toEqual({ width: pane.width, height: pane.height })
@@ -302,7 +309,7 @@ test('a pane drawn at a size other than it declares is degraded, logged, and lef
   const message = 'drawn 390×150, declared 390×844 at this zoom'
   await expect
     .poll(async () => (await state()).panes[mobile.id])
-    .toEqual({
+    .toMatchObject({
       attachment: 'attached',
       geometry: 'mismatch',
       degraded: [{ cause: 'geometry', message }]

@@ -1,10 +1,11 @@
 import { realpath, stat } from 'node:fs/promises'
 import type { EventLog } from '../../shared/event-log'
-import { createProject, type Project } from '../../shared/project'
+import type { EmulationChanges } from '../../shared/emulation'
+import { createProject, type Pane, type Project } from '../../shared/project'
 import type { StateSnapshot } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
-import type { PaneService } from './pane-service'
+import type { PaneService, PaneUpdate } from './pane-service'
 import type { ProjectStore } from './project-store'
 
 /**
@@ -19,7 +20,8 @@ import type { ProjectStore } from './project-store'
  */
 export class ProjectService {
   private current: Project | null = null
-  private pendingOpen: Promise<void> = Promise.resolve()
+  /** Opens and pane changes, one at a time, in the order they were asked for. */
+  private queue: Promise<void> = Promise.resolve()
 
   constructor(
     private readonly store: ProjectStore,
@@ -33,9 +35,9 @@ export class ProjectService {
    * slash — so every route to the same repo is the same project.
    */
   open(path: string): Promise<StateSnapshot> {
-    const opened = this.pendingOpen.then(() => this.openNext(path))
+    const opened = this.queue.then(() => this.openNext(path))
     // The caller receives the rejection; later opens must still get their turn.
-    this.pendingOpen = opened.then(
+    this.queue = opened.then(
       () => undefined,
       () => undefined
     )
@@ -82,6 +84,47 @@ export class ProjectService {
     this.panes.open(project)
     this.feed.publish({ type: 'project.opened', project })
     return this.snapshot()
+  }
+
+  /**
+   * Changes one of the open project's panes, saves the project and announces the pane.
+   * Queued behind any open in flight, so a change can never land on the project an open
+   * is replacing. Values the pane already has are not a change: nothing is saved or
+   * announced for them.
+   */
+  updatePane(id: string, changes: EmulationChanges): Promise<PaneUpdate> {
+    const updated = this.queue.then(() => this.replacePane(id, changes))
+    this.queue = updated.then(
+      () => undefined,
+      () => undefined
+    )
+    return updated
+  }
+
+  private async replacePane(id: string, changes: EmulationChanges): Promise<PaneUpdate> {
+    const project = this.current
+    const pane = project?.panes.find((candidate) => candidate.id === id)
+    if (!project || !pane)
+      throw new RouteError('PANE_NOT_FOUND', `no pane ${id} in the open project`)
+
+    const changed = Object.fromEntries(
+      Object.entries(changes).filter(
+        ([name, value]) => value !== undefined && pane[name as keyof EmulationChanges] !== value
+      )
+    ) as EmulationChanges
+    if (Object.keys(changed).length === 0) return { pane, changes: changed }
+
+    const next: Pane = { ...pane, ...changed }
+    const updated: Project = {
+      ...project,
+      panes: project.panes.map((candidate) => (candidate.id === id ? next : candidate))
+    }
+    // Saved first: a change that could not be kept is not made.
+    await this.store.save(updated)
+    this.current = updated
+    this.panes.open(updated)
+    this.feed.publish({ type: 'pane.changed', pane: next })
+    return { pane: next, changes: changed }
   }
 
   snapshot(): StateSnapshot {

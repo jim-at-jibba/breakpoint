@@ -74,4 +74,38 @@ describe('applying a patch', () => {
     })
     expect(next).toEqual({ ...open, revision: 2 })
   })
+
+  it('replaces a changed pane in place and keeps what is observed of every pane', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const degraded = applyPatch(open, {
+      revision: 2,
+      patch: { type: 'pane.status', pane: tablet, status: failed }
+    })
+    const dark = { ...shop.panes[1], colorScheme: 'dark' as const }
+    const next = applyPatch(degraded, { revision: 3, patch: { type: 'pane.changed', pane: dark } })
+
+    expect(next.project?.panes).toEqual([shop.panes[0], dark, shop.panes[2]])
+    expect(next.panes).toEqual(degraded.panes)
+    expect(next.revision).toBe(3)
+  })
+
+  it('ignores a change to a pane the open project does not have', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const ghost = { ...shop.panes[0], id: 'ghost' }
+    expect(applyPatch(open, { revision: 2, patch: { type: 'pane.changed', pane: ghost } })).toEqual(
+      {
+        ...open,
+        revision: 2
+      }
+    )
+    expect(
+      applyPatch(nothingOpen, { revision: 1, patch: { type: 'pane.changed', pane: ghost } })
+    ).toEqual({ ...nothingOpen, revision: 1 })
+  })
 })

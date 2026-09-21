@@ -1,3 +1,5 @@
+import { EMULATION_CAPABILITIES, type EmulationCapability, type EmulationResult } from './emulation'
+
 /**
  * What the app knows about a pane while it runs, as opposed to what the project stores
  * about it. A `Pane` is declared; a `PaneStatus` is observed.
@@ -56,15 +58,29 @@ export type AttachmentState = 'pending' | 'attached' | 'failed'
 /** The last host-side geometry check, or `unchecked` until the pane has been measured. */
 export type GeometryState = 'unchecked' | 'ok' | 'mismatch'
 
-/** One reason a rendering pane is degraded. A cause appears at most once. */
+/**
+ * Whether one emulation capability is in force on the pane's guest: `pending` until the
+ * overrides have been sent over an attachment, which a pane whose attachment failed never
+ * gets past.
+ */
+export type CapabilityState = 'pending' | 'applied' | 'failed'
+
+export type EmulationState = Record<EmulationCapability, CapabilityState>
+
+/**
+ * One reason a rendering pane is degraded. A cause appears at most once. Each emulation
+ * capability is its own cause, since each is refused on its own.
+ */
 export interface PaneDegradation {
-  cause: 'attachment' | 'geometry'
+  cause: 'attachment' | 'geometry' | EmulationCapability
   message: string
 }
 
 export interface PaneStatus {
   attachment: AttachmentState
   geometry: GeometryState
+  /** What is actually emulated, as opposed to what the pane declares. */
+  emulation: EmulationState
   /** Empty when the pane is healthy. A degraded pane still renders ([CONTEXT.md]). */
   degraded: PaneDegradation[]
 }
@@ -80,10 +96,14 @@ export type PaneObservation =
   | { type: 'attached' }
   | { type: 'attachFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
+  | { type: 'emulated'; results: readonly EmulationResult[] }
   | { type: 'guestDestroyed' }
 
 export function initialPaneStatus(): PaneStatus {
-  return { attachment: 'pending', geometry: 'unchecked', degraded: [] }
+  const emulation = Object.fromEntries(
+    EMULATION_CAPABILITIES.map((capability) => [capability, 'pending'])
+  ) as EmulationState
+  return { attachment: 'pending', geometry: 'unchecked', emulation, degraded: [] }
 }
 
 export function foldPaneStatus(status: PaneStatus, observation: PaneObservation): PaneStatus {
@@ -108,6 +128,18 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
         geometry: 'mismatch',
         degraded: withCause(status, { cause: 'geometry', message: result.message })
       }
+    }
+    case 'emulated': {
+      let next = status
+      for (const result of observation.results) {
+        const { capability } = result
+        const emulation = { ...next.emulation, [capability]: result.ok ? 'applied' : 'failed' }
+        const degraded = result.ok
+          ? without(next, capability)
+          : withCause(next, { cause: capability, message: result.message })
+        next = { ...next, emulation, degraded }
+      }
+      return next
     }
   }
 }
