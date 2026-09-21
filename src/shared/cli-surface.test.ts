@@ -84,7 +84,11 @@ describe('parseArgv', () => {
   })
 
   it('treats no arguments as a usage mistake, not as help', () => {
-    expect(parseArgv([])).toEqual({ kind: 'error', message: expect.stringContaining('command') })
+    expect(parseArgv([])).toEqual({
+      kind: 'error',
+      message: expect.stringContaining('command'),
+      options: { json: false, noLaunch: false, verbose: false }
+    })
   })
 
   it('rejects an unknown command', () => {
@@ -107,5 +111,17 @@ describe('parseArgv', () => {
 
   it('rejects a lone dash rather than reading it as a command', () => {
     expect(parseArgv(['-']).kind).toBe('error')
+  })
+
+  it.each([
+    ['--json', 'quit', '--turbo'],
+    ['quit', '--turbo', '--json'],
+    ['quit', 'now', '--json'],
+    ['frobnicate', '--json'],
+    ['--json']
+  ])('retains JSON mode for invalid arguments: %j', (...argv: string[]) => {
+    const result = parseArgv(argv)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.options.json).toBe(true)
   })
 })

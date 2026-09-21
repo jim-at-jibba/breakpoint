@@ -34,6 +34,12 @@ export type WireErrorCode = (typeof WIRE_ERROR_CODES)[number]
 export type SurfaceErrorCode = (typeof SURFACE_ERROR_CODES)[number]
 export type ErrorCode = (typeof ERROR_CODES)[number]
 
+const ERROR_CODE_SET: ReadonlySet<string> = new Set(ERROR_CODES)
+
+function isErrorCode(value: unknown): value is ErrorCode {
+  return typeof value === 'string' && ERROR_CODE_SET.has(value)
+}
+
 /**
  * Stands in for the id of a request we could not read one from. A reply still has to be
  * addressed, and refusing to answer at all would leave the caller waiting.
@@ -53,11 +59,11 @@ export interface RouteRequest {
   params?: unknown
 }
 
-export interface RouteSuccess {
+export interface RouteSuccess<T = unknown> {
   id: string
   ok: true
   /** The route's payload. Named `data` on the wire, per the contract #6 settled. */
-  data: unknown
+  data: T
 }
 
 export interface RouteFailure {
@@ -66,9 +72,9 @@ export interface RouteFailure {
   error: RouteError
 }
 
-export type RouteResponse = RouteSuccess | RouteFailure
+export type RouteResponse<T = unknown> = RouteSuccess<T> | RouteFailure
 
-export function success(id: string, data: unknown): RouteSuccess {
+export function success<T>(id: string, data: T): RouteSuccess<T> {
   return { id, ok: true, data }
 }
 
@@ -93,14 +99,50 @@ export function encodeLine(value: unknown): string {
   return `${JSON.stringify(value)}\n`
 }
 
-/** Splits a byte stream into whole lines, holding a partial line back for the next chunk. */
+export const MAX_FRAME_BYTES = 1024 * 1024
+
+const UTF8_ENCODER = new TextEncoder()
+
+export class FrameTooLargeError extends Error {
+  constructor() {
+    super(`frame exceeds the ${MAX_FRAME_BYTES}-byte limit`)
+  }
+}
+
+/** The limit excludes the newline and counts UTF-8 bytes, not JavaScript characters. */
 export class LineBuffer {
-  private rest = ''
+  private fragments: string[] = []
+  private bytes = 0
 
   push(chunk: string): string[] {
-    const parts = (this.rest + chunk).split('\n')
-    this.rest = parts.pop() ?? ''
-    return parts.filter((line) => line.length > 0)
+    const lines: string[] = []
+    let start = 0
+
+    while (start < chunk.length) {
+      const newline = chunk.indexOf('\n', start)
+      const end = newline === -1 ? chunk.length : newline
+      const fragment = chunk.slice(start, end)
+      const fragmentBytes =
+        fragment.length > MAX_FRAME_BYTES
+          ? fragment.length
+          : UTF8_ENCODER.encode(fragment).byteLength
+      if (this.bytes + fragmentBytes > MAX_FRAME_BYTES) {
+        this.fragments = []
+        this.bytes = 0
+        throw new FrameTooLargeError()
+      }
+      if (fragment.length > 0) {
+        this.fragments.push(fragment)
+        this.bytes += fragmentBytes
+      }
+      if (newline === -1) break
+      if (this.bytes > 0) lines.push(this.fragments.join(''))
+      this.fragments = []
+      this.bytes = 0
+      start = newline + 1
+    }
+
+    return lines
   }
 }
 
@@ -157,11 +199,15 @@ export function parseResponseLine(line: string): ParsedResponse {
     return { ok: true, response: { id: object.id, ok: true, data: object.data } }
   }
   if (object.ok === false) {
-    const error = object.error as RouteError | undefined
-    if (!error || typeof error.code !== 'string' || typeof error.message !== 'string') {
+    const error = asObject(object.error)
+    if (!error || typeof error.message !== 'string') {
       return malformed('failed response has no error')
     }
-    return { ok: true, response: { id: object.id, ok: false, error } }
+    if (!isErrorCode(error.code)) return malformed('failed response has an unknown error code')
+    return {
+      ok: true,
+      response: failure(object.id, error.code, error.message, error.details)
+    }
   }
   return malformed('response is neither a success nor a failure')
 }

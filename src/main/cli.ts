@@ -5,10 +5,12 @@ import { join } from 'node:path'
 import { helpText, parseArgv, type CliCommandSpec, type CliOptions } from '../shared/cli-surface'
 import {
   LineBuffer,
+  FrameTooLargeError,
   encodeLine,
   exitCodeFor,
   parseResponseLine,
   type ErrorCode,
+  type RouteError,
   type RouteResponse
 } from '../shared/protocol'
 import { currentPathEnvironment, resolveSocketPath } from '../shared/paths'
@@ -44,8 +46,12 @@ function main(): void {
   }
 
   if (parsed.kind === 'error') {
-    process.stderr.write(`breakpoint: ${parsed.message}\n\n${helpText()}`)
-    process.exit(exitCodeFor('INVALID_USAGE'))
+    const code = reportError({
+      error: { code: 'INVALID_USAGE', message: parsed.message },
+      options: parsed.options
+    })
+    if (!parsed.options.json) process.stderr.write(`\n${helpText()}`)
+    process.exit(code)
   }
 
   const { command, options } = parsed
@@ -56,8 +62,7 @@ function main(): void {
     .catch((error: unknown) => {
       const code: ErrorCode = error instanceof CliError ? error.code : 'INTERNAL_ERROR'
       const message = error instanceof Error ? error.message : String(error)
-      process.stderr.write(`breakpoint: ${message}\n`)
-      process.exit(exitCodeFor(code))
+      process.exit(reportError({ error: { code, message }, options }))
     })
 }
 
@@ -98,10 +103,15 @@ function report(command: CliCommandSpec, response: RouteResponse, options: CliOp
 
   // A failure has no payload, so stdout stays empty in both modes rather than carrying
   // something a `jq` pipe would choke on.
-  const { code, message } = response.error
-  const text = options.json ? JSON.stringify({ error: { code, message } }) : `${code}: ${message}`
-  process.stderr.write(`breakpoint: ${text}\n`)
-  return exitCodeFor(code)
+  return reportError({ error: response.error, options })
+}
+
+function reportError({ error, options }: { error: RouteError; options: CliOptions }): number {
+  const text = options.json
+    ? JSON.stringify({ error })
+    : `breakpoint: ${error.code}: ${error.message}`
+  process.stderr.write(`${text}\n`)
+  return exitCodeFor(error.code)
 }
 
 function request(
@@ -138,7 +148,15 @@ function request(
     })
 
     socket.on('data', (chunk: string) => {
-      for (const line of lines.push(chunk)) {
+      let received: string[]
+      try {
+        received = lines.push(chunk)
+      } catch (error) {
+        if (!(error instanceof FrameTooLargeError)) throw error
+        fail(new CliError('TRANSPORT_ERROR', error.message))
+        return
+      }
+      for (const line of received) {
         const parsed = parseResponseLine(line)
         if (settled) return
         settled = true

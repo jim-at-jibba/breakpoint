@@ -3,6 +3,7 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { dirname } from 'node:path'
 import {
   LineBuffer,
+  FrameTooLargeError,
   UNADDRESSED_ID,
   encodeLine,
   failure,
@@ -77,7 +78,15 @@ function handleConnection(connection: Socket, dispatch: Dispatch): void {
   connection.on('error', () => connection.destroy())
 
   connection.on('data', (chunk: string) => {
-    for (const line of lines.push(chunk)) {
+    let received: string[]
+    try {
+      received = lines.push(chunk)
+    } catch (error) {
+      if (!(error instanceof FrameTooLargeError)) throw error
+      connection.destroy()
+      return
+    }
+    for (const line of received) {
       void respond(connection, dispatch, line)
     }
   })

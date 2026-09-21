@@ -34,7 +34,11 @@ export class Sandbox {
     const inherited = Object.entries(process.env).filter(
       (entry): entry is [string, string] => entry[1] !== undefined
     )
-    return { ...Object.fromEntries(inherited), BREAKPOINT_USER_DATA: this.userDataDir }
+    return {
+      ...Object.fromEntries(inherited),
+      BREAKPOINT_USER_DATA: this.userDataDir,
+      BREAKPOINT_SOCKET: this.socketPath
+    }
   }
 
   dispose(): void {
@@ -59,6 +63,13 @@ export async function launchApp(sandbox: Sandbox): Promise<LaunchedApp> {
 
   await waitFor(() => existsSync(sandbox.socketPath), 'the app to open its socket')
   await app.firstWindow()
+  await waitFor(
+    () =>
+      app.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows().some((window) => window.isVisible())
+      ),
+    'the initial window to be shown'
+  )
   return { app, output: () => output }
 }
 

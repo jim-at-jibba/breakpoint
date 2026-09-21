@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { connect } from 'node:net'
 import { expect, test } from '@playwright/test'
 import type { BreakpointBridge } from '../src/shared/ipc'
+import { MAX_FRAME_BYTES } from '../src/shared/protocol'
 import {
   closeApp,
   isRunning,
@@ -50,7 +52,7 @@ test('quit --no-launch with nothing running exits 3 and starts nothing', async (
 
   expect(run.code).toBe(3)
   expect(run.stdout).toBe('')
-  expect(run.stderr).toContain('not running')
+  expect(run.stderr).toBe('breakpoint: APP_NOT_RUNNING: the app is not running\n')
   // "never starts the app" is the half of this that a socket check alone would miss.
   expect(existsSync(sandbox.socketPath)).toBe(false)
   expect(isRunning(sandbox)).toBe(false)
@@ -80,9 +82,32 @@ test('a malformed envelope comes back as INVALID_REQUEST, not as a crash', async
   const response = await sendRaw(sandbox.socketPath, '{ not json')
 
   expect(response.ok === false && response.error.code).toBe('INVALID_REQUEST')
-  // The connection survived it well enough to answer a real request afterwards.
+  // The app still accepts requests after rejecting the malformed envelope.
   const after = await sendRaw(sandbox.socketPath, requestLine('nope.nope'))
   expect(after.ok === false && after.error.code).toBe('UNKNOWN_ROUTE')
+})
+
+test('an oversized unterminated request closes only its connection', async () => {
+  launched = await launchApp(sandbox)
+  const socket = connect(sandbox.socketPath)
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      socket.once('connect', () => socket.write('x'.repeat(MAX_FRAME_BYTES + 1)))
+      socket.once('close', () => resolve())
+      socket.once('error', (error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ECONNRESET' && error.code !== 'EPIPE') reject(error)
+      })
+    })
+  } finally {
+    socket.destroy()
+  }
+
+  const response = await sendRaw(sandbox.socketPath, requestLine('nope.nope'))
+  expect(response.ok === false && response.error.code).toBe('UNKNOWN_ROUTE')
+  expect(
+    await launched.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)
+  ).toBe(1)
 })
 
 test('params a route does not take come back as INVALID_PARAMS', async () => {
@@ -101,8 +126,10 @@ test('an unparseable argument exits 2 without reaching the app', async () => {
 
   expect(unknownCommand.code).toBe(2)
   expect(unknownCommand.stdout).toBe('')
+  expect(unknownCommand.stderr).toContain('INVALID_USAGE: unknown command frobnicate')
   expect(unknownFlag.code).toBe(2)
   expect(unknownFlag.stdout).toBe('')
+  expect(unknownFlag.stderr).toContain('INVALID_USAGE: unknown flag --turbo')
   expect(existsSync(sandbox.socketPath)).toBe(true)
 })
 

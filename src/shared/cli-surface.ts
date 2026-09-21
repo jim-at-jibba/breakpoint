@@ -92,7 +92,7 @@ export const EXIT_CODES: readonly ExitCodeSpec[] = [
 export type ArgvParse =
   | { kind: 'command'; command: CliCommandSpec; options: CliOptions }
   | { kind: 'help'; options: CliOptions }
-  | { kind: 'error'; message: string }
+  | { kind: 'error'; message: string; options: CliOptions }
 
 const FLAGS_BY_NAME: ReadonlyMap<string, CliFlagSpec> = new Map(
   CLI_FLAGS.flatMap((flag) => [flag.name, ...(flag.aliases ?? [])].map((name) => [name, flag]))
@@ -102,26 +102,32 @@ export function parseArgv(argv: readonly string[]): ArgvParse {
   const options: CliOptions = { json: false, noLaunch: false, verbose: false }
   let commandName: string | undefined
   let help = false
+  let error: string | undefined
 
   for (const argument of argv) {
     if (argument.startsWith('-')) {
       const flag = FLAGS_BY_NAME.get(argument)
-      if (!flag) return { kind: 'error', message: `unknown flag ${argument}` }
+      if (!flag) {
+        error ??= `unknown flag ${argument}`
+        continue
+      }
       if (flag.sets === 'help') help = true
       else options[flag.sets] = true
       continue
     }
     if (commandName !== undefined) {
-      return { kind: 'error', message: `unexpected argument ${argument}` }
+      error ??= `unexpected argument ${argument}`
+      continue
     }
     commandName = argument
   }
 
+  if (error !== undefined) return { kind: 'error', message: error, options }
   if (help) return { kind: 'help', options }
-  if (commandName === undefined) return { kind: 'error', message: 'no command given' }
+  if (commandName === undefined) return { kind: 'error', message: 'no command given', options }
 
   const command = CLI_COMMANDS.find((candidate) => candidate.name === commandName)
-  if (!command) return { kind: 'error', message: `unknown command ${commandName}` }
+  if (!command) return { kind: 'error', message: `unknown command ${commandName}`, options }
 
   return { kind: 'command', command, options }
 }

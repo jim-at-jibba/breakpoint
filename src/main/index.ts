@@ -133,10 +133,19 @@ if (!hasSingleInstanceLock) {
 
   // A rejection here would otherwise leave a running process with no window and no
   // explanation, which is the hardest kind of failure to report from a terminal.
-  app.whenReady().then(startUp, (error) => {
-    console.error('[breakpoint] startup failed:', error)
-    app.exit(1)
-  })
+  app
+    .whenReady()
+    .then(startUp)
+    .catch((error: unknown) => {
+      console.error('[breakpoint] startup failed:', error)
+      try {
+        socketAdapter?.close()
+      } catch (cleanupError) {
+        console.error('[breakpoint] socket cleanup failed:', cleanupError)
+      }
+      socketAdapter = undefined
+      app.exit(1)
+    })
 }
 
 app.on('will-quit', () => {

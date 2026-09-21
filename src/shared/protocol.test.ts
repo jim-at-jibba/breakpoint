@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   ERROR_CODES,
+  FrameTooLargeError,
   LineBuffer,
+  MAX_FRAME_BYTES,
   encodeLine,
   exitCodeFor,
   failure,
@@ -40,6 +42,38 @@ describe('LineBuffer', () => {
     const buffer = new LineBuffer()
     expect(buffer.push('a\nb')).toEqual(['a'])
     expect(buffer.push('c\n')).toEqual(['bc'])
+  })
+
+  it('accepts a frame exactly at the byte limit with a separately delivered newline', () => {
+    const buffer = new LineBuffer()
+    const frame = 'x'.repeat(MAX_FRAME_BYTES)
+    expect(buffer.push(frame)).toEqual([])
+    expect(buffer.push('\n')).toEqual([frame])
+  })
+
+  it('rejects an oversized unterminated frame across chunks', () => {
+    const buffer = new LineBuffer()
+    for (let index = 0; index < 16; index += 1) {
+      expect(buffer.push('x'.repeat(MAX_FRAME_BYTES / 16))).toEqual([])
+    }
+    expect(() => buffer.push('x')).toThrow(FrameTooLargeError)
+  })
+
+  it('also rejects oversized complete frames', () => {
+    expect(() => new LineBuffer().push(`${'x'.repeat(MAX_FRAME_BYTES + 1)}\n`)).toThrow(
+      FrameTooLargeError
+    )
+  })
+
+  it('counts UTF-8 bytes rather than characters', () => {
+    const buffer = new LineBuffer()
+    expect(buffer.push('é'.repeat(MAX_FRAME_BYTES / 2))).toEqual([])
+    expect(() => buffer.push('é')).toThrow(FrameTooLargeError)
+  })
+
+  it('limits each frame independently in a coalesced chunk', () => {
+    const frame = 'é'.repeat(MAX_FRAME_BYTES / 2)
+    expect(new LineBuffer().push(`${frame}\n${frame}\n`)).toEqual([frame, frame])
   })
 })
 
@@ -115,6 +149,29 @@ describe('parseResponseLine', () => {
     const result = parseResponseLine('{"id":"7"}')
     expect(!result.ok && result.error.code).toBe('INVALID_REQUEST')
   })
+
+  it('rejects an undeclared error code instead of asserting it is an ErrorCode', () => {
+    expect(
+      parseResponseLine('{"id":"7","ok":false,"error":{"code":"NOT_DECLARED","message":"bad"}}')
+    ).toEqual({
+      ok: false,
+      error: { code: 'INVALID_REQUEST', message: 'failed response has an unknown error code' }
+    })
+  })
+
+  it.each(ERROR_CODES)('accepts the declared error code %s', (code) => {
+    const response = failure('7', code, 'diagnostic')
+    expect(parseResponseLine(encodeLine(response))).toEqual({ ok: true, response })
+  })
+
+  it.each([null, [], 'bad', { code: 'INTERNAL_ERROR' }, { code: 42, message: 'bad' }])(
+    'rejects a malformed error object: %j',
+    (error) => {
+      const result = parseResponseLine(JSON.stringify({ id: '7', ok: false, error }))
+      expect(result.ok).toBe(false)
+      expect(!result.ok && result.error.code).toBe('INVALID_REQUEST')
+    }
+  )
 })
 
 describe('exitCodeFor', () => {

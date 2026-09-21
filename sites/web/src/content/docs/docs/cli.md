@@ -53,6 +53,10 @@ One rule, and every command inherits it:
 - **stderr carries everything else** — diagnostics, progress, and the message that goes
   with a non-zero exit.
 
+Failures include a stable error code. With `--json`, the error diagnostic on stderr is
+`{ "error": { "code": "APP_NOT_RUNNING", "message": "the app is not running" } }`;
+stdout stays empty. `--verbose` adds separate diagnostic lines on stderr.
+
 Which means a verbose run still pipes cleanly:
 
 ```sh
@@ -99,7 +103,11 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | --- | --- | --- |
 | `app.quit` | `{ "quitting": true }` | `breakpoint quit` |
 
-On the socket the exchange is one line of JSON each way:
+On the socket the exchange is one line of JSON each way. Each request or response line
+is limited to 1 MiB of UTF-8, excluding the terminating newline. An oversized request
+closes its connection; an oversized response causes the CLI to report `TRANSPORT_ERROR`.
+
+For example:
 
 ```json
 { "id": "1", "route": "app.quit" }

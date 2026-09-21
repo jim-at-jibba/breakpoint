@@ -48,6 +48,8 @@ export interface DispatchResult {
   afterRespond?: () => void
 }
 
+export type Dispatch = (request: RouteRequest) => Promise<DispatchResult>
+
 export function createRouteTable(services: { app: AppService }): RouteTable {
   return {
     'app.quit': {
@@ -57,7 +59,7 @@ export function createRouteTable(services: { app: AppService }): RouteTable {
   }
 }
 
-export function createDispatch(table: RouteTable) {
+export function createDispatch(table: RouteTable): Dispatch {
   return async function dispatch(request: RouteRequest): Promise<DispatchResult> {
     const { id, route } = request
 
@@ -65,9 +67,7 @@ export function createDispatch(table: RouteTable) {
       return { response: failure(id, 'UNKNOWN_ROUTE', `no route named ${route}`) }
     }
 
-    // The table is keyed by the whole union, so every entry's parse and handle agree on
-    // one route's types. Narrowing that back per name costs more than it proves here.
-    const entry = table[route] as RouteEntry<RouteName>
+    const entry = table[route]
 
     const params = entry.parseParams(request.params)
     if (!params.ok) {
@@ -83,5 +83,3 @@ export function createDispatch(table: RouteTable) {
     }
   }
 }
-
-export type Dispatch = ReturnType<typeof createDispatch>

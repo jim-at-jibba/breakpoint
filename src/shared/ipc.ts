@@ -1,5 +1,5 @@
 import type { RouteResponse } from './protocol'
-import type { RouteName, RouteParams } from './routes'
+import type { RouteName, RouteParams, RoutePayload } from './routes'
 
 /**
  * The one IPC channel. The renderer never names an Electron channel per feature; it
@@ -14,5 +14,8 @@ export const ROUTE_CHANNEL = 'breakpoint:route'
  * the CLI reads off the socket.
  */
 export interface BreakpointBridge {
-  invoke<N extends RouteName>(route: N, params?: RouteParams<N>): Promise<RouteResponse>
+  invoke<N extends RouteName>(
+    route: N,
+    params?: RouteParams<N>
+  ): Promise<RouteResponse<RoutePayload<N>>>
 }
