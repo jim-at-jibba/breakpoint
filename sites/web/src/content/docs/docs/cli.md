@@ -79,8 +79,8 @@ breakpoint quit --no-launch   # exits 3 if the app is not running, and starts no
 | `--verbose` | Prints diagnostics on stderr, where they cannot pollute stdout |
 | `--help`, `-h` | Prints the help and exits 0 |
 
-`--json` has to be passed explicitly today. Turning it on automatically when stdout is
-not a terminal arrives with the commands that print state worth piping.
+`--json` has to be passed explicitly today, `state` included. Turning it on automatically
+when stdout is not a terminal is a later change.
 
 ## Output
 

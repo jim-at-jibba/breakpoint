@@ -153,6 +153,12 @@ describe('opening a project from the command line', () => {
     expect(result.kind === 'error' && result.message).toBe('unknown command frobnicate')
   })
 
+  it('never reads a flag as a path, whatever it contains', () => {
+    const result = parseArgv(['--out/dir'], cwd)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toBe('unknown flag --out/dir')
+  })
+
   it('takes flags around the path', () => {
     const result = parseArgv(['--json', '.', '--no-launch'], cwd)
     expect(result.kind === 'command' && result.options).toEqual({

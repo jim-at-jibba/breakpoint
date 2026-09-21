@@ -1,11 +1,12 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   projectFileName,
   readProjectFile,
   writeProjectFile,
   type Project,
-  type ReadProjectResult
+  type ReadProjectResult,
+  type RefusalReason
 } from '../../shared/project'
 
 /**
@@ -17,7 +18,7 @@ import {
 export type LoadResult =
   | { status: 'loaded'; project: Project }
   | { status: 'missing' }
-  | { status: 'refused'; reason: 'newer' | 'corrupt'; message: string; file: string }
+  | { status: 'refused'; reason: RefusalReason; message: string; file: string }
 
 export class ProjectStore {
   constructor(readonly directory: string) {}
@@ -58,17 +59,5 @@ export class ProjectStore {
     const partial = `${file}.${process.pid}.tmp`
     writeFileSync(partial, `${JSON.stringify(writeProjectFile(project), null, 2)}\n`)
     renameSync(partial, file)
-  }
-
-  /** Every file in the directory, loadable or not. #19 lists them from here. */
-  files(): string[] {
-    try {
-      return readdirSync(this.directory)
-        .filter((name) => name.endsWith('.json'))
-        .map((name) => join(this.directory, name))
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-      throw error
-    }
   }
 }

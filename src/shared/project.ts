@@ -124,8 +124,11 @@ export type ProjectMigrations = Readonly<Record<number, ProjectMigration>>
 /** Empty until version 2 exists. The machinery is exercised in tests with injected steps. */
 export const PROJECT_MIGRATIONS: ProjectMigrations = {}
 
+/** Why a file on disk is refused. Reported to the caller as `details.reason`. */
+export type RefusalReason = 'newer' | 'corrupt'
+
 export type ReadProjectResult =
-  { ok: true; project: Project } | { ok: false; reason: 'newer' | 'corrupt'; message: string }
+  { ok: true; project: Project } | { ok: false; reason: RefusalReason; message: string }
 
 interface ReadProjectOptions {
   version: number

@@ -1,4 +1,5 @@
 import { resolve } from 'node:path'
+import { looksLikePath } from './paths'
 import type { Project } from './project'
 import type { RouteName, RouteParams } from './routes'
 import type { StateSnapshot } from './state'
@@ -138,15 +139,6 @@ const FLAGS_BY_NAME: ReadonlyMap<string, CliFlagSpec> = new Map(
 )
 
 /**
- * A positional argument is a path if it could only be one: `.`, `..`, or anything with a
- * separator in it. A bare word is always a command, so a typo stays a usage error rather
- * than quietly becoming a project called `stat`.
- */
-export function looksLikePath(argument: string): boolean {
-  return argument === '.' || argument === '..' || /[\\/]/.test(argument)
-}
-
-/**
  * `cwd` is where relative paths resolve. The app's own working directory is not the
  * terminal's, so the path has to be made absolute here, before it leaves the process
  * that knows.
@@ -158,7 +150,7 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
   let error: string | undefined
 
   for (const argument of argv) {
-    if (argument.startsWith('-') && !looksLikePath(argument)) {
+    if (argument.startsWith('-')) {
       const flag = FLAGS_BY_NAME.get(argument)
       if (!flag) {
         error ??= `unknown flag ${argument}`

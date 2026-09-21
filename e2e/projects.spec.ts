@@ -116,6 +116,18 @@ test('breakpoint . with nothing running starts the app and opens the project', a
   await waitFor(() => !isRunning(sandbox), 'the launched app to exit')
 })
 
+test('breakpoint . --no-launch with nothing running exits 3, starts nothing and creates nothing', async () => {
+  const shop = makeRepo('shop')
+
+  const run = await runCli(sandbox, ['.', '--no-launch', '--json'], shop)
+
+  expect(run.code).toBe(3)
+  expect(run.stdout).toBe('')
+  expect(JSON.parse(run.stderr).error.code).toBe('APP_NOT_RUNNING')
+  expect(isRunning(sandbox)).toBe(false)
+  expect(projectFiles()).toEqual([])
+})
+
 test('running it again in the same repo reopens the same project, not a second one', async () => {
   launched = await launchApp(sandbox)
   const shop = makeRepo('shop')

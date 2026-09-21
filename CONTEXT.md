@@ -97,8 +97,8 @@ _Avoid_: offset, sequence, checkpoint, watermark
 **Snapshot**:
 Everything a surface renders from, at one moment: the open project and the revision it is
 current to. Returned by one route to every surface; the window fetches it and then keeps it
-current with patches.
-_Avoid_: state (unqualified), store, model
+current with patches. `project.state` is the route that returns one.
+_Avoid_: store, model, projection
 
 **Patch**:
 One typed change to the snapshot, from a fixed set of kinds. Numbered by revision and pushed

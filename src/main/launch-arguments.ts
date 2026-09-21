@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import { looksLikePath } from '../shared/cli-surface'
+import { looksLikePath } from '../shared/paths'
 
 /**
  * The repo a launch was pointed at, if any: `open -a Breakpoint .`, a Dock drop, or a

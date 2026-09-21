@@ -9,6 +9,15 @@ import { posix, win32 } from 'node:path'
  * Not imported by the renderer — it reaches routes over IPC and never sees the socket.
  */
 
+/**
+ * A command-line argument is a path if it could only be one: `.`, `..`, or anything with a
+ * separator in it. A bare word is never a path, so a typo stays a usage error rather than
+ * quietly becoming a project called `stat`.
+ */
+export function looksLikePath(argument: string): boolean {
+  return argument === '.' || argument === '..' || /[\\/]/.test(argument)
+}
+
 /** Matches `productName` in electron-builder.yml, and is set on `app` so dev agrees with a build. */
 export const APP_NAME = 'Breakpoint'
 

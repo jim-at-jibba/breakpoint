@@ -38,9 +38,10 @@ interface RouteEntry<N extends RouteName> {
 
 type RouteTable = { [N in RouteName]: RouteEntry<N> }
 
-function expectNoParams<N extends 'app.quit' | 'project.state'>(
-  raw: unknown
-): ParamsOk<N> | ParamsBad {
+/** The routes whose params are `undefined`, read off the signatures rather than listed. */
+type NoParamsRoute = { [N in RouteName]: RouteParams<N> extends undefined ? N : never }[RouteName]
+
+function expectNoParams<N extends NoParamsRoute>(raw: unknown): ParamsOk<N> | ParamsBad {
   if (raw !== undefined && raw !== null) {
     return { ok: false, message: 'this route takes no params' }
   }
