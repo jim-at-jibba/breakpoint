@@ -1,10 +1,31 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { applyEmulation, emulationFor, type EmulationCommand } from './emulation'
+import {
+  affectedCapabilities,
+  applyEmulation,
+  emulationFor,
+  type EmulationCommand
+} from './emulation'
 
 const CHROME = '140.0.7339.41'
 
-const phone = { width: 390, height: 844, dpr: 3, mobile: true, colorScheme: 'dark' as const }
-const desktop = { width: 1440, height: 900, dpr: 1, mobile: false, colorScheme: 'light' as const }
+const phone = {
+  width: 390,
+  height: 844,
+  dpr: 3,
+  mobile: true,
+  touch: true,
+  userAgent: null,
+  colorScheme: 'dark' as const
+}
+const desktop = {
+  width: 1440,
+  height: 900,
+  dpr: 1,
+  mobile: false,
+  touch: false,
+  userAgent: null,
+  colorScheme: 'light' as const
+}
 
 function command(commands: EmulationCommand[], method: string): EmulationCommand | undefined {
   return commands.find((candidate) => candidate.method === method)
@@ -65,17 +86,42 @@ describe('the overrides a pane is emulated with', () => {
     expect(JSON.stringify(params)).not.toMatch(/Electron|breakpoint/i)
   })
 
-  it('emulates touch for a mobile pane', () => {
+  it('sends the pane’s own user agent when it has one, in place of Breakpoint’s', () => {
+    const { params } = command(
+      emulationFor({ ...phone, userAgent: 'Kiosk/1.0 (Shelf)' }, CHROME),
+      'Emulation.setUserAgentOverride'
+    )!
+    expect(params).toMatchObject({
+      userAgent: 'Kiosk/1.0 (Shelf)',
+      // The client hints keep telling the mobile flag's story: a preset carries one user
+      // agent, not a full hint set, and a server reading either still sees a phone.
+      userAgentMetadata: { platform: 'Android', mobile: true }
+    })
+  })
+
+  it('emulates touch for a pane that asks for it, whatever its mobile flag says', () => {
     expect(command(emulationFor(phone, CHROME), 'Emulation.setTouchEmulationEnabled')).toEqual({
       capability: 'touch',
       method: 'Emulation.setTouchEmulationEnabled',
       params: { enabled: true, maxTouchPoints: 5 }
     })
+    expect(
+      command(
+        emulationFor({ ...desktop, touch: true }, CHROME),
+        'Emulation.setTouchEmulationEnabled'
+      )?.params
+    ).toEqual({ enabled: true, maxTouchPoints: 5 })
   })
 
-  it('disables touch for a desktop pane with one touch point, since CDP rejects zero even when disabling', () => {
+  it('disables touch for a pane that does not, with one touch point, since CDP rejects zero even when disabling', () => {
     expect(
       command(emulationFor(desktop, CHROME), 'Emulation.setTouchEmulationEnabled')?.params
+    ).toEqual({ enabled: false, maxTouchPoints: 1 })
+    expect(
+      command(
+        emulationFor({ ...phone, touch: false }, CHROME),
+        'Emulation.setTouchEmulationEnabled'
+      )?.params
     ).toEqual({ enabled: false, maxTouchPoints: 1 })
   })
 
@@ -105,6 +151,26 @@ describe('the overrides a pane is emulated with', () => {
       'userAgent',
       'touch',
       'colorScheme'
+    ])
+  })
+})
+
+describe('which capabilities a change invalidates', () => {
+  it('maps each declared value to the overrides that carry it', () => {
+    expect(affectedCapabilities({ dpr: 2 })).toEqual(['viewport'])
+    // The mobile flag is in the viewport override and in the client hints, but no longer
+    // in touch: a pane carries its own touch setting once it exists.
+    expect(affectedCapabilities({ mobile: true })).toEqual(['viewport', 'userAgent'])
+    expect(affectedCapabilities({ touch: true })).toEqual(['touch'])
+    expect(affectedCapabilities({ colorScheme: 'dark' })).toEqual(['colorScheme'])
+    expect(affectedCapabilities({})).toEqual([])
+  })
+
+  it('names a capability once however many changes reach it', () => {
+    expect(affectedCapabilities({ dpr: 2, mobile: false, touch: false })).toEqual([
+      'viewport',
+      'userAgent',
+      'touch'
     ])
   })
 })

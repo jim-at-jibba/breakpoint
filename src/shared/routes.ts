@@ -12,6 +12,7 @@
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
 import type { PaneStatus, Size } from './panes'
+import type { Preset } from './presets'
 import type { Pane } from './project'
 import type { StateSnapshot } from './state'
 
@@ -21,9 +22,14 @@ export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 export const ROUTE_NAMES = [
   'app.quit',
   'log.read',
+  'panes.add',
   'panes.list',
+  'panes.remove',
   'panes.reportGeometry',
+  'panes.resize',
+  'panes.rotate',
   'panes.setEmulation',
+  'presets.list',
   'project.open',
   'project.state'
 ] as const
@@ -42,8 +48,16 @@ export interface RouteSignatures {
    * everything that ever happened.
    */
   'log.read': { params: ReadParams; payload: LogRead }
+  /**
+   * Adds a pane to the open project, from a preset or at a size the caller gives, and
+   * appends it to the set. A preset is resolved once into the pane's own values here and
+   * never consulted again ([ADR-0011]), so editing it afterwards leaves this pane alone.
+   */
+  'panes.add': { params: PaneCreation; payload: { pane: PaneListing; index: number } }
   /** The open project's panes, each with what is observed of it. Empty with nothing open. */
   'panes.list': { params: undefined; payload: { panes: PaneListing[] } }
+  /** Takes a pane out of the open project, leaving every other pane as it was. */
+  'panes.remove': { params: { pane: string }; payload: { pane: Pane } }
   /**
    * The host-side geometry check's measurement of one pane ([ADR-0004]), in screen
    * pixels: its declared size times the canvas zoom, and its element's own rendered box.
@@ -52,11 +66,25 @@ export interface RouteSignatures {
    */
   'panes.reportGeometry': { params: GeometryReport; payload: { status: PaneStatus } }
   /**
+   * Declares a pane's exact size in CSS pixels, one dimension or both. Resizing is a
+   * change to the canvas as well as to emulation, which is why it is here and not in
+   * `panes.setEmulation`. One dimension at a time because that is how a developer types
+   * it: a width committed on its own must not carry a height the pane no longer has.
+   */
+  'panes.resize': { params: PaneResize; payload: { pane: PaneListing } }
+  /** Swaps a pane's width and height, so landscape needs no arithmetic. */
+  'panes.rotate': { params: { pane: string }; payload: { pane: PaneListing } }
+  /**
    * Changes what one pane emulates — DPR, the mobile flag, colour scheme — and keeps it
    * with the project. The payload is the pane as now declared; whether each override took
    * is its status, which follows once the pane's guest has been told.
    */
   'panes.setEmulation': { params: EmulationSetting; payload: { pane: PaneListing } }
+  /**
+   * Every preset, as the global file declares them. Read from disk per call, so a file
+   * the developer edited in another window is the one the next pane is created from.
+   */
+  'presets.list': { params: undefined; payload: { presets: Preset[] } }
   /**
    * Opens the project for a repo, creating it the first time. `path` is absolute: the
    * caller resolves it against its own working directory, which the app cannot know.
@@ -75,6 +103,12 @@ export interface GeometryReport {
 }
 
 export type EmulationSetting = EmulationChanges & { pane: string }
+
+/** A pane from a preset, or one at a size the developer typed. Never both. */
+export type PaneCreation =
+  { preset: string; name?: string } | { width: number; height: number; name?: string }
+
+export type PaneResize = Partial<Size> & { pane: string }
 
 export type RouteParams<N extends RouteName> = RouteSignatures[N]['params']
 export type RoutePayload<N extends RouteName> = RouteSignatures[N]['payload']

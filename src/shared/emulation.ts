@@ -1,4 +1,4 @@
-import type { Pane } from './project'
+import type { Pane, PaneChanges } from './project'
 
 /**
  * Emulation: the overrides that make a pane behave as it describes rather than as the
@@ -15,13 +15,16 @@ export const EMULATION_CAPABILITIES = ['viewport', 'userAgent', 'touch', 'colorS
 export type EmulationCapability = (typeof EMULATION_CAPABILITIES)[number]
 
 /** The part of a pane emulation reads. Everything else about a pane is the canvas's business. */
-export type PaneEmulation = Pick<Pane, 'width' | 'height' | 'dpr' | 'mobile' | 'colorScheme'>
+export type PaneEmulation = Pick<
+  Pane,
+  'width' | 'height' | 'dpr' | 'mobile' | 'touch' | 'userAgent' | 'colorScheme'
+>
 
 /**
  * What `panes.setEmulation` may change. Size is not here: resizing a pane is a change to
  * the canvas as well as to emulation, and belongs with the rest of pane management.
  */
-export type EmulationChanges = Partial<Pick<Pane, 'dpr' | 'mobile' | 'colorScheme'>>
+export type EmulationChanges = Partial<Pick<Pane, 'dpr' | 'mobile' | 'touch' | 'colorScheme'>>
 
 interface UserAgentBrand {
   brand: string
@@ -89,14 +92,18 @@ export function emulationFor(pane: PaneEmulation, chromeVersion: string): Emulat
     {
       capability: 'userAgent',
       method: 'Emulation.setUserAgentOverride',
-      params: userAgentFor({ mobile: pane.mobile, chromeVersion })
+      params: userAgentFor({
+        mobile: pane.mobile,
+        chromeVersion,
+        userAgent: pane.userAgent
+      })
     },
     {
       capability: 'touch',
       method: 'Emulation.setTouchEmulationEnabled',
       params: {
-        enabled: pane.mobile,
-        maxTouchPoints: pane.mobile ? 5 : 1 // not 0 — CDP rejects it even when disabling (#4)
+        enabled: pane.touch,
+        maxTouchPoints: pane.touch ? 5 : 1 // not 0 — CDP rejects it even when disabling (#4)
       }
     },
     {
@@ -121,14 +128,17 @@ export function emulationFor(pane: PaneEmulation, chromeVersion: string): Emulat
 interface UserAgentOptions {
   mobile: boolean
   chromeVersion: string
+  /** The pane's own, resolved from its preset, or `null` for Breakpoint's ([presets.ts]). */
+  userAgent: string | null
 }
 
 /**
  * The reduced user agent Chrome itself sends, with client hints that tell the same story,
- * so server-side detection reading either sees the same device. A pane chooses by its
- * mobile flag until presets carry a user agent of their own (#12).
+ * so server-side detection reading either sees the same device. A pane whose preset gave
+ * it a user agent of its own sends that instead; the client hints keep following the
+ * mobile flag, because a preset carries one user agent and not a whole hint set.
  */
-function userAgentFor({ mobile, chromeVersion }: UserAgentOptions): UserAgentOverride {
+function userAgentFor({ mobile, chromeVersion, userAgent }: UserAgentOptions): UserAgentOverride {
   const major = chromeVersion.split('.')[0]
   const brands: UserAgentBrand[] = [
     { brand: 'Chromium', version: major },
@@ -141,7 +151,9 @@ function userAgentFor({ mobile, chromeVersion }: UserAgentOptions): UserAgentOve
 
   if (mobile) {
     return {
-      userAgent: `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Mobile Safari/537.36`,
+      userAgent:
+        userAgent ??
+        `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Mobile Safari/537.36`,
       platform: 'Linux armv81',
       userAgentMetadata: {
         brands,
@@ -155,7 +167,9 @@ function userAgentFor({ mobile, chromeVersion }: UserAgentOptions): UserAgentOve
     }
   }
   return {
-    userAgent: `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
+    userAgent:
+      userAgent ??
+      `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
     platform: 'MacIntel',
     userAgentMetadata: {
       brands,
@@ -171,10 +185,18 @@ function userAgentFor({ mobile, chromeVersion }: UserAgentOptions): UserAgentOve
 
 export type SendCommand = (command: EmulationCommand) => Promise<unknown>
 
-export function affectedCapabilities(changes: EmulationChanges): EmulationCapability[] {
+/** Which overrides a set of changed declarations puts back in doubt, in command order. */
+export function affectedCapabilities(changes: PaneChanges): EmulationCapability[] {
   const capabilities: EmulationCapability[] = []
-  if (changes.dpr !== undefined || changes.mobile !== undefined) capabilities.push('viewport')
-  if (changes.mobile !== undefined) capabilities.push('userAgent', 'touch')
+  const viewport =
+    changes.width !== undefined ||
+    changes.height !== undefined ||
+    changes.dpr !== undefined ||
+    changes.mobile !== undefined
+  if (viewport) capabilities.push('viewport')
+  // The mobile flag reaches the client hints, but not touch: a pane carries its own.
+  if (changes.mobile !== undefined) capabilities.push('userAgent')
+  if (changes.touch !== undefined) capabilities.push('touch')
   if (changes.colorScheme !== undefined) capabilities.push('colorScheme')
   return capabilities
 }

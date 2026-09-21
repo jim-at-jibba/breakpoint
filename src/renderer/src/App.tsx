@@ -1,3 +1,4 @@
+import { AddPane } from '@renderer/components/add-pane'
 import { Canvas } from '@renderer/components/canvas'
 import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
@@ -61,14 +62,16 @@ export default function App(): React.JSX.Element {
             Refreshing project…
           </span>
         )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="ml-auto mr-[var(--bp-space-4)]"
-          onClick={() => void window.breakpoint.invoke('app.quit')}
-        >
-          Quit
-        </Button>
+        <div className="ml-auto mr-[var(--bp-space-4)] flex items-center gap-[var(--bp-space-2)]">
+          {project && <AddPane />}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void window.breakpoint.invoke('app.quit')}
+          >
+            Quit
+          </Button>
+        </div>
       </header>
       {project && snapshot ? (
         <Canvas project={project} statuses={snapshot.panes} />

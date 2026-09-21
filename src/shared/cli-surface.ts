@@ -153,6 +153,12 @@ function describeEntry(entry: Entry): string {
   switch (entry.type) {
     case 'project.openFailed':
       return `could not open ${entry.path}: ${entry.code}: ${entry.message}`
+    case 'pane.added':
+      return `added at ${entry.width}×${entry.height}${entry.preset ? ` from the ${entry.preset} preset` : ''}`
+    case 'pane.removed':
+      return 'removed from the project'
+    case 'pane.resized':
+      return `resized to ${entry.width}×${entry.height}`
     case 'pane.created':
       return `created, loading ${entry.url}`
     case 'pane.attached':

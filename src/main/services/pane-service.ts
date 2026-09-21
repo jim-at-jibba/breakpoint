@@ -1,8 +1,4 @@
-import {
-  affectedCapabilities,
-  type EmulationChanges,
-  type EmulationResult
-} from '../../shared/emulation'
+import { affectedCapabilities, type EmulationResult } from '../../shared/emulation'
 import type { EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
   compareGeometry,
@@ -10,11 +6,19 @@ import {
   type PaneObservation,
   type PaneStatus
 } from '../../shared/panes'
-import type { Pane, Project } from '../../shared/project'
-import type { EmulationSetting, GeometryReport, PaneListing } from '../../shared/routes'
+import { paneFromPreset, paneFromSize, presetById, type PaneDraft } from '../../shared/presets'
+import type { Pane, PaneChanges, Project } from '../../shared/project'
+import type {
+  EmulationSetting,
+  GeometryReport,
+  PaneCreation,
+  PaneListing,
+  PaneResize
+} from '../../shared/routes'
 import { paneStatusesFor } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
+import type { PresetService } from './preset-service'
 
 interface AttachmentFailure {
   pane: string
@@ -38,15 +42,25 @@ interface GuestDestruction {
 /** A pane after a change, and which of the asked-for values were actually different. */
 export interface PaneUpdate {
   pane: Pane
-  changes: EmulationChanges
+  changes: PaneChanges
+}
+
+/** A pane as added, and where in the set it landed. */
+export interface PaneAddition {
+  pane: Pane
+  index: number
 }
 
 /**
  * Where a pane's declared values are changed. The project service owns the open project
- * and its file; this is the one thing panes need from it.
+ * and its file; these are the things panes need from it. Every one of them is queued
+ * there, so two surfaces changing the pane set at once still agree on the result.
  */
 export interface PaneProjects {
-  updatePane(pane: string, changes: EmulationChanges): Promise<PaneUpdate>
+  updatePane(pane: string, changes: PaneChanges): Promise<PaneUpdate>
+  addPane(draft: PaneDraft): Promise<PaneAddition>
+  removePane(pane: string): Promise<{ pane: Pane }>
+  rotatePane(pane: string): Promise<PaneUpdate>
 }
 
 /**
@@ -65,6 +79,7 @@ export class PaneService {
   constructor(
     private readonly feed: StateFeed,
     private readonly log: EventLog,
+    private readonly presets: PresetService,
     private readonly projects: PaneProjects
   ) {}
 
@@ -95,6 +110,68 @@ export class PaneService {
   list(): { panes: PaneListing[] } {
     const panes = this.project?.panes ?? []
     return { panes: panes.map((pane) => ({ ...pane, status: this.current[pane.id] })) }
+  }
+
+  /**
+   * Adds a pane from a preset or at a size the caller gave. The preset is resolved into
+   * the pane's own values here, once, and the pane remembers only which preset it came
+   * from ([ADR-0011]) — so a preset edited afterwards leaves this pane exactly as it is.
+   */
+  async add(creation: PaneCreation): Promise<{ pane: PaneListing; index: number }> {
+    const draft = await this.draftFor(creation)
+    const { pane, index } = await this.projects.addPane(draft)
+    this.record(pane.id, {
+      type: 'pane.added',
+      width: pane.width,
+      height: pane.height,
+      preset: pane.preset
+    })
+    return { pane: { ...pane, status: this.current[pane.id] }, index }
+  }
+
+  private async draftFor(creation: PaneCreation): Promise<PaneDraft> {
+    if (!('preset' in creation)) {
+      return paneFromSize({ width: creation.width, height: creation.height }, creation.name)
+    }
+    const { presets } = await this.presets.list()
+    const preset = presetById(presets, creation.preset)
+    if (!preset) {
+      throw new RouteError('PRESET_NOT_FOUND', `no preset ${creation.preset} in the presets file`)
+    }
+    const draft = paneFromPreset(preset)
+    return creation.name === undefined ? draft : { ...draft, name: creation.name }
+  }
+
+  /**
+   * Takes a pane out of the project. Every other pane keeps what is observed of it: their
+   * guests are the same ones, and the pane that went is simply forgotten.
+   */
+  async remove(pane: string): Promise<{ pane: Pane }> {
+    if (!this.has(pane)) throw noSuchPane(pane)
+    const removed = await this.projects.removePane(pane)
+    this.record(pane, { type: 'pane.removed' })
+    return removed
+  }
+
+  /** Exact dimensions, typed rather than dragged. The emulated viewport follows. */
+  async resize({ pane, ...size }: PaneResize): Promise<{ pane: PaneListing }> {
+    return this.resized(pane, await this.projects.updatePane(pane, size))
+  }
+
+  /** Landscape from portrait and back, without the developer doing the arithmetic. */
+  async rotate(pane: string): Promise<{ pane: PaneListing }> {
+    return this.resized(pane, await this.projects.rotatePane(pane))
+  }
+
+  private resized(pane: string, update: PaneUpdate): { pane: PaneListing } {
+    if (update.changes.width !== undefined || update.changes.height !== undefined) {
+      this.record(pane, {
+        type: 'pane.resized',
+        width: update.pane.width,
+        height: update.pane.height
+      })
+    }
+    return { pane: { ...update.pane, status: this.current[pane] } }
   }
 
   guestCreated(pane: string, url: string): void {
@@ -135,8 +212,7 @@ export class PaneService {
    * An entry is written when the pane goes wrong or comes right, not on every report.
    */
   reportGeometry({ pane, expected, measured }: GeometryReport): { status: PaneStatus } {
-    if (!this.has(pane))
-      throw new RouteError('PANE_NOT_FOUND', `no pane ${pane} in the open project`)
+    if (!this.has(pane)) throw noSuchPane(pane)
     const before = this.current[pane]
 
     const result = compareGeometry(expected, measured)
@@ -171,7 +247,7 @@ export class PaneService {
     return { pane: { ...update.pane, status: this.current[pane] } }
   }
 
-  invalidateEmulation(pane: string, changes: EmulationChanges): void {
+  invalidateEmulation(pane: string, changes: PaneChanges): void {
     this.observe(pane, { type: 'emulationPending', capabilities: affectedCapabilities(changes) })
   }
 
@@ -210,4 +286,8 @@ export class PaneService {
     this.current = { ...this.current, [pane]: after }
     this.feed.publish({ type: 'pane.status', pane, status: after })
   }
+}
+
+function noSuchPane(pane: string): RouteError {
+  return new RouteError('PANE_NOT_FOUND', `no pane ${pane} in the open project`)
 }

@@ -1,5 +1,13 @@
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
+import { isPaneDimension } from './panes'
+import {
+  DEFAULT_PANE_PRESETS,
+  DEFAULT_PRESETS,
+  paneFromPreset,
+  presetById,
+  type Preset
+} from './presets'
 import { isWebUrl } from './urls'
 
 /**
@@ -26,11 +34,24 @@ export interface Pane {
   height: number
   dpr: number
   mobile: boolean
+  /** Touch emulation, independent of the mobile flag once the pane exists. */
+  touch: boolean
+  /** The pane's own user agent, or `null` for Breakpoint's own ([presets.ts]). */
+  userAgent: string | null
   colorScheme: ColorScheme
   /** The id of the session this pane's cookies, cache and storage live in. */
   session: string
   preset: string | null
 }
+
+/**
+ * What can change about a pane once it exists. Its id, its session and the preset it was
+ * created from are not here: identity does not change, and the preset is a record of
+ * where the pane came from rather than a value to be edited ([ADR-0011]).
+ */
+export type PaneChanges = Partial<
+  Pick<Pane, 'name' | 'width' | 'height' | 'dpr' | 'mobile' | 'touch' | 'colorScheme'>
+>
 
 export interface Session {
   id: string
@@ -52,52 +73,35 @@ export interface Project {
 const DEFAULT_START_URL = 'http://localhost:3000'
 const DEFAULT_SESSION: Session = { id: 'default', name: 'Default' }
 
-/** PRD 6.2 V1: the pane set a project is useful with before anything is configured. */
-const DEFAULT_PANES: ReadonlyArray<Omit<Pane, 'id' | 'session'>> = [
-  {
-    name: 'Mobile',
-    width: 390,
-    height: 844,
-    dpr: 3,
-    mobile: true,
-    colorScheme: 'system',
-    preset: 'mobile'
-  },
-  {
-    name: 'Tablet',
-    width: 820,
-    height: 1180,
-    dpr: 2,
-    mobile: true,
-    colorScheme: 'system',
-    preset: 'tablet'
-  },
-  {
-    name: 'Desktop',
-    width: 1440,
-    height: 900,
-    dpr: 1,
-    mobile: false,
-    colorScheme: 'system',
-    preset: 'desktop'
-  }
-]
-
-export function createProject(repoPath: string): Project {
+/**
+ * A new project's three panes are resolved from the presets the caller holds, exactly as
+ * a pane added later is: there is one path from a preset to a pane, and a new project
+ * takes it three times. A default whose preset the user has deleted falls back to the
+ * built-in one, so a new project is never short of the set PRD 6.2 V1 promises.
+ */
+export function createProject(
+  repoPath: string,
+  presets: readonly Preset[] = DEFAULT_PRESETS
+): Project {
+  const panes = DEFAULT_PANE_PRESETS.map((id) => {
+    const preset = presetById(presets, id) ?? presetById(DEFAULT_PRESETS, id)!
+    return { ...paneFromPreset(preset), id: newPaneId(), session: DEFAULT_SESSION.id }
+  })
   return {
     name: basename(repoPath),
     repoPath,
     startUrl: DEFAULT_START_URL,
     allowedOrigins: [new URL(DEFAULT_START_URL).origin],
-    panes: DEFAULT_PANES.map((pane) => ({
-      ...pane,
-      id: globalThis.crypto.randomUUID(),
-      session: DEFAULT_SESSION.id
-    })),
+    panes,
     layout: 'horizontal',
     zoom: 'fit',
     sessions: [DEFAULT_SESSION]
   }
+}
+
+/** One place a pane's identity is minted, whether it arrives with a project or later. */
+export function newPaneId(): string {
+  return globalThis.crypto.randomUUID()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -110,7 +114,7 @@ export function createProject(repoPath: string): Project {
  * a later build added, and then saving over them, is how a downgrade quietly corrupts a
  * project.
  */
-export const PROJECT_FILE_VERSION = 1
+export const PROJECT_FILE_VERSION = 2
 
 export interface ProjectFile {
   version: number
@@ -122,8 +126,30 @@ export type ProjectMigration = (file: Record<string, unknown>) => Record<string,
 
 export type ProjectMigrations = Readonly<Record<number, ProjectMigration>>
 
-/** Empty until version 2 exists. The machinery is exercised in tests with injected steps. */
-export const PROJECT_MIGRATIONS: ProjectMigrations = {}
+/**
+ * Version 1 panes had neither `touch` nor `userAgent`: touch followed the mobile flag,
+ * and the user agent was always Breakpoint's own. Both are written down as they were in
+ * force, so a project opened after the upgrade renders exactly as it did before it (#12).
+ */
+function addTouchAndUserAgent(file: Record<string, unknown>): Record<string, unknown> {
+  const project = file.project
+  if (typeof project !== 'object' || project === null || Array.isArray(project)) return file
+  const panes = (project as { panes?: unknown }).panes
+  if (!Array.isArray(panes)) return file
+  return {
+    ...file,
+    project: {
+      ...project,
+      panes: panes.map((pane: unknown) => {
+        if (typeof pane !== 'object' || pane === null) return pane
+        const { mobile } = pane as { mobile?: unknown }
+        return { ...pane, touch: mobile === true, userAgent: null }
+      })
+    }
+  }
+}
+
+export const PROJECT_MIGRATIONS: ProjectMigrations = { 1: addTouchAndUserAgent }
 
 /** Why a file on disk is refused. Reported to the caller as `details.reason`. */
 export type RefusalReason = 'newer' | 'corrupt'
@@ -224,8 +250,10 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
   const pane = asRecord(value)
   if (!pane) return undefined
   if (!isString(pane.id) || !isString(pane.name)) return undefined
-  if (!isPositive(pane.width) || !isPositive(pane.height) || !isPositive(pane.dpr)) return undefined
-  if (typeof pane.mobile !== 'boolean') return undefined
+  if (!isPaneDimension(pane.width) || !isPaneDimension(pane.height)) return undefined
+  if (!isPositive(pane.dpr)) return undefined
+  if (typeof pane.mobile !== 'boolean' || typeof pane.touch !== 'boolean') return undefined
+  if (pane.userAgent !== null && !isString(pane.userAgent)) return undefined
   if (!isColorScheme(pane.colorScheme)) return undefined
   if (!isString(pane.session) || !sessionIds.has(pane.session)) return undefined
   if (pane.preset !== null && !isString(pane.preset)) return undefined
@@ -236,6 +264,8 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
     height: pane.height,
     dpr: pane.dpr,
     mobile: pane.mobile,
+    touch: pane.touch,
+    userAgent: pane.userAgent,
     colorScheme: pane.colorScheme,
     session: pane.session,
     preset: pane.preset

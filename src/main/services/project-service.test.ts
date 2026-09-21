@@ -7,6 +7,8 @@ import { EventLog } from '../../shared/event-log'
 import type { RevisionedPatch } from '../../shared/state'
 import { StateFeed } from '../state-feed'
 import { PaneService } from './pane-service'
+import { PresetService } from './preset-service'
+import { PresetStore } from './preset-store'
 import { ProjectService } from './project-service'
 import { ProjectStore } from './project-store'
 
@@ -34,10 +36,14 @@ beforeEach(async () => {
     patches.push(patch)
   })
   log = new EventLog()
-  const panes = new PaneService(feed, log, {
-    updatePane: (pane, changes) => service.updatePane(pane, changes)
+  const presets = new PresetService(new PresetStore(join(root, 'presets.json')))
+  const panes = new PaneService(feed, log, presets, {
+    updatePane: (pane, changes) => service.updatePane(pane, changes),
+    addPane: (draft) => service.addPane(draft),
+    removePane: (pane) => service.removePane(pane),
+    rotatePane: (pane) => service.rotatePane(pane)
   })
-  service = new ProjectService(store, feed, log, panes)
+  service = new ProjectService(store, feed, log, panes, presets)
 })
 
 afterEach(async () => {

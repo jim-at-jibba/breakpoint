@@ -19,7 +19,11 @@ export const WIRE_ERROR_CODES = [
   /** The project's file is on disk but this build will not load it: corrupt, or newer. */
   'PROJECT_UNREADABLE',
   /** No pane with that id in the open project, or no project open. */
-  'PANE_NOT_FOUND'
+  'PANE_NOT_FOUND',
+  /** The global presets file is on disk but this build will not read it: corrupt, or newer. */
+  'PRESETS_UNREADABLE',
+  /** No preset with that id, which is what an edited presets file makes possible. */
+  'PRESET_NOT_FOUND'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

@@ -92,6 +92,71 @@ describe('applying a patch', () => {
     expect(next.revision).toBe(3)
   })
 
+  describe('a pane joining or leaving the set', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const degraded = applyPatch(open, {
+      revision: 2,
+      patch: { type: 'pane.status', pane: tablet, status: failed }
+    })
+    const added = { ...shop.panes[0], id: 'added', name: 'Laptop', width: 1280, height: 800 }
+
+    it('inserts an added pane where it belongs, with a fresh status', () => {
+      const next = applyPatch(degraded, {
+        revision: 3,
+        patch: { type: 'pane.added', pane: added, index: 1 }
+      })
+
+      expect(next.project?.panes.map((pane) => pane.id)).toEqual([mobile, 'added', tablet, desktop])
+      expect(next.panes).toEqual({ ...degraded.panes, added: initialPaneStatus() })
+      expect(next.revision).toBe(3)
+    })
+
+    it('appends an added pane whose index is past the end', () => {
+      const next = applyPatch(degraded, {
+        revision: 3,
+        patch: { type: 'pane.added', pane: added, index: 99 }
+      })
+      expect(next.project?.panes.map((pane) => pane.id)).toEqual([mobile, tablet, desktop, 'added'])
+    })
+
+    it('drops a removed pane and forgets what was observed of it, leaving the rest untouched', () => {
+      const next = applyPatch(degraded, {
+        revision: 3,
+        patch: { type: 'pane.removed', pane: mobile }
+      })
+
+      expect(next.project?.panes).toEqual([shop.panes[1], shop.panes[2]])
+      expect(next.panes).toEqual({ [tablet]: failed, [desktop]: initialPaneStatus() })
+      expect(next.revision).toBe(3)
+    })
+
+    it('ignores an add or a remove with nothing open, and a remove of a pane that is not there', () => {
+      expect(
+        applyPatch(nothingOpen, {
+          revision: 1,
+          patch: { type: 'pane.added', pane: added, index: 0 }
+        })
+      ).toEqual({ ...nothingOpen, revision: 1 })
+      expect(
+        applyPatch(nothingOpen, { revision: 1, patch: { type: 'pane.removed', pane: mobile } })
+      ).toEqual({ ...nothingOpen, revision: 1 })
+      expect(
+        applyPatch(degraded, { revision: 3, patch: { type: 'pane.removed', pane: 'ghost' } })
+      ).toEqual({ ...degraded, revision: 3 })
+    })
+
+    it('ignores an add of a pane the project already has, so a replayed patch cannot double it', () => {
+      const next = applyPatch(degraded, {
+        revision: 3,
+        patch: { type: 'pane.added', pane: shop.panes[0], index: 0 }
+      })
+      expect(next).toEqual({ ...degraded, revision: 3 })
+    })
+  })
+
   it('ignores a change to a pane the open project does not have', () => {
     const open = applyPatch(nothingOpen, {
       revision: 1,

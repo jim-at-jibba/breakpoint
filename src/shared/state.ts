@@ -35,6 +35,9 @@ export type StatePatch =
   | { type: 'pane.status'; pane: string; status: PaneStatus }
   /** A saved declaration; any affected capabilities were marked pending before this patch. */
   | { type: 'pane.changed'; pane: Pane }
+  /** A pane added to the open project, at the position it was added at. */
+  | { type: 'pane.added'; pane: Pane; index: number }
+  | { type: 'pane.removed'; pane: string }
 
 export interface RevisionedPatch {
   revision: number
@@ -68,7 +71,34 @@ export function applyPatch(
       const panes = project.panes.map((candidate) => (candidate.id === pane.id ? pane : candidate))
       return { ...before, revision, project: { ...project, panes } }
     }
+    case 'pane.added': {
+      const { project } = before
+      // A pane the project already has is a patch seen twice, not a second pane.
+      if (!project || project.panes.some((candidate) => candidate.id === patch.pane.id)) {
+        return { ...before, revision }
+      }
+      const panes = [...project.panes]
+      panes.splice(Math.min(patch.index, panes.length), 0, patch.pane)
+      return withPanes(before, revision, { ...project, panes })
+    }
+    case 'pane.removed': {
+      const { project } = before
+      if (!project?.panes.some((candidate) => candidate.id === patch.pane)) {
+        return { ...before, revision }
+      }
+      const panes = project.panes.filter((candidate) => candidate.id !== patch.pane)
+      return withPanes(before, revision, { ...project, panes })
+    }
   }
+}
+
+/**
+ * A new pane set, with the statuses reconciled through the same function the main process
+ * uses: surviving panes keep what is known about them, a new pane starts over, and a pane
+ * that has gone is forgotten.
+ */
+function withPanes(before: StateSnapshot, revision: number, project: Project): StateSnapshot {
+  return { ...before, revision, project, panes: paneStatusesFor(project, before.panes) }
 }
 
 /**
