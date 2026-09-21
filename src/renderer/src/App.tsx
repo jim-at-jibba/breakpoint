@@ -4,6 +4,10 @@ import { Button } from '@renderer/components/ui/button'
 // strip is the window's drag region and clears the traffic lights, and the body
 // shows the chrome ground, Inter, the mono stack, a pane identity hue and a Base
 // UI component picking up --primary. Replaced by the real toolbar and canvas.
+//
+// Quit is here for a second reason: it is the renderer's end of the route table. The
+// button causes `app.quit` over typed IPC, and a terminal causes the same route over the
+// socket — one table, no UI-only route (ADR-0005). It goes away with the real toolbar.
 export default function App(): React.JSX.Element {
   return (
     <div className="flex h-screen flex-col">
@@ -24,8 +28,12 @@ export default function App(): React.JSX.Element {
           />
           <span className="font-mono text-[length:var(--bp-text-lg)]">breakpoint</span>
         </div>
-        <Button size="sm" variant="outline">
-          scaffold
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void window.breakpoint.invoke('app.quit')}
+        >
+          Quit
         </Button>
       </main>
     </div>

@@ -1,82 +1,130 @@
 ---
 title: CLI reference
-description: The Breakpoint commands and flags that exist today.
+description: The Breakpoint commands, flags, exit codes and routes that exist today.
 ---
 
 The CLI is not a wrapper around the app — it is the same service layer the window calls,
 reached through a local socket. Anything the UI can do, a command can do, and both see
 the same state.
 
-:::note[Hand-written, for now]
-This page is maintained by hand and covers the Phase 1 command set only. Once the command
-router lands it will be generated from the router's own route table, so it cannot drift
-from what the binary accepts. Commands from later phases — `logs`, `nav`, `shot`,
-`check`, and the rest — are deliberately absent until they ship.
+:::note[Only what exists]
+Every command, flag, exit code, error code and route on this page is one the binary
+accepts today. Commands from later phases — `open`, `state`, `logs`, `nav`, `shot`,
+`check`, and the rest — are deliberately absent until they ship, and this page grows in
+the same change that ships them.
 :::
 
 ## Commands
-
-### `breakpoint <path>`
-
-Opens the project at `<path>`, launching the app if it is not already running. `.` is the
-common case.
-
-```sh
-breakpoint .
-```
-
-If an instance is already running, the arguments are handed to it rather than starting a
-second one. There is a single-instance lock, so you never end up with two windows
-fighting over the same project.
-
-### `breakpoint open <url>`
-
-Points the current project's panes at a URL.
-
-```sh
-breakpoint open http://localhost:3000/checkout
-```
-
-### `breakpoint state`
-
-Prints the current state: the project, the panes, their viewports and the layout mode.
-
-```sh
-breakpoint state --json
-```
-
-This is the command to reach for from a script or an agent — it is the cheapest way to
-find out what the window is showing.
 
 ### `breakpoint quit`
 
 Shuts the app down cleanly, releasing the single-instance lock.
 
+```sh
+breakpoint quit
+```
+
+If nothing is running, `quit` starts the app and then quits it, because every command
+connects first and launches second. Pass `--no-launch` when you want the check rather
+than the launch:
+
+```sh
+breakpoint quit --no-launch   # exits 3 if the app is not running, and starts nothing
+```
+
 ## Flags
 
-| Flag | Applies to | What it does |
+| Flag | What it does |
+| --- | --- |
+| `--json` | Prints the route's payload object on stdout and nothing else |
+| `--no-launch` | Exits 3 rather than starting the app if it is not running |
+| `--verbose` | Prints diagnostics on stderr, where they cannot pollute stdout |
+| `--help`, `-h` | Prints the help and exits 0 |
+
+`--json` has to be passed explicitly today. Turning it on automatically when stdout is
+not a terminal arrives with the commands that print state worth piping.
+
+## Output
+
+One rule, and every command inherits it:
+
+- **stdout carries the payload and nothing else.** With `--json` that is exactly the
+  route's payload object, so `jq` never has to skip a line.
+- **stderr carries everything else** — diagnostics, progress, and the message that goes
+  with a non-zero exit.
+
+Failures include a stable error code. With `--json`, the error diagnostic on stderr is
+`{ "error": { "code": "APP_NOT_RUNNING", "message": "the app is not running" } }`;
+stdout stays empty. `--verbose` adds separate diagnostic lines on stderr.
+
+Which means a verbose run still pipes cleanly:
+
+```sh
+breakpoint quit --json --verbose | jq .quitting
+# stderr: breakpoint: socket /Users/you/Library/Application Support/Breakpoint/breakpoint.sock
+# stderr: breakpoint: connected, calling app.quit
+# stdout: true
+```
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | The command succeeded |
+| `1` | An unexpected error |
+| `2` | The arguments could not be parsed |
+| `3` | The app is not running or is unreachable |
+| `4` | Reserved. Denied by a permission tier, from Phase 6 |
+| `5` | Reserved. Paused by the user, from Phase 6 |
+
+## Error codes
+
+Stable strings, so a script can branch on the failure rather than on its wording. The
+first four come back from the app; the rest are raised by the command itself.
+
+| Code | Exit | Meaning |
 | --- | --- | --- |
-| `--json` | all | Emits machine-readable output instead of formatted text |
-| `--wait` | `breakpoint <path>` | Blocks until the app is ready and the panes have rendered, then returns |
-| `--no-launch` | `breakpoint <path>` | Fails rather than starting the app if it is not already running |
-| `--background` | `breakpoint <path>` | Best effort: starts the app without bringing it to the front |
+| `UNKNOWN_ROUTE` | `1` | There is no route by that name |
+| `INVALID_REQUEST` | `1` | The request was not a route envelope |
+| `INVALID_PARAMS` | `1` | The params were not what the route takes |
+| `INTERNAL_ERROR` | `1` | The route failed |
+| `INVALID_USAGE` | `2` | The arguments could not be parsed |
+| `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
+| `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
+| `TIMEOUT` | `1` | The app accepted the connection but did not answer in time |
+| `TRANSPORT_ERROR` | `1` | The connection failed, or the reply could not be read |
 
-### On `--background`
+## Routes
 
-It is best effort and says so. Launching on macOS without stealing focus is awkward
-enough that a guaranteed version was deferred; if focus matters to your workflow, treat
-the current behaviour as a convenience rather than a contract.
+Commands are a surface over the route table, and so are the window and — later — MCP.
+Every route is reachable from every surface; there is no window-only behaviour.
+
+| Route | Payload | Reached by |
+| --- | --- | --- |
+| `app.quit` | `{ "quitting": true }` | `breakpoint quit` |
+
+On the socket the exchange is one line of JSON each way. Each request or response line
+is limited to 1 MiB of UTF-8, excluding the terminating newline. An oversized request
+closes its connection; an oversized response causes the CLI to report `TRANSPORT_ERROR`.
+
+For example:
+
+```json
+{ "id": "1", "route": "app.quit" }
+{ "id": "1", "ok": true, "data": { "quitting": true } }
+```
+
+and a failure carries the code instead:
+
+```json
+{ "id": "1", "ok": false, "error": { "code": "UNKNOWN_ROUTE", "message": "no route named nope.nope" } }
+```
+
+`--json` prints the `data` object alone — never the envelope around it.
 
 ## Using it from an agent
 
-The pattern that works today is: launch and wait, then read.
-
-```sh
-breakpoint . --wait --json
-breakpoint state --json
-```
-
-Both return structured output, so a coding agent can drive the window it shares with you
-rather than spinning up a headless browser you cannot see. The observe-and-verify
-commands that make this genuinely useful — reading the console, taking screenshots,
-running layout checks — arrive in later phases.
+The socket lives in Breakpoint's own data directory with owner-only permissions, and it
+is on by default — there is no configuration step and no first command that fails. The
+observe-and-verify commands that make this genuinely useful — reading the console,
+taking screenshots, running layout checks — arrive in later phases.
