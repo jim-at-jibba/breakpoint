@@ -1,0 +1,38 @@
+#!/bin/sh
+# Repo-local `breakpoint` shim. Symlink it somewhere on your PATH by hand:
+#
+#   ln -s "$PWD/bin/breakpoint" /usr/local/bin/breakpoint
+#
+# Phase 5's "Install command line tool" replaces this. Until then it does what the
+# packaged launcher will do: run the CLI entry of the main build under the app's own
+# Electron runtime in Node mode, so there is no separate Node dependency.
+set -e
+
+# Resolve through any symlinks, so the shim still finds the repo when it is on PATH.
+target=$0
+while [ -L "$target" ]; do
+  link=$(readlink "$target")
+  case "$link" in
+    /*) target=$link ;;
+    *) target=$(dirname "$target")/$link ;;
+  esac
+done
+repo=$(cd "$(dirname "$target")/.." && pwd -P)
+
+cli="$repo/out/main/cli.js"
+if [ ! -f "$cli" ]; then
+  echo "breakpoint: $cli is missing — run 'npm run build' in $repo first" >&2
+  exit 1
+fi
+
+case "$(uname -s)" in
+  Darwin) electron="$repo/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron" ;;
+  *) electron="$repo/node_modules/electron/dist/electron" ;;
+esac
+
+if [ ! -x "$electron" ]; then
+  echo "breakpoint: no Electron runtime at $electron — run 'npm install' in $repo first" >&2
+  exit 1
+fi
+
+ELECTRON_RUN_AS_NODE=1 exec "$electron" "$cli" "$@"
