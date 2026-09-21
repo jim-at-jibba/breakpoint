@@ -23,11 +23,46 @@ export type PaneEmulation = Pick<Pane, 'width' | 'height' | 'dpr' | 'mobile' | '
  */
 export type EmulationChanges = Partial<Pick<Pane, 'dpr' | 'mobile' | 'colorScheme'>>
 
-export interface EmulationCommand {
-  capability: EmulationCapability
-  method: string
-  params: Record<string, unknown>
+interface UserAgentBrand {
+  brand: string
+  version: string
 }
+
+interface UserAgentOverride {
+  userAgent: string
+  platform: string
+  userAgentMetadata: {
+    brands: UserAgentBrand[]
+    fullVersionList: UserAgentBrand[]
+    platform: string
+    platformVersion: string
+    architecture: string
+    model: string
+    mobile: boolean
+  }
+}
+
+export type EmulationCommand =
+  | {
+      capability: 'viewport'
+      method: 'Emulation.setDeviceMetricsOverride'
+      params: { width: number; height: number; deviceScaleFactor: number; mobile: boolean }
+    }
+  | {
+      capability: 'userAgent'
+      method: 'Emulation.setUserAgentOverride'
+      params: UserAgentOverride
+    }
+  | {
+      capability: 'touch'
+      method: 'Emulation.setTouchEmulationEnabled'
+      params: { enabled: boolean; maxTouchPoints: number }
+    }
+  | {
+      capability: 'colorScheme'
+      method: 'Emulation.setEmulatedMedia'
+      params: { features: [{ name: 'prefers-color-scheme'; value: 'light' | 'dark' | '' }] }
+    }
 
 export type EmulationResult =
   | { capability: EmulationCapability; ok: true }
@@ -54,7 +89,7 @@ export function emulationFor(pane: PaneEmulation, chromeVersion: string): Emulat
     {
       capability: 'userAgent',
       method: 'Emulation.setUserAgentOverride',
-      params: userAgentFor(pane.mobile, chromeVersion)
+      params: userAgentFor({ mobile: pane.mobile, chromeVersion })
     },
     {
       capability: 'touch',
@@ -83,18 +118,23 @@ export function emulationFor(pane: PaneEmulation, chromeVersion: string): Emulat
   ]
 }
 
+interface UserAgentOptions {
+  mobile: boolean
+  chromeVersion: string
+}
+
 /**
  * The reduced user agent Chrome itself sends, with client hints that tell the same story,
  * so server-side detection reading either sees the same device. A pane chooses by its
  * mobile flag until presets carry a user agent of their own (#12).
  */
-function userAgentFor(mobile: boolean, chromeVersion: string): Record<string, unknown> {
+function userAgentFor({ mobile, chromeVersion }: UserAgentOptions): UserAgentOverride {
   const major = chromeVersion.split('.')[0]
-  const brands = [
+  const brands: UserAgentBrand[] = [
     { brand: 'Chromium', version: major },
     { brand: 'Not=A?Brand', version: '24' }
   ]
-  const fullVersionList = [
+  const fullVersionList: UserAgentBrand[] = [
     { brand: 'Chromium', version: chromeVersion },
     { brand: 'Not=A?Brand', version: '24.0.0.0' }
   ]
@@ -131,13 +171,20 @@ function userAgentFor(mobile: boolean, chromeVersion: string): Record<string, un
 
 export type SendCommand = (command: EmulationCommand) => Promise<unknown>
 
+export function affectedCapabilities(changes: EmulationChanges): EmulationCapability[] {
+  const capabilities: EmulationCapability[] = []
+  if (changes.dpr !== undefined || changes.mobile !== undefined) capabilities.push('viewport')
+  if (changes.mobile !== undefined) capabilities.push('userAgent', 'touch')
+  if (changes.colorScheme !== undefined) capabilities.push('colorScheme')
+  return capabilities
+}
+
 /**
  * Sends every command, each inside its own error handling: one rejected override degrades
  * one capability rather than costing the pane the rest (#4).
  *
- * Every command is sent in the same task, in order, before any answer is awaited. A new
- * guest starts loading as soon as it attaches, and overrides still waiting behind an
- * earlier answer would miss its first request. Results come back in command order.
+ * Every command is sent in the same task, before any answer is awaited. One slow answer
+ * cannot delay sending another override. Results come back in command order.
  */
 export function applyEmulation(
   commands: readonly EmulationCommand[],

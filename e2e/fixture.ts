@@ -55,6 +55,16 @@ function page(origin: string, other: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>fixture ${origin}</title>
+<script>
+  document.documentElement.dataset.touchAtStart = String('ontouchstart' in window);
+  document.documentElement.dataset.initialTouches = '0';
+  if ('ontouchstart' in window) {
+    document.addEventListener('touchstart', () => {
+      const data = document.documentElement.dataset;
+      data.initialTouches = String(Number(data.initialTouches) + 1);
+    });
+  }
+</script>
 <style>
   html, body { margin: 0; height: 100%; }
   body {

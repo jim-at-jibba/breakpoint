@@ -63,6 +63,7 @@ export class PaneHost {
   private readonly attachments = new WeakSet<WebContents>()
   /** The latest emulation pass per guest, so a slow answer cannot report over a newer one. */
   private readonly passes = new WeakMap<WebContents, number>()
+  private readonly allowLoads = new WeakMap<WebContents, () => void>()
   private pending: PendingGuest | null = null
 
   constructor(
@@ -72,7 +73,7 @@ export class PaneHost {
     feed.subscribe(({ patch }) => {
       if (patch.type !== 'pane.changed') return
       const guest = this.guests.get(patch.pane.id)
-      if (guest) this.emulate(patch.pane.id, guest)
+      if (guest) void this.emulate(patch.pane.id, guest)
     })
   }
 
@@ -83,6 +84,8 @@ export class PaneHost {
   install(app: App): void {
     app.on('web-contents-created', (_event, contents) => {
       if (contents.getType() === 'webview') {
+        const initialized = new Promise<void>((resolve) => this.allowLoads.set(contents, resolve))
+        contents.once('destroyed', () => this.allowLoads.get(contents)?.())
         // Before anything else can run in it: `window.open` and `target=_blank` never
         // spawn a window, whatever the page or the element asked for.
         contents.setWindowOpenHandler(() => ({ action: 'deny' }))
@@ -97,11 +100,25 @@ export class PaneHost {
         // will-navigate. Reject before navigation starts: stop() inside
         // did-start-navigation crashes Electron 44; deferring it risks a commit.
         const loadURL = contents.loadURL.bind(contents)
+        let bootstrap: Promise<void> | undefined
         contents.loadURL = (url: string, options?: LoadURLOptions): Promise<void> => {
           if (!isWebUrl(url)) {
             return Promise.reject(new Error('Pane navigation requires an http: or https: URL'))
           }
-          return loadURL(url, options)
+          // CDP needs a live renderer to answer. A host-owned blank document starts it
+          // before the first target document fixes its touch feature-detection values.
+          bootstrap ??= loadURL('about:blank').then(() => {
+            contents.once('did-navigate', () => {
+              const history = contents.navigationHistory
+              if (history.getEntryAtIndex(0)?.url === 'about:blank') history.removeEntryAtIndex(0)
+            })
+          })
+          return bootstrap
+            .then(() => initialized)
+            .then(() => {
+              if (contents.isDestroyed()) throw new Error('Pane was destroyed before navigation')
+              return loadURL(url, options)
+            })
         }
       }
       contents.on('will-attach-webview', (event, preferences, params) => {
@@ -190,15 +207,15 @@ export class PaneHost {
       failed = false
     })
     guest.on('did-finish-load', () => {
-      if (!failed && current()) this.panes.loaded(pane, guest.getURL())
+      if (!failed && current() && isWebUrl(guest.getURL())) this.panes.loaded(pane, guest.getURL())
     })
     guest.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
-      if (!isMainFrame || code === ERR_ABORTED) return
+      if (!isMainFrame || code === ERR_ABORTED || !isWebUrl(url)) return
       failed = true
       if (current()) this.panes.loadFailed({ pane, url, code, message: description })
     })
     guest.on('did-navigate', () => {
-      if (current()) this.emulate(pane, guest)
+      if (current() && isWebUrl(guest.getURL())) void this.emulate(pane, guest)
     })
     guest.once('destroyed', () => {
       const wasCurrent = current()
@@ -207,7 +224,7 @@ export class PaneHost {
     })
 
     this.panes.guestCreated(pane, src)
-    this.attach({ pane, guest, attempt: 1 })
+    void this.attach({ pane, guest, attempt: 1 }).then(() => this.allowLoads.get(guest)?.())
   }
 
   /** Whether `guest` is still the pane's, rather than one it has since replaced. */
@@ -219,7 +236,7 @@ export class PaneHost {
    * Attachment failure never fails the pane: it renders, degraded, with the reason
    * recorded. One retry once the page has loaded, then stop — no backoff loop.
    */
-  private attach({ pane, guest, attempt }: GuestAttachment): void {
+  private async attach({ pane, guest, attempt }: GuestAttachment): Promise<void> {
     try {
       guest.debugger.attach(CDP_VERSION)
     } catch (error) {
@@ -227,36 +244,38 @@ export class PaneHost {
       const message = error instanceof Error ? error.message : String(error)
       this.panes.attachFailed({ pane, attempt, retrying, message })
       if (retrying) {
-        guest.once('did-stop-loading', () => {
-          if (!guest.isDestroyed() && this.isCurrent(pane, guest)) {
-            this.attach({ pane, guest, attempt: 2 })
+        const retry = (): void => {
+          if (!guest.isDestroyed() && this.isCurrent(pane, guest) && isWebUrl(guest.getURL())) {
+            guest.removeListener('did-stop-loading', retry)
+            void this.attach({ pane, guest, attempt: 2 })
           }
-        })
+        }
+        guest.on('did-stop-loading', retry)
       }
       return
     }
     this.attachments.add(guest)
     guest.debugger.once('detach', () => this.attachments.delete(guest))
     this.panes.attached(pane, attempt)
-    this.emulate(pane, guest)
+    await this.emulate(pane, guest)
   }
 
   /**
    * Sends every override for what the pane declares now, each on its own, and reports what
    * took. A pane with no attachment is left alone: its status already says why.
    */
-  private emulate(pane: string, guest: WebContents): void {
+  private async emulate(pane: string, guest: WebContents): Promise<void> {
     const declared = this.panes.paneFor(pane)
     if (!declared || guest.isDestroyed() || !this.attachments.has(guest)) return
     const pass = (this.passes.get(guest) ?? 0) + 1
     this.passes.set(guest, pass)
 
-    void applyEmulation(emulationFor(declared, process.versions.chrome), ({ method, params }) =>
-      guest.debugger.sendCommand(method, params)
-    ).then((results) => {
-      if (this.passes.get(guest) === pass && this.isCurrent(pane, guest)) {
-        this.panes.emulated(pane, results)
-      }
-    })
+    const results = await applyEmulation(
+      emulationFor(declared, process.versions.chrome),
+      ({ method, params }) => guest.debugger.sendCommand(method, params)
+    )
+    if (this.passes.get(guest) === pass && this.isCurrent(pane, guest)) {
+      this.panes.emulated(pane, results)
+    }
   }
 }

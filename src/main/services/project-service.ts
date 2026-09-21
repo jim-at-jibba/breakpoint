@@ -123,6 +123,7 @@ export class ProjectService {
     await this.store.save(updated)
     this.current = updated
     this.panes.open(updated)
+    this.panes.invalidateEmulation(id, changed)
     this.feed.publish({ type: 'pane.changed', pane: next })
     return { pane: next, changes: changed }
   }

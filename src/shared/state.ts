@@ -33,7 +33,7 @@ export interface StateSnapshot {
 export type StatePatch =
   | { type: 'project.opened'; project: Project }
   | { type: 'pane.status'; pane: string; status: PaneStatus }
-  /** One pane's declared values changed. Its status stands: the guest is the same one. */
+  /** A saved declaration; any affected capabilities were marked pending before this patch. */
   | { type: 'pane.changed'; pane: Pane }
 
 export interface RevisionedPatch {

@@ -1,16 +1,17 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type JSHandle, type Page } from '@playwright/test'
 import type { Entry, LogRead } from '../src/shared/event-log'
 import type { PaneStatus } from '../src/shared/panes'
+import type { EmulationSetting } from '../src/shared/routes'
 import {
   createProject,
   projectFileName,
   writeProjectFile,
   type Project
 } from '../src/shared/project'
-import type { StateSnapshot } from '../src/shared/state'
+import type { RevisionedPatch, StateSnapshot } from '../src/shared/state'
 import {
   HIT_TARGET,
   SCHEME_SWATCH,
@@ -124,6 +125,56 @@ function inGuest<T>(app: LaunchedApp['app'], id: number, script: string): Promis
     ({ webContents }, { id, script }) => webContents.fromId(id)!.executeJavaScript(script),
     { id, script }
   ) as Promise<T>
+}
+
+interface MediaControl {
+  count(): number
+  complete(index: number): void
+  refuse(index: number): void
+}
+
+interface HoldMediaOptions {
+  app: LaunchedApp['app']
+  id: number
+  mode: 'command' | 'response'
+}
+
+function holdMedia({ app, id, mode }: HoldMediaOptions): Promise<JSHandle<MediaControl>> {
+  return app.evaluateHandle(
+    ({ webContents }, { id, mode }) => {
+      const target = webContents.fromId(id)!.debugger
+      const send = target.sendCommand.bind(target)
+      const held: Array<{ complete(): void; refuse(): void }> = []
+      target.sendCommand = (
+        method: string,
+        params?: object,
+        sessionId?: string
+      ): Promise<unknown> => {
+        if (method !== 'Emulation.setEmulatedMedia') return send(method, params, sessionId)
+        return new Promise<unknown>((resolve, reject) => {
+          const refuse = (): void => reject(new Error('obsolete media failure'))
+          if (mode === 'command') {
+            held.push({
+              complete: (): void => {
+                void send(method, params, sessionId).then(resolve, reject)
+              },
+              refuse
+            })
+          } else {
+            void send(method, params, sessionId).then((value: unknown): void => {
+              held.push({ complete: (): void => resolve(value), refuse })
+            }, reject)
+          }
+        })
+      }
+      return {
+        count: (): number => held.length,
+        complete: (index: number): void => held[index].complete(),
+        refuse: (index: number): void => held[index].refuse()
+      }
+    },
+    { id, mode }
+  )
 }
 
 /** The centre pixel of the scheme swatch, read off the guest's own raster. */
@@ -293,22 +344,31 @@ test('a mobile pane emulates touch, and a desktop pane has it disabled without t
   const { app } = launched
   const page = await app.firstWindow()
   const shop = makeRepo('shop')
+  const before = documents(fixture.a).length
   await open(shop)
   await settled(shop)
   const [mobile, , desktop] = shop.panes
 
-  // Deliberately not `'ontouchstart' in window`: Chromium settles that when a document is
-  // created, and a pane's very first document is created before its overrides reach the
-  // renderer. It reads true from the next navigation on; touch itself works throughout.
   const probe = `({
+    touchAtStart: document.documentElement.dataset.touchAtStart,
+    touchEvent: 'ontouchstart' in window,
     points: navigator.maxTouchPoints,
     coarse: matchMedia('(pointer: coarse)').matches,
     hover: matchMedia('(hover: none)').matches
   })`
   const phone = await guestId(page, mobile.id)
-  expect(await inGuest(app, phone, probe)).toEqual({ points: 5, coarse: true, hover: true })
+  expect(await inGuest(app, phone, probe)).toEqual({
+    touchAtStart: 'true',
+    touchEvent: true,
+    points: 5,
+    coarse: true,
+    hover: true
+  })
   expect(await touchesReceived(app, phone)).toBe(1)
+  expect(await inGuest(app, phone, 'document.documentElement.dataset.initialTouches')).toBe('1')
   expect(await inGuest(app, await guestId(page, desktop.id), probe)).toEqual({
+    touchAtStart: 'false',
+    touchEvent: false,
     points: 0,
     coarse: false,
     hover: false
@@ -319,6 +379,103 @@ test('a mobile pane emulates touch, and a desktop pane has it disabled without t
     expect(snapshot.panes[pane.id]).toMatchObject({ emulation: ALL_APPLIED, degraded: [] })
   }
   expect(ofType(await logs(), 'pane.emulationFailed')).toEqual([])
+  expect(documents(fixture.a).slice(before)).toHaveLength(shop.panes.length)
+  expect(
+    await app.evaluate(
+      ({ webContents }, id) => webContents.fromId(id)!.navigationHistory.canGoBack(),
+      phone
+    )
+  ).toBe(false)
+})
+
+test('a saved scheme stays pending on both surfaces until the new override is applied', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await settled(shop)
+  const [mobile] = shop.panes
+  const id = await guestId(page, mobile.id)
+  const dark = await inGuest<boolean>(app, id, `matchMedia('(prefers-color-scheme: dark)').matches`)
+  const colorScheme = dark ? 'light' : 'dark'
+  const held = await holdMedia({ app, id, mode: 'command' })
+  const received = await page.evaluateHandle(() => {
+    const patches: RevisionedPatch[] = []
+    const dispose = window.breakpoint.onPatches((batch) => patches.push(...batch))
+    return { patches, dispose }
+  })
+  const setting: EmulationSetting = { pane: mobile.id, colorScheme }
+  const response = await page.evaluate(
+    async (setting: EmulationSetting) => window.breakpoint.invoke('panes.setEmulation', setting),
+    setting
+  )
+  expect(response).toMatchObject({
+    ok: true,
+    data: {
+      pane: {
+        colorScheme,
+        status: { emulation: { ...ALL_APPLIED, colorScheme: 'pending' } }
+      }
+    }
+  })
+  expect((await state()).panes[mobile.id].emulation).toEqual({
+    ...ALL_APPLIED,
+    colorScheme: 'pending'
+  })
+  expect(await inGuest(app, id, `matchMedia('(prefers-color-scheme: dark)').matches`)).toBe(dark)
+  await expect
+    .poll(() => received.evaluate(({ patches }) => patches.map(({ patch }) => patch.type)))
+    .toEqual(['pane.status', 'pane.changed'])
+
+  await held.evaluate((control) => control.complete(0))
+  await expect.poll(async () => (await state()).panes[mobile.id].emulation).toEqual(ALL_APPLIED)
+  expect(await inGuest(app, id, `matchMedia('(prefers-color-scheme: dark)').matches`)).toBe(!dark)
+  await expect
+    .poll(() => received.evaluate(({ patches }) => patches.map(({ patch }) => patch.type)))
+    .toEqual(['pane.status', 'pane.changed', 'pane.status'])
+  expect(await received.evaluate(({ patches }) => patches[0].patch)).toMatchObject({
+    type: 'pane.status',
+    pane: mobile.id,
+    status: { emulation: { colorScheme: 'pending' } }
+  })
+  await received.evaluate(({ dispose }) => dispose())
+  await received.dispose()
+  await held.dispose()
+})
+
+test('obsolete emulation answers cannot complete or degrade the latest setting', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await settled(shop)
+  const [mobile] = shop.panes
+  const held = await holdMedia({ app, id: await guestId(page, mobile.id), mode: 'response' })
+  const { cursor } = await state()
+  for (const colorScheme of ['dark', 'light', 'system'] as const) {
+    expect(
+      await sendRaw(
+        sandbox.socketPath,
+        requestLine('panes.setEmulation', { pane: mobile.id, colorScheme })
+      )
+    ).toMatchObject({ ok: true })
+  }
+  await expect.poll(() => held.evaluate((control) => control.count())).toBe(3)
+  await held.evaluate((control) => control.complete(0))
+  expect((await state()).panes[mobile.id].emulation.colorScheme).toBe('pending')
+
+  await held.evaluate((control) => control.complete(2))
+  await expect.poll(async () => (await state()).panes[mobile.id].emulation).toEqual(ALL_APPLIED)
+  await held.evaluate((control) => control.refuse(1))
+  expect((await state()).panes[mobile.id]).toMatchObject({ emulation: ALL_APPLIED, degraded: [] })
+  expect((await logs(cursor)).map((entry) => entry.type)).toEqual([
+    'pane.emulationChanged',
+    'pane.emulationChanged',
+    'pane.emulationChanged'
+  ])
+  await held.dispose()
 })
 
 test('two panes render the same page light and dark, and neither follows the app’s appearance', async () => {

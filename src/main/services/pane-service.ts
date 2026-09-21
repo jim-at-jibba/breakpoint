@@ -1,4 +1,8 @@
-import type { EmulationChanges, EmulationResult } from '../../shared/emulation'
+import {
+  affectedCapabilities,
+  type EmulationChanges,
+  type EmulationResult
+} from '../../shared/emulation'
 import type { EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
   compareGeometry,
@@ -167,6 +171,10 @@ export class PaneService {
     return { pane: { ...update.pane, status: this.current[pane] } }
   }
 
+  invalidateEmulation(pane: string, changes: EmulationChanges): void {
+    this.observe(pane, { type: 'emulationPending', capabilities: affectedCapabilities(changes) })
+  }
+
   /**
    * What the latest application of a pane's overrides achieved, capability by capability.
    * An entry is written when a capability starts failing, fails differently, or recovers —
@@ -182,7 +190,7 @@ export class PaneService {
         if (known?.message !== result.message) {
           this.record(pane, { type: 'pane.emulationFailed', capability, message: result.message })
         }
-      } else if (before.emulation[capability] === 'failed') {
+      } else if (before.degraded.some((degradation) => degradation.cause === capability)) {
         this.record(pane, { type: 'pane.emulationRecovered', capability })
       }
     }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, expectTypeOf, it } from 'vitest'
 import { applyEmulation, emulationFor, type EmulationCommand } from './emulation'
 
 const CHROME = '140.0.7339.41'
@@ -11,6 +11,23 @@ function command(commands: EmulationCommand[], method: string): EmulationCommand
 }
 
 describe('the overrides a pane is emulated with', () => {
+  it('requires the capability, method and parameters to agree at compile time', () => {
+    expectTypeOf<{
+      capability: 'touch'
+      method: 'Emulation.setEmulatedMedia'
+      params: { features: [{ name: 'prefers-color-scheme'; value: 'dark' }] }
+    }>().not.toMatchTypeOf<EmulationCommand>()
+    expectTypeOf<{
+      capability: 'touch'
+      method: 'Emulation.setTouchEmulationEnabled'
+      params: { enabled: string; maxTouchPoints: number }
+    }>().not.toMatchTypeOf<EmulationCommand>()
+    expectTypeOf<{
+      capability: 'viewport'
+      method: 'Emulation.setDeviceMetricsOverride'
+      params: { width: number; height: number; mobile: boolean }
+    }>().not.toMatchTypeOf<EmulationCommand>()
+  })
   it('sets a true CSS viewport at the pane’s DPR, whatever size it is drawn', () => {
     expect(command(emulationFor(phone, CHROME), 'Emulation.setDeviceMetricsOverride')).toEqual({
       capability: 'viewport',

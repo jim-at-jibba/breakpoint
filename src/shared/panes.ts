@@ -60,8 +60,8 @@ export type GeometryState = 'unchecked' | 'ok' | 'mismatch'
 
 /**
  * Whether one emulation capability is in force on the pane's guest: `pending` until the
- * overrides have been sent over an attachment, which a pane whose attachment failed never
- * gets past.
+ * current overrides have completed, including after a setting changes. A pane whose
+ * attachment failed never gets past pending.
  */
 export type CapabilityState = 'pending' | 'applied' | 'failed'
 
@@ -96,6 +96,7 @@ export type PaneObservation =
   | { type: 'attached' }
   | { type: 'attachFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
+  | { type: 'emulationPending'; capabilities: readonly EmulationCapability[] }
   | { type: 'emulated'; results: readonly EmulationResult[] }
   | { type: 'guestDestroyed' }
 
@@ -140,6 +141,11 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
         next = { ...next, emulation, degraded }
       }
       return next
+    }
+    case 'emulationPending': {
+      const emulation = { ...status.emulation }
+      for (const capability of observation.capabilities) emulation[capability] = 'pending'
+      return { ...status, emulation }
     }
   }
 }
