@@ -4,9 +4,9 @@ import starlight from '@astrojs/starlight';
 
 // https://astro.build/config
 export default defineConfig({
-  // TODO: swap for the custom domain when one is pointed at this project.
-  // Until then this only affects canonical URLs and the sitemap.
-  site: 'https://breakpoint.netlify.app',
+  // The Netlify project's own hostname. Swap for the custom domain when one is
+  // pointed at this project; it only affects canonical URLs and the sitemap.
+  site: 'https://breakpoint-app.netlify.app',
 
   vite: {
     // Pin the tsconfig for the transform step, so the oxc transformer uses this
