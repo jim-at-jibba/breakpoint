@@ -3,6 +3,7 @@ import { failure, success, type RouteRequest, type RouteResponse } from '../shar
 import { isRouteName, type RouteName, type RouteParams, type RoutePayload } from '../shared/routes'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
+import { PaneService } from './services/pane-service'
 import { ProjectService } from './services/project-service'
 
 /**
@@ -73,6 +74,32 @@ function expectSince(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   return { ok: true, params: { since } }
 }
 
+function expectSize(raw: unknown): { width: number; height: number } | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const { width, height } = raw as { width?: unknown; height?: unknown }
+  const measure = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value >= 0
+  return measure(width) && measure(height) ? { width, height } : undefined
+}
+
+function expectGeometryReport(raw: unknown): ParamsOk<'panes.reportGeometry'> | ParamsBad {
+  const shape =
+    'this route takes { pane, expected: { width, height }, measured: { width, height } }'
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, message: shape }
+  }
+  const report = raw as { pane?: unknown; expected?: unknown; measured?: unknown }
+  if (typeof report.pane !== 'string' || report.pane.length === 0) {
+    return { ok: false, message: 'pane must be a non-empty string' }
+  }
+  const expected = expectSize(report.expected)
+  const measured = expectSize(report.measured)
+  if (!expected || !measured) {
+    return { ok: false, message: `${shape}, in finite pixels of 0 or more` }
+  }
+  return { ok: true, params: { pane: report.pane, expected, measured } }
+}
+
 export interface DispatchResult {
   response: RouteResponse
   afterRespond?: () => void
@@ -88,6 +115,7 @@ export type Dispatch = (request: RouteRequest) => Promise<DispatchResult>
 export interface Services {
   app: AppService
   log: EventLog
+  panes: PaneService
   project: ProjectService
 }
 
@@ -100,6 +128,14 @@ export function createRouteTable(services: Services): RouteTable {
     'log.read': {
       parseParams: expectSince,
       handle: (params) => ({ payload: services.log.read(params) })
+    },
+    'panes.list': {
+      parseParams: expectNoParams,
+      handle: () => ({ payload: services.panes.list() })
+    },
+    'panes.reportGeometry': {
+      parseParams: expectGeometryReport,
+      handle: (report) => ({ payload: services.panes.reportGeometry(report) })
     },
     'project.open': {
       parseParams: expectPath,

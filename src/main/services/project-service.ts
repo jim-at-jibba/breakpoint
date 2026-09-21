@@ -4,6 +4,7 @@ import { createProject, type Project } from '../../shared/project'
 import type { StateSnapshot } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
+import type { PaneService } from './pane-service'
 import type { ProjectStore } from './project-store'
 
 /**
@@ -23,7 +24,8 @@ export class ProjectService {
   constructor(
     private readonly store: ProjectStore,
     private readonly feed: StateFeed,
-    private readonly log: EventLog
+    private readonly log: EventLog,
+    private readonly panes: PaneService
   ) {}
 
   /**
@@ -77,12 +79,18 @@ export class ProjectService {
     }
 
     this.current = project
+    this.panes.open(project)
     this.feed.publish({ type: 'project.opened', project })
     return this.snapshot()
   }
 
   snapshot(): StateSnapshot {
-    return { revision: this.feed.revision, cursor: this.log.cursor, project: this.current }
+    return {
+      revision: this.feed.revision,
+      cursor: this.log.cursor,
+      project: this.current,
+      panes: this.panes.statuses()
+    }
   }
 }
 

@@ -1,3 +1,4 @@
+import { reconcilePaneStatuses, type PaneStatus } from './panes'
 import type { Project } from './project'
 
 /**
@@ -21,9 +22,17 @@ export interface StateSnapshot {
    */
   cursor: number
   project: Project | null
+  /**
+   * What is observed of each of the open project's panes, keyed by pane id: its
+   * attachment, its last geometry check, and why it is degraded if it is. Not stored —
+   * a pane's status is true of this run only. Empty when nothing is open.
+   */
+  panes: Record<string, PaneStatus>
 }
 
-export type StatePatch = { type: 'project.opened'; project: Project }
+export type StatePatch =
+  | { type: 'project.opened'; project: Project }
+  | { type: 'pane.status'; pane: string; status: PaneStatus }
 
 export interface RevisionedPatch {
   revision: number
@@ -39,6 +48,29 @@ export function applyPatch(
 ): StateSnapshot {
   switch (patch.type) {
     case 'project.opened':
-      return { revision, cursor: before.cursor, project: patch.project }
+      return {
+        revision,
+        cursor: before.cursor,
+        project: patch.project,
+        panes: paneStatusesFor(patch.project, before.panes)
+      }
+    case 'pane.status':
+      if (!Object.hasOwn(before.panes, patch.pane)) return { ...before, revision }
+      return { ...before, revision, panes: { ...before.panes, [patch.pane]: patch.status } }
   }
+}
+
+/**
+ * The statuses a project's panes have once it is open, given what was known before. The
+ * main process and the renderer both call this on every open, so they agree without the
+ * reset having to be announced pane by pane.
+ */
+export function paneStatusesFor(
+  project: Project,
+  previous: Readonly<Record<string, PaneStatus>>
+): Record<string, PaneStatus> {
+  return reconcilePaneStatuses(
+    previous,
+    project.panes.map((pane) => pane.id)
+  )
 }

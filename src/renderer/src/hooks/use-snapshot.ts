@@ -7,7 +7,7 @@ import {
 
 type SnapshotView = SnapshotState & { retry(): void }
 
-const INITIAL_STATE: SnapshotState = { status: 'fetching' }
+const INITIAL_STATE: SnapshotState = { status: 'fetching', snapshot: null }
 
 export function useSnapshot(): SnapshotView {
   const [state, setState] = useState<SnapshotState>(INITIAL_STATE)

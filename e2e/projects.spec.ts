@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { PATCH_CHANNEL, ROUTE_CHANNEL } from '../src/shared/ipc'
 import { PROJECT_FILE_VERSION, projectFileName, type Project } from '../src/shared/project'
+import type { LogRead } from '../src/shared/event-log'
 import type { PatchBatch, StateSnapshot } from '../src/shared/state'
 import {
   closeApp,
@@ -57,6 +58,25 @@ async function openProject(path: string): Promise<StateSnapshot> {
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)
   return JSON.parse(run.stdout) as StateSnapshot
+}
+
+/**
+ * The snapshot once every pane has been attached to or given up on and has been measured,
+ * after which nothing announces a change on its own. Tests that forge patches number them
+ * from this revision; one taken at open is overtaken by the panes' own status patches.
+ */
+async function quietSnapshot(): Promise<StateSnapshot> {
+  let snapshot: StateSnapshot | undefined
+  await expect
+    .poll(async () => {
+      const run = await runCli(sandbox, ['state', '--json'])
+      snapshot = JSON.parse(run.stdout) as StateSnapshot
+      return Object.values(snapshot.panes).every(
+        (status) => status.attachment !== 'pending' && status.geometry !== 'unchecked'
+      )
+    })
+    .toBe(true)
+  return snapshot as StateSnapshot
 }
 
 async function shownProject(page: Page): Promise<{ name: string; url: string }> {
@@ -262,8 +282,16 @@ test('a project file with another repo identity is refused without changing the 
   })
   expect(readFileSync(file, 'utf8')).toBe(written)
   const state = await runCli(sandbox, ['state', '--json'])
-  // The open is untouched. Only the cursor moved: the refusal is itself an observation.
-  expect(JSON.parse(state.stdout)).toEqual({ ...before, cursor: before.cursor + 1 })
+  // The open is untouched. The refusal is itself an observation, logged against no pane;
+  // the panes keep observing too, so the cursor is not asserted to have moved by one.
+  const after = JSON.parse(state.stdout) as StateSnapshot
+  expect(after.project).toEqual(before.project)
+  expect(Object.keys(after.panes)).toEqual(Object.keys(before.panes))
+  const logs = await runCli(sandbox, ['logs', '--since', String(before.cursor), '--json'])
+  const refusals = (JSON.parse(logs.stdout) as LogRead).entries.filter(
+    (entry) => entry.type === 'project.openFailed'
+  )
+  expect(refusals).toEqual([expect.objectContaining({ pane: null, path: other })])
   await expect(page.getByTestId('project-name')).toHaveText('shop')
 })
 
@@ -271,8 +299,9 @@ test('the renderer shows a snapshot failure and recovers over the real preload b
   launched = await launchApp(sandbox)
   const { app } = launched
   const page = await app.firstWindow()
-  const snapshot = await openProject(makeRepo('shop'))
+  await openProject(makeRepo('shop'))
   await expect(page.getByTestId('project-name')).toHaveText('shop')
+  const snapshot = await quietSnapshot()
   await app.evaluate(
     ({ ipcMain, BrowserWindow }, { route, patch, snapshot }) => {
       ipcMain.removeHandler(route)
@@ -311,7 +340,7 @@ test('state with nothing open says so on both outputs', async () => {
   const text = await runCli(sandbox, ['state'])
 
   expect(json.code).toBe(0)
-  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, cursor: 0, project: null })
+  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, cursor: 0, project: null, panes: {} })
   // The cursor is printed with nothing open: that is when the log matters most.
   expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
 })
@@ -321,8 +350,9 @@ test('the renderer renders from a snapshot plus patches, and re-fetches on a des
   const { app } = launched
   const page = await app.firstWindow()
   const shop = makeRepo('shop')
-  const snapshot = await openProject(shop)
+  await openProject(shop)
   await expect(page.getByTestId('project-name')).toHaveText('shop')
+  const snapshot = await quietSnapshot()
 
   const phantom: Project = { ...(snapshot.project as Project), name: 'phantom' }
   const push = (batch: PatchBatch): Promise<void> =>

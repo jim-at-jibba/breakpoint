@@ -48,6 +48,11 @@
   /* ---- strokes ---------------------------------------------------------- */
   --bp-stroke: 1px;
   --bp-stroke-strong: 2px;
+
+  /* ---- pane header ------------------------------------------------------ */
+  /* The identity tab at the header's leading edge, in the pane's palette colour. */
+  --bp-pane-tab-w: 3px;
+  --bp-pane-tab-h: 12px;
   /* Overlay strokes counter-scale: set --bp-zoom on the canvas element and
      any stroke drawn *over* a pane uses this, so it stays 1.5 screen px. */
   --bp-zoom: 1;

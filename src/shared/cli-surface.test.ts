@@ -10,6 +10,9 @@ import {
   type ParsedValue
 } from './cli-surface'
 import type { LogRead, ReadParams } from './event-log'
+import { foldPaneStatus } from './panes'
+import { createProject } from './project'
+import { paneStatusesFor, type StateSnapshot } from './state'
 
 describe('the declared surface', () => {
   it('checks command parsers against their route parameters', () => {
@@ -329,6 +332,38 @@ describe('the log as a terminal reads it', () => {
     ).toContain('[truncated: path, message]')
   })
 
+  it('prints a pane lifecycle entry against its pane, saying what happened', () => {
+    const text = render({
+      entries: [
+        { cursor: 3, time: 0, pane: 'p-1', type: 'pane.created', url: 'http://127.0.0.1:5173/' },
+        {
+          cursor: 4,
+          time: 0,
+          pane: 'p-1',
+          type: 'pane.attachFailed',
+          attempt: 1,
+          retrying: true,
+          message: 'Debugger is already attached to the target'
+        },
+        {
+          cursor: 5,
+          time: 0,
+          pane: 'p-1',
+          type: 'pane.geometryMismatch',
+          expected: { width: 390, height: 844 },
+          measured: { width: 390, height: 150 },
+          message: 'drawn 390×150, declared 390×844 at this zoom'
+        }
+      ],
+      cursor: 5
+    })
+    expect(text.split('\n')).toEqual([
+      '3  p-1  created, loading http://127.0.0.1:5173/',
+      '4  p-1  attachment failed (attempt 1, retrying after load): Debugger is already attached to the target',
+      '5  p-1  degraded: drawn 390×150, declared 390×844 at this zoom'
+    ])
+  })
+
   it('says what was evicted before what it is about to print', () => {
     const text = render({
       entries: [
@@ -350,5 +385,26 @@ describe('the log as a terminal reads it', () => {
     expect(second).toContain('41')
     expect(second).toContain('/repos/shop')
     expect(second).toContain('PROJECT_UNREADABLE')
+  })
+})
+
+describe('the state as a terminal reads it', () => {
+  const state = CLI_COMMANDS.find((command) => command.route === 'project.state')
+  const shop = createProject('/repos/shop')
+  const [mobile, tablet] = shop.panes
+
+  it('lists each pane with its size, and says which are degraded and why', () => {
+    const panes = paneStatusesFor(shop, {})
+    panes[tablet.id] = foldPaneStatus(panes[tablet.id], {
+      type: 'attachFailed',
+      message: 'Debugger is already attached to the target'
+    })
+    const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
+
+    const lines = (state?.render(snapshot) ?? '').split('\n')
+    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x`)
+    expect(lines).toContain(
+      '  Tablet    820×1180 @2x  degraded: attachment: Debugger is already attached to the target'
+    )
   })
 })

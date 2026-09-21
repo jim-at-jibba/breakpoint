@@ -31,7 +31,9 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules
+      ...eslintPluginReactRefresh.configs.vite.rules,
+      // Electron's <webview> attributes, which React passes through as written.
+      'react/no-unknown-property': ['error', { ignore: ['partition', 'webpreferences'] }]
     }
   },
   eslintConfigPrettier,

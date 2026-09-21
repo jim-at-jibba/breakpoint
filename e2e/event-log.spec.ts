@@ -93,7 +93,9 @@ test('a project that refuses to load reaches a terminal reading from a cursor', 
     path: shop,
     code: 'PROJECT_UNREADABLE'
   })
-  expect(read.entries[0].message).toContain(`file version ${PROJECT_FILE_VERSION + 1}`)
+  expect(read.entries[0]).toMatchObject({
+    message: expect.stringContaining(`file version ${PROJECT_FILE_VERSION + 1}`)
+  })
   expect(read.cursor).toBe(1)
 
   // And the state payload carries the position, so the next read starts where this ended.

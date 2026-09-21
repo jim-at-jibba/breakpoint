@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
+import { isWebUrl } from './urls'
 
 /**
  * A project: a repo path plus everything Breakpoint remembers about working on it. This
@@ -241,7 +242,7 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
 export function parseProject(value: unknown): Project | undefined {
   const raw = asRecord(value)
   if (!raw) return undefined
-  if (!isString(raw.name) || !isString(raw.repoPath) || !isString(raw.startUrl)) return undefined
+  if (!isString(raw.name) || !isString(raw.repoPath) || !isWebUrl(raw.startUrl)) return undefined
   if (!isStringArray(raw.allowedOrigins)) return undefined
   if (!isString(raw.layout) || !LAYOUTS.has(raw.layout)) return undefined
   const zoom = parseZoom(raw.zoom)

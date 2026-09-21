@@ -10,12 +10,21 @@
  */
 
 import type { LogRead, ReadParams } from './event-log'
+import type { PaneStatus, Size } from './panes'
+import type { Pane } from './project'
 import type { StateSnapshot } from './state'
 
 /** A route is a dotted `noun.verb`. The noun is the service, the verb is the method. */
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
-export const ROUTE_NAMES = ['app.quit', 'log.read', 'project.open', 'project.state'] as const
+export const ROUTE_NAMES = [
+  'app.quit',
+  'log.read',
+  'panes.list',
+  'panes.reportGeometry',
+  'project.open',
+  'project.state'
+] as const
 
 export type RouteName = (typeof ROUTE_NAMES)[number]
 
@@ -31,6 +40,15 @@ export interface RouteSignatures {
    * everything that ever happened.
    */
   'log.read': { params: ReadParams; payload: LogRead }
+  /** The open project's panes, each with what is observed of it. Empty with nothing open. */
+  'panes.list': { params: undefined; payload: { panes: PaneListing[] } }
+  /**
+   * The host-side geometry check's measurement of one pane ([ADR-0004]), in screen
+   * pixels: its declared size times the canvas zoom, and its element's own rendered box.
+   * The window is the surface that can measure, but the route is anyone's. A mismatch
+   * degrades the pane and writes an entry; nothing resizes the pane to match.
+   */
+  'panes.reportGeometry': { params: GeometryReport; payload: { status: PaneStatus } }
   /**
    * Opens the project for a repo, creating it the first time. `path` is absolute: the
    * caller resolves it against its own working directory, which the app cannot know.
@@ -38,6 +56,14 @@ export interface RouteSignatures {
   'project.open': { params: { path: string }; payload: StateSnapshot }
   /** The snapshot every surface renders from. `project` is null until one is opened. */
   'project.state': { params: undefined; payload: StateSnapshot }
+}
+
+export type PaneListing = Pane & { status: PaneStatus }
+
+export interface GeometryReport {
+  pane: string
+  expected: Size
+  measured: Size
 }
 
 export type RouteParams<N extends RouteName> = RouteSignatures[N]['params']

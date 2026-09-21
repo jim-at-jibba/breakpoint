@@ -35,7 +35,8 @@ resolve against the terminal's working directory, and every route to the same di
 
 A new project is named after its directory, starts on `http://localhost:3000`, allows
 that origin, and has three panes: Mobile 390×844 @3x, Tablet 820×1180 @2x and Desktop
-1440×900 @1x.
+1440×900 @1x. The window shows them side by side on a canvas that scrolls sideways, each
+loading the start URL at its declared size.
 
 The path has to be a directory that exists, or the command fails with `INVALID_PARAMS`.
 A project whose stored file this build will not read — one written by a newer
@@ -55,6 +56,21 @@ breakpoint state --json | jq .cursor        # hand this to `logs --since`
 
 If nothing is open, `project` is `null` and the text output says so. The JSON payload
 carries `cursor` either way.
+
+A pane that is rendering but not fully trustworthy is **degraded**, and says why. The
+text output puts the reason on the pane's line:
+
+```
+Panes:
+  Mobile    390×844 @3x
+  Tablet    820×1180 @2x  degraded: attachment: Debugger is already attached to the target
+```
+
+There are two causes today. `attachment`: the app could not make its debugging
+connection to the pane, so the pane renders but cannot be observed; the app tries once
+more after the page loads, then stops. `geometry`: the pane's element is not drawn at
+its declared size times the canvas zoom, measured in the window rather than asked of the
+page. A pane with the wrong geometry is never resized to hide it.
 
 ### `breakpoint logs`
 
@@ -126,9 +142,23 @@ shortened fields, such as `"truncated": ["path", "message"]`. Human output inclu
 is separate from `droppedBefore`, which reports evicted entries, and the entry's cursor
 still lets a reader continue past it.
 
-What the log carries today is the app's own failures. Every other producer — pane
-lifecycle, navigation, the console, network — arrives with the feature that observes it,
-in this same payload and on this same cursor.
+What the log carries today is the app's own failures and pane lifecycle. Pane entries
+are tagged with the pane's `id`:
+
+| `type` | Fields | When |
+| --- | --- | --- |
+| `pane.created` | `url` | The pane's page was created, loading `url` |
+| `pane.attached` | `attempt` | The app made its debugging connection to the pane |
+| `pane.attachFailed` | `attempt`, `retrying`, `message` | It could not. `retrying` says whether one more attempt follows the next load; the second failure is final |
+| `pane.loaded` | `url` | The pane finished loading `url` |
+| `pane.loadFailed` | `url`, `code`, `message` | The pane could not load `url`. `code` is Chromium's net error, such as `-102` |
+| `pane.geometryMismatch` | `expected`, `measured`, `message` | The pane's element is not drawn at its declared size times the zoom. Both sizes are `{ "width", "height" }` in screen pixels |
+| `pane.geometryMatched` | none | A mismatched pane is drawn at its declared size again |
+| `pane.destroyed` | none | The pane's page went away: the pane was removed, or another project opened |
+
+`url` is shortened like `path` and `message` when it is long, and named in `truncated`.
+Every other producer — navigation, emulation, the console, network — arrives with the
+feature that observes it, in this same payload and on this same cursor.
 
 ### `breakpoint quit`
 
@@ -195,7 +225,7 @@ breakpoint quit --json --verbose | jq .quitting
 ## Error codes
 
 Stable strings, so a script can branch on the failure rather than on its wording. The
-first five come back from the app; the rest are raised by the command itself.
+first six come back from the app; the rest are raised by the command itself.
 
 | Code | Exit | Meaning |
 | --- | --- | --- |
@@ -204,6 +234,7 @@ first five come back from the app; the rest are raised by the command itself.
 | `INVALID_PARAMS` | `1` | The params were not what the route takes |
 | `INTERNAL_ERROR` | `1` | The route failed |
 | `PROJECT_UNREADABLE` | `1` | The project's file is on disk but this build will not load it. `details.reason` is `newer` or `corrupt`, and `details.file` is the path |
+| `PANE_NOT_FOUND` | `1` | The open project has no pane with that id, or nothing is open |
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
@@ -219,16 +250,39 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | --- | --- | --- | --- |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
 | `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
+| `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
+| `panes.reportGeometry` | `{ "pane": id, "expected": { "width", "height" }, "measured": { "width", "height" } }` | `{ "status": … }` | the window |
 | `project.open` | `{ "path": "/abs/repo" }` | the state snapshot | `breakpoint .`, `breakpoint <path>` |
 | `project.state` | none | the state snapshot | `breakpoint state` |
 
-The state snapshot is `{ "revision": n, "cursor": n, "project": … }`, where `project` is
-`null` until one is opened, and otherwise carries `name`, `repoPath`, `startUrl`,
-`allowedOrigins`, `panes`, `layout`, `zoom` and `sessions`. Each pane has an `id`,
-`name`, `width`, `height`, `dpr`, `mobile` flag, `colorScheme`, `session` and the
+The state snapshot is `{ "revision": n, "cursor": n, "project": …, "panes": { … } }`,
+where `project` is `null` until one is opened, and otherwise carries `name`, `repoPath`,
+`startUrl`, `allowedOrigins`, `panes`, `layout`, `zoom` and `sessions`. Each pane has an
+`id`, `name`, `width`, `height`, `dpr`, `mobile` flag, `colorScheme`, `session` and the
 `preset` it was made from. `revision` counts the changes the app has announced to its
 window; a script can ignore it. `cursor` is the event log position the snapshot was
 taken at.
+
+The top-level `panes` is what is observed of each pane while the app runs, keyed by pane
+`id`, and empty when nothing is open. It is never stored:
+
+```json
+{
+  "attachment": "attached",
+  "geometry": "ok",
+  "degraded": []
+}
+```
+
+`attachment` is `pending`, `attached` or `failed`. `geometry` is the last check of the
+pane's drawn size: `unchecked`, `ok` or `mismatch`. `degraded` holds one
+`{ "cause", "message" }` per reason the pane is degraded, with `cause` `attachment` or
+`geometry`, and is empty for a healthy pane. `panes.list` returns the same statuses
+joined to the stored panes, as `{ "panes": [ { "id": …, "name": …, …, "status": { … } } ] }`.
+
+`panes.reportGeometry` is how the window reports what it measured; it answers
+`PANE_NOT_FOUND` for a pane the open project does not have. It is a route like any
+other, so it is reachable over the socket, but it exists for the window.
 
 `since` must be an integer of 0 or more; anything else is `INVALID_PARAMS` from the
 route and a usage error from the command, which never sends it.
