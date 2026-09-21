@@ -1,0 +1,77 @@
+/* ============================================================================
+   Starlight, wearing the site's clothes.
+
+   Starlight theming is a mapping exercise: it draws everything from --sl-*
+   custom properties, so the job here is to point those at the tokens the site
+   already owns rather than to restyle Starlight's components.
+
+   Nothing in this file defines a colour. If a value is missing, add it to
+   nocturne.css or site-tokens.css first, then point a --sl-* at it.
+   ========================================================================= */
+
+:root,
+:root[data-theme='dark'] {
+  /* The Site is dark-only: site-tokens.css carries the app's dark-theme pane
+     values byte-for-byte so the page graphics, the screenshots and the product
+     agree, and Nocturne ships no light ramp to map against.
+
+     Only the tokens below are remapped; everything else — asides, code blocks,
+     the note/tip/caution families — keeps Starlight's own dark values. That is
+     why components/ThemeProvider.astro pins data-theme to dark rather than
+     letting it follow prefers-color-scheme: on a light-mode OS the unmapped
+     tokens would resolve light against a dark page. */
+
+  --sl-color-accent-low: var(--color-accent-900);
+  --sl-color-accent: var(--color-accent-600);
+  --sl-color-accent-high: var(--color-accent-300);
+
+  --sl-color-white: var(--color-neutral-100);
+  --sl-color-gray-1: var(--color-neutral-200);
+  --sl-color-gray-2: var(--color-neutral-300);
+  --sl-color-gray-3: var(--color-neutral-500);
+  --sl-color-gray-4: var(--color-neutral-700);
+  --sl-color-gray-5: var(--color-neutral-800);
+  --sl-color-gray-6: var(--color-neutral-900);
+  --sl-color-black: var(--color-bg);
+
+  --sl-color-bg: var(--color-bg);
+  --sl-color-bg-nav: color-mix(in srgb, var(--color-bg) 86%, transparent);
+  --sl-color-bg-sidebar: var(--color-bg);
+  --sl-color-bg-inline-code: var(--color-neutral-900);
+  --sl-color-text: var(--color-text);
+  --sl-color-text-accent: var(--color-accent-300);
+  --sl-color-hairline: var(--color-neutral-900);
+  --sl-color-hairline-light: var(--color-neutral-800);
+  --sl-color-hairline-shade: var(--color-neutral-900);
+
+  --sl-font: var(--font-body);
+  --sl-font-mono: var(--bp-font-mono);
+}
+
+/* The header carries the same wordmark treatment as the marketing nav, so
+   crossing from / into /docs does not feel like a different site. */
+.site-title {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+header.header {
+  backdrop-filter: blur(10px);
+}
+
+/* The current page in the sidebar. Starlight fills it solid with
+   --sl-color-text-accent, which reads as a bright pill against this palette.
+   The Site's idiom for "selected" is accent text on a low-alpha accent wash —
+   the same move the marketing nav's primary button makes. */
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  color: var(--color-accent-300);
+  background-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+/* Starlight's default measure is generous for prose; the CLI reference is
+   mostly tables and code, which want the extra room. */
+:root {
+  --sl-content-width: 48rem;
+}

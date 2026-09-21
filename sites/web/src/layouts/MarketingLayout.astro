@@ -1,0 +1,184 @@
+---
+/**
+ * The chrome for the Site's non-Docs pages. Starlight owns /docs and brings its
+ * own layout; this is everything else.
+ *
+ * The design prototype (docs/design/site/Breakpoint Site.dc.html) is the source
+ * of truth for what is inside it.
+ */
+import '../styles/nocturne.css';
+import '../styles/site-tokens.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+const nav = [
+  { href: '#features', label: 'Features' },
+  { href: '#demo', label: 'Demo' },
+  { href: '#cli', label: 'CLI' },
+];
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    />
+  </head>
+  <body>
+    <!-- NAV -->
+    <div class="nav-bar">
+      <div class="nav-inner">
+        <div class="wordmark">
+          <span class="wordmark-bars">
+            <span style="background: var(--bp-pane-1);"></span>
+            <span style="background: var(--bp-pane-3);"></span>
+            <span style="background: var(--bp-pane-6);"></span>
+          </span>
+          <span class="wordmark-text">Breakpoint</span>
+        </div>
+        <div class="nav-links">
+          {nav.map((item) => <a href={item.href}>{item.label}</a>)}
+          <a href="/docs/" class="btn btn-primary nav-cta">Docs</a>
+        </div>
+      </div>
+    </div>
+
+    <slot />
+
+    <!-- FOOTER -->
+    <div class="site-footer">
+      <span>Breakpoint</span>
+      <span class="site-footer-links">
+        <a href="/docs/">Docs</a>
+        <a href="https://github.com/jim-at-jibba/breakpoint/releases">Changelog</a>
+        <a href="https://github.com/jim-at-jibba/breakpoint">GitHub</a>
+        <a href="https://github.com/jim-at-jibba/breakpoint/blob/main/LICENCE">Licence</a>
+      </span>
+    </div>
+  </body>
+</html>
+
+<style is:global>
+  html,
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    user-select: text;
+    -webkit-user-select: text;
+    overflow-x: hidden;
+  }
+  a {
+    color: var(--color-accent-300);
+    text-decoration: none;
+    text-underline-offset: 3px;
+  }
+  a:hover {
+    color: var(--color-accent);
+    text-decoration: underline;
+  }
+  .mono {
+    font-family: var(--bp-font-mono);
+  }
+
+  /* The prototype's shared measure: one 1180px column with a fluid gutter. */
+  .shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 40px);
+  }
+
+  /* — nav — */
+  .nav-bar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: color-mix(in srgb, var(--color-bg) 86%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--color-neutral-900);
+  }
+  .nav-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 40px);
+    height: 56px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  .wordmark {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .wordmark-bars {
+    display: flex;
+    gap: 2px;
+  }
+  .wordmark-bars span {
+    width: 3px;
+    height: 15px;
+    border-radius: 1px;
+  }
+  .wordmark-text {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-left: auto;
+    font-size: 13px;
+  }
+  .nav-links a {
+    color: var(--color-neutral-400);
+  }
+  .nav-cta {
+    font-size: 13px;
+    padding: 5px 12px;
+  }
+  .nav-links a.nav-cta {
+    color: var(--color-accent);
+  }
+
+  /* — footer — */
+  .site-footer {
+    max-width: 1180px;
+    margin: clamp(64px, 9vw, 104px) auto 0;
+    padding: 24px clamp(16px, 4vw, 40px) 48px;
+    border-top: 1px solid var(--color-neutral-900);
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 13px;
+    color: var(--color-neutral-400);
+  }
+  .site-footer-links {
+    margin-left: auto;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  .site-footer-links a {
+    color: var(--color-neutral-500);
+  }
+</style>

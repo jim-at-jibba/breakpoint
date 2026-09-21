@@ -1,0 +1,56 @@
+---
+title: Quickstart
+description: Open a project, get panes on screen, and drive them from a terminal.
+---
+
+This walks through what exists today: opening a project, getting panes rendering, and
+checking them from a terminal.
+
+## 1. Open a project
+
+Start your dev server as you normally would, then point Breakpoint at the directory:
+
+```sh
+breakpoint .
+```
+
+A **project** is a repo path plus the dev command and URL that go with it. Opening one
+restores the canvas you left: the same panes, the same zoom, the same layout mode.
+
+If the app is already running, `breakpoint .` hands the arguments to the running
+instance rather than starting a second one.
+
+## 2. Read the canvas
+
+Three panes open by default — mobile, tablet and desktop. Each has its own emulated
+viewport width, device pixel ratio and colour scheme, and each carries a colour from the
+pane palette.
+
+Layout modes:
+
+- **Horizontal** lines the panes up so you can compare neighbours.
+- **Fit** scales the whole set to the window.
+- **Focus** gives one pane full size and drops the rest to a strip.
+
+## 3. Check it from a terminal
+
+Everything the window knows, the CLI can print:
+
+```sh
+breakpoint state --json
+```
+
+That is the contract the agent integration is built on: one service layer, called
+identically by the UI and by the command router. If the window can do it, a command can
+do it.
+
+To wait for the app to be ready before reading state — useful in a script, and the way a
+coding agent should drive it:
+
+```sh
+breakpoint . --wait --json
+```
+
+## Next
+
+The [CLI reference](/docs/cli/) covers the commands and flags that exist today.

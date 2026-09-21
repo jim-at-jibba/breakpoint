@@ -1,0 +1,31 @@
+# Netlify build configuration for the Site.
+#
+# There must be exactly ONE netlify.toml in this repository, and this is it.
+# `base` in a root-level netlify.toml overrides the base directory set in the
+# Netlify UI, and every other path here resolves relative to that base — so
+# `publish = "dist"` means sites/web/dist. Adding a second netlify.toml inside
+# sites/web would silently take precedence over this file.
+#
+# See docs/adr/0001-astro-starlight-for-the-site.md.
+
+[build]
+  base = "sites/web"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Astro emits directory-style URLs; Netlify serves them without help. These
+# headers are the ones a static site wants and nothing more.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Astro fingerprints everything under /_astro/, so it can be cached forever.
+[[headers]]
+  for = "/_astro/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"

@@ -1,0 +1,15 @@
+---
+/**
+ * Overrides Starlight's theme picker with nothing.
+ *
+ * The Site is dark-only. site-tokens.css mirrors the app's dark-theme pane
+ * palette byte-for-byte so the page graphics, the demo still and the product
+ * agree on what "pane 3" looks like; Nocturne carries no light ramp to map
+ * against. Offering a toggle that only half works is worse than not offering
+ * one.
+ *
+ * To bring light mode back: add a light ramp to nocturne.css, split the
+ * mappings in starlight.css by [data-theme], and delete this file along with
+ * its entry in astro.config.mjs.
+ */
+---

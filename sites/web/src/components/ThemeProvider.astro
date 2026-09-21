@@ -1,0 +1,27 @@
+---
+/**
+ * Overrides Starlight's theme provider to pin the Docs to dark.
+ *
+ * Starlight's default reads localStorage, then falls back to
+ * prefers-color-scheme. The Site has no light theme — site-tokens.css mirrors
+ * the app's dark-theme pane palette byte-for-byte and Nocturne ships no light
+ * ramp — so a visitor on a light-mode OS would otherwise get Starlight's light
+ * defaults for everything the mapping in styles/starlight.css does not cover:
+ * asides, code blocks, the note/tip/caution colour families.
+ *
+ * The `updatePickers` stub is kept because Starlight's own code calls it; the
+ * picker itself is overridden away in components/ThemeSelect.astro.
+ *
+ * To bring light mode back, delete this file and its entry in
+ * astro.config.mjs, and split the mappings in styles/starlight.css by
+ * [data-theme].
+ */
+---
+
+{/* Intentionally inlined to avoid a flash of the wrong theme. */}
+<script is:inline>
+  window.StarlightThemeProvider = (() => {
+    document.documentElement.dataset.theme = 'dark';
+    return { updatePickers() {} };
+  })();
+</script>
