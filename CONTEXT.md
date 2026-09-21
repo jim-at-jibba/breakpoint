@@ -92,6 +92,24 @@ A monotonic position in the event log. A reader asks for everything after its cu
 told if anything was evicted before it arrived.
 _Avoid_: offset, sequence, checkpoint, watermark
 
+### State
+
+**Snapshot**:
+Everything a surface renders from, at one moment: the open project and the revision it is
+current to. Returned by one route to every surface; the window fetches it and then keeps it
+current with patches.
+_Avoid_: state (unqualified), store, model
+
+**Patch**:
+One typed change to the snapshot, from a fixed set of kinds. Numbered by revision and pushed
+to the window in batches, one batch per frame. Never a path-and-value edit.
+_Avoid_: event, delta, update, diff
+
+**Revision**:
+The count of patches the app has announced. A snapshot carries the revision it reflects, and
+a window that sees a gap in the sequence fetches a fresh snapshot rather than guessing.
+_Avoid_: version (that is the stored file's), sequence number, generation
+
 ### Surfaces
 
 **Surface**:

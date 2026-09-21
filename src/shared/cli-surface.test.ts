@@ -51,7 +51,7 @@ describe('the declared surface', () => {
 
 describe('parseArgv', () => {
   it('reads a bare command', () => {
-    const result = parseArgv(['quit'])
+    const result = parseArgv(['quit'], '/cwd')
     expect(result.kind).toBe('command')
     expect(result.kind === 'command' && result.command.name).toBe('quit')
     expect(result.kind === 'command' && result.options).toEqual({
@@ -62,14 +62,14 @@ describe('parseArgv', () => {
   })
 
   it('reads flags before and after the command', () => {
-    const before = parseArgv(['--json', 'quit'])
-    const after = parseArgv(['quit', '--json'])
+    const before = parseArgv(['--json', 'quit'], '/cwd')
+    const after = parseArgv(['quit', '--json'], '/cwd')
     expect(before).toEqual(after)
     expect(before.kind === 'command' && before.options.json).toBe(true)
   })
 
   it('reads every flag together', () => {
-    const result = parseArgv(['quit', '--json', '--no-launch', '--verbose'])
+    const result = parseArgv(['quit', '--json', '--no-launch', '--verbose'], '/cwd')
     expect(result.kind === 'command' && result.options).toEqual({
       json: true,
       noLaunch: true,
@@ -78,13 +78,13 @@ describe('parseArgv', () => {
   })
 
   it('treats --help and its -h alias as help, wherever they appear', () => {
-    expect(parseArgv(['--help']).kind).toBe('help')
-    expect(parseArgv(['-h']).kind).toBe('help')
-    expect(parseArgv(['quit', '--help']).kind).toBe('help')
+    expect(parseArgv(['--help'], '/cwd').kind).toBe('help')
+    expect(parseArgv(['-h'], '/cwd').kind).toBe('help')
+    expect(parseArgv(['quit', '--help'], '/cwd').kind).toBe('help')
   })
 
   it('treats no arguments as a usage mistake, not as help', () => {
-    expect(parseArgv([])).toEqual({
+    expect(parseArgv([], '/cwd')).toEqual({
       kind: 'error',
       message: expect.stringContaining('command'),
       options: { json: false, noLaunch: false, verbose: false }
@@ -92,25 +92,25 @@ describe('parseArgv', () => {
   })
 
   it('rejects an unknown command', () => {
-    const result = parseArgv(['frobnicate'])
+    const result = parseArgv(['frobnicate'], '/cwd')
     expect(result.kind).toBe('error')
     expect(result.kind === 'error' && result.message).toContain('frobnicate')
   })
 
   it('rejects an unknown flag', () => {
-    const result = parseArgv(['quit', '--turbo'])
+    const result = parseArgv(['quit', '--turbo'], '/cwd')
     expect(result.kind).toBe('error')
     expect(result.kind === 'error' && result.message).toContain('--turbo')
   })
 
   it('rejects a second positional argument', () => {
-    const result = parseArgv(['quit', 'now'])
+    const result = parseArgv(['quit', 'now'], '/cwd')
     expect(result.kind).toBe('error')
     expect(result.kind === 'error' && result.message).toContain('now')
   })
 
   it('rejects a lone dash rather than reading it as a command', () => {
-    expect(parseArgv(['-']).kind).toBe('error')
+    expect(parseArgv(['-'], '/cwd').kind).toBe('error')
   })
 
   it.each([
@@ -120,8 +120,56 @@ describe('parseArgv', () => {
     ['frobnicate', '--json'],
     ['--json']
   ])('retains JSON mode for invalid arguments: %j', (...argv: string[]) => {
-    const result = parseArgv(argv)
+    const result = parseArgv(argv, '/cwd')
     expect(result.kind).toBe('error')
     expect(result.kind === 'error' && result.options.json).toBe(true)
+  })
+})
+
+describe('opening a project from the command line', () => {
+  const cwd = '/Users/dev/code/shop'
+
+  it('reads a dot as the project at the working directory', () => {
+    const result = parseArgv(['.'], cwd)
+    expect(result.kind).toBe('command')
+    expect(result.kind === 'command' && result.command.route).toBe('project.open')
+    expect(result.kind === 'command' && result.params).toEqual({ path: cwd })
+  })
+
+  it.each([
+    ['..', '/Users/dev/code'],
+    ['../store', '/Users/dev/code/store'],
+    ['./packages/web', '/Users/dev/code/shop/packages/web'],
+    ['packages/web/', '/Users/dev/code/shop/packages/web'],
+    ['/tmp/elsewhere', '/tmp/elsewhere']
+  ])('resolves %s against the working directory before it leaves the terminal', (given, path) => {
+    const result = parseArgv([given], cwd)
+    expect(result.kind === 'command' && result.params).toEqual({ path })
+  })
+
+  it('still reads a bare word as a command, so a typo is a usage error and not a project', () => {
+    const result = parseArgv(['frobnicate'], cwd)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toBe('unknown command frobnicate')
+  })
+
+  it('takes flags around the path', () => {
+    const result = parseArgv(['--json', '.', '--no-launch'], cwd)
+    expect(result.kind === 'command' && result.options).toEqual({
+      json: true,
+      noLaunch: true,
+      verbose: false
+    })
+  })
+
+  it('refuses a path and a command together', () => {
+    expect(parseArgv(['.', 'state'], cwd).kind).toBe('error')
+    expect(parseArgv(['state', '.'], cwd).kind).toBe('error')
+  })
+
+  it('reads state as the snapshot route with no params', () => {
+    const result = parseArgv(['state'], cwd)
+    expect(result.kind === 'command' && result.command.route).toBe('project.state')
+    expect(result.kind === 'command' && result.params).toBeUndefined()
   })
 })
