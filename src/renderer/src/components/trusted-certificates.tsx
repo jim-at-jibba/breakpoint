@@ -1,7 +1,7 @@
 import { Button } from '@renderer/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
 import { useState } from 'react'
-import { describeCertificateError, type TrustedCertificate } from '../../../shared/certificates'
+import { describeCertificateErrors, type TrustedCertificate } from '../../../shared/certificates'
 
 /**
  * The certificate decisions this machine holds, in settings, where PRD 8.8 says they
@@ -86,8 +86,8 @@ export function TrustedCertificates({
                 >
                   {certificate.fingerprint}
                 </span>
-                <span className="truncate text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-faint)]">
-                  {describeCertificateError(certificate.error)}
+                <span className="text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-faint)]">
+                  {describeCertificateErrors(certificate)}
                 </span>
               </span>
               <Button

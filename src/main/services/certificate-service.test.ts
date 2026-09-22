@@ -47,6 +47,7 @@ let feed: StateFeed
 let log: EventLog
 let patches: RevisionedPatch[]
 let service: CertificateService
+let revokeConnections: ReturnType<typeof vi.fn<() => Promise<void>>>
 
 function refusal(certificate: TestCertificate, url: string, error = AUTHORITY): CertificateRefusal {
   return {
@@ -79,7 +80,8 @@ beforeEach(() => {
   log = new EventLog()
   patches = []
   feed.subscribe((patch) => patches.push(patch))
-  service = new CertificateService(store as never, feed, log, () => NOW)
+  revokeConnections = vi.fn().mockResolvedValue(undefined)
+  service = new CertificateService(store, feed, log, revokeConnections, () => NOW)
 })
 
 describe('what the certificate itself says', () => {
@@ -251,6 +253,7 @@ describe('every other host', () => {
         subject: 'staging.example.com',
         issuer: 'staging.example.com',
         error: AUTHORITY,
+        errors: [AUTHORITY],
         trustedAt: NOW
       }
     ])
@@ -389,6 +392,44 @@ describe('settings', () => {
     expect(state).toEqual({ trusted: [], waiting: [] })
     expect(store.saved).toEqual([[]])
     expect(types()).toEqual(['certificate.forgotten'])
+    expect(revokeConnections).toHaveBeenCalledExactlyOnceWith({
+      host: stored.host,
+      fingerprint: stored.fingerprint
+    })
+  })
+
+  test('does not report success or delete the decision when connection closure fails', async () => {
+    await start({ status: 'loaded', certificates: [stored] })
+    revokeConnections.mockRejectedValueOnce(new Error('could not close connections'))
+    await expect(service.forget(stored)).rejects.toThrow('could not close connections')
+    expect(service.list().trusted).toEqual([stored])
+    expect(store.saved).toEqual([])
+    expect(types()).toEqual([])
+    await expect(service.forget(stored)).resolves.toEqual({ trusted: [], waiting: [] })
+  })
+
+  test('does not reaccept a certificate while its live connections are being revoked', async () => {
+    const certificate = issueCertificate({ commonName: stored.host })
+    const decision = { ...stored, fingerprint: certificate.fingerprint }
+    await start({ status: 'loaded', certificates: [decision] })
+    let finish!: () => void
+    revokeConnections.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+    const forgotten = service.forget(decision)
+    await Promise.resolve()
+    const respond = vi.fn()
+    service.verify(refusal(certificate, `https://${stored.host}/`), respond)
+    expect(respond).not.toHaveBeenCalled()
+    expect(service.list().waiting).toHaveLength(1)
+    expect(store.saved).toEqual([])
+    finish()
+    await forgotten
+    expect(service.list().trusted).toEqual([])
+    expect(respond).not.toHaveBeenCalled()
   })
 
   test('forgetting something that is not stored is refused', async () => {
@@ -416,6 +457,83 @@ describe('settings', () => {
       type: 'certificates.changed',
       certificates: service.list()
     })
+  })
+})
+
+describe('canceled loads', () => {
+  test('removes only the canceled waiter, and retires the question with the last one', async () => {
+    await start()
+    const certificate = issueCertificate({ commonName: 'staging.example.com' })
+    const served = refusal(certificate, 'https://staging.example.com/')
+    const first = vi.fn()
+    const second = vi.fn()
+    const cancelFirst = service.verify(served, first)!
+    const cancelSecond = service.verify(served, second)!
+    cancelFirst()
+    expect(first).toHaveBeenCalledExactlyOnceWith(false)
+    expect(second).not.toHaveBeenCalled()
+    expect(service.list().waiting).toHaveLength(1)
+    cancelSecond()
+    cancelFirst()
+    cancelSecond()
+    expect(second).toHaveBeenCalledExactlyOnceWith(false)
+    expect(service.list()).toEqual({ trusted: [], waiting: [] })
+    expect(types()).toEqual(['certificate.prompted'])
+    expect(patches.at(-1)?.patch).toEqual({
+      type: 'certificates.changed',
+      certificates: { trusted: [], waiting: [] }
+    })
+    // Cancellation is not refusal: returning deliberately asks again.
+    expect(service.verify(served, vi.fn())).toBeTypeOf('function')
+    expect(service.list().waiting).toHaveLength(1)
+  })
+
+  test('trust releases the remaining waiter without answering the canceled load twice', async () => {
+    await start()
+    const certificate = issueCertificate({ commonName: 'staging.example.com' })
+    const served = refusal(certificate, 'https://staging.example.com/')
+    const first = vi.fn()
+    const second = vi.fn()
+    service.verify(served, first)!()
+    const cancel = service.verify(served, second)!
+    await service.decide({
+      host: 'staging.example.com',
+      fingerprint: certificate.fingerprint,
+      trusted: true
+    })
+    cancel()
+    expect(first).toHaveBeenCalledExactlyOnceWith(false)
+    expect(second).toHaveBeenCalledExactlyOnceWith(true)
+    expect(service.list().waiting).toEqual([])
+  })
+
+  test('a replacement arriving during persistence is released by consent for the same key', async () => {
+    await start()
+    const certificate = issueCertificate({ commonName: 'staging.example.com' })
+    const served = refusal(certificate, 'https://staging.example.com/')
+    const first = vi.fn()
+    const cancel = service.verify(served, first)!
+    let finish!: () => void
+    vi.spyOn(store, 'save').mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve
+        })
+    )
+    const deciding = service.decide({
+      host: 'staging.example.com',
+      fingerprint: certificate.fingerprint,
+      trusted: true
+    })
+    await Promise.resolve()
+    cancel()
+    const replacement = vi.fn()
+    service.verify(served, replacement)
+    finish()
+    await deciding
+    expect(first).toHaveBeenCalledExactlyOnceWith(false)
+    expect(replacement).toHaveBeenCalledExactlyOnceWith(true)
+    expect(service.list().waiting).toEqual([])
   })
 })
 

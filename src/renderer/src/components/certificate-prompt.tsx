@@ -1,6 +1,6 @@
 import { Button } from '@renderer/components/ui/button'
 import { useState } from 'react'
-import { describeCertificateError, type CertificateRequest } from '../../../shared/certificates'
+import { describeCertificateErrors, type CertificateRequest } from '../../../shared/certificates'
 
 /**
  * The one question Breakpoint asks about a page it is loading: this host's certificate
@@ -57,8 +57,7 @@ export function CertificatePrompt({
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="text-[length:var(--bp-text-base)] text-[color:var(--bp-ink)]">
             <span className="font-mono">{request.host}</span> served a certificate{' '}
-            {describeCertificateError(request.error)}. Panes waiting on it are held until you
-            answer.
+            {describeCertificateErrors(request)}. Panes waiting on it are held until you answer.
           </span>
           <span
             title={request.fingerprint}

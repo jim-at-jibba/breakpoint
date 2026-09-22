@@ -19,6 +19,7 @@ import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
 import { CertificateService } from './services/certificate-service'
 import { CertificateStore } from './services/certificate-store'
+import { CertificateHost } from './certificate-host'
 import { PaneService } from './services/pane-service'
 import { PresetService } from './services/preset-service'
 import { PresetStore } from './services/preset-store'
@@ -164,10 +165,12 @@ if (!hasSingleInstanceLock) {
     const presets = new PresetService(new PresetStore(join(userDataDir, 'presets.json')))
     // Global for the same reason presets are: a certificate belongs to a host and this
     // machine, so two projects on one staging server are one decision ([ADR-0012]).
+    const certificateHost = new CertificateHost()
     const certificates = new CertificateService(
       new CertificateStore(join(userDataDir, 'certificates.json')),
       feed,
-      log
+      log,
+      (key) => certificateHost.revokeConnections(key)
     )
     await certificates.load()
     // The two services reach each other: opening a project resets its panes, and changing
@@ -192,24 +195,7 @@ if (!hasSingleInstanceLock) {
       })
     )
 
-    // Chromium refused a certificate. `preventDefault` takes the answer away from it and
-    // suspends the load until we give one, which is what lets a prompt be a prompt rather
-    // than an error page with a retry behind it. Every web contents reaches here, and a
-    // pane's guest is the only one that ever loads a page we did not write.
-    app.on('certificate-error', (event, _contents, url, error, certificate, callback) => {
-      event.preventDefault()
-      certificates.verify(
-        {
-          url,
-          error,
-          data: certificate.data,
-          fingerprint: certificate.fingerprint,
-          subjectName: certificate.subject.commonName,
-          issuerName: certificate.issuer.commonName
-        },
-        callback
-      )
-    })
+    certificateHost.install(app, certificates)
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest'
 import {
   CERTIFICATE_FILE_VERSION,
   certificateVerdict,
+  describeCertificateErrors,
   readCertificateFile,
   withoutCertificate,
   writeCertificateFile,
@@ -15,6 +16,7 @@ const facts = (changes: Partial<CertificateFacts> = {}): CertificateFacts => ({
   issuer: 'localhost',
   namesHost: true,
   current: true,
+  errors: [],
   ...changes
 })
 
@@ -138,6 +140,29 @@ describe('withoutCertificate', () => {
 })
 
 describe('the certificates file', () => {
+  test('keeps all waived faults and reads older decisions without them', () => {
+    const certificate = trusted({ errors: [AUTHORITY, 'net::ERR_CERT_DATE_INVALID'] })
+    expect(readCertificateFile(writeCertificateFile([certificate]))).toEqual({
+      ok: true,
+      certificates: [certificate]
+    })
+    expect(describeCertificateErrors(certificate)).toBe(
+      'signed by an authority this machine does not know and outside its validity dates'
+    )
+    expect(describeCertificateErrors(trusted())).toBe(
+      'signed by an authority this machine does not know'
+    )
+  })
+
+  test.each([null, 'expired', [null], ['']])('rejects invalid recorded faults %j', (errors) => {
+    expect(
+      readCertificateFile({ version: 1, certificates: [{ ...trusted(), errors }] })
+    ).toMatchObject({
+      ok: false,
+      reason: 'corrupt'
+    })
+  })
+
   test('round-trips what was stored', () => {
     const file = writeCertificateFile([trusted()])
     expect(file.version).toBe(CERTIFICATE_FILE_VERSION)

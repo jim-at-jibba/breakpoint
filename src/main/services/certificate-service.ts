@@ -2,6 +2,7 @@ import { X509Certificate } from 'node:crypto'
 import { isIP } from 'node:net'
 import {
   certificateVerdict,
+  certificateKey,
   hasCertificate,
   withoutCertificate,
   type CertificateFacts,
@@ -61,7 +62,7 @@ export type CertificateResponse = (trusted: boolean) => void
 interface Waiting {
   request: CertificateRequest
   /** Every load held by this certificate. Three panes meeting it is one question. */
-  responses: CertificateResponse[]
+  responses: Set<CertificateResponse>
 }
 
 /**
@@ -78,12 +79,19 @@ export function certificateFacts(
   try {
     certificate = new X509Certificate(data)
   } catch {
-    return { ...base, namesHost: false, current: false }
+    return { ...base, namesHost: false, current: false, errors: ['net::ERR_CERT_INVALID'] }
   }
+  const matches = namesHost(certificate, host)
+  const current =
+    now >= certificate.validFromDate.getTime() && now <= certificate.validToDate.getTime()
   return {
     ...base,
-    namesHost: namesHost(certificate, host),
-    current: now >= certificate.validFromDate.getTime() && now <= certificate.validToDate.getTime()
+    namesHost: matches,
+    current,
+    errors: [
+      ...(!matches ? ['net::ERR_CERT_COMMON_NAME_INVALID'] : []),
+      ...(!current ? ['net::ERR_CERT_DATE_INVALID'] : [])
+    ]
   }
 }
 
@@ -105,11 +113,13 @@ export class CertificateService {
   /** Why the stored decisions could not be read, if they could not be. */
   private unreadable: string | undefined
   private queue: Promise<void> = Promise.resolve()
+  private readonly revoking = new Set<string>()
 
   constructor(
     private readonly store: CertificateStore,
     private readonly feed: StateFeed,
     private readonly log: EventLog,
+    private readonly revokeConnections: (key: CertificateKey) => Promise<void>,
     private readonly now: () => number = () => Date.now()
   ) {
     feed.subscribe(({ patch }) => {
@@ -142,12 +152,13 @@ export class CertificateService {
   /**
    * Answers one refusal, or holds it until the developer does. `respond` is Chromium's
    * callback: called once with `true` to accept the certificate for this connection and
-   * `false` to let the load fail.
+   * `false` to let the load fail. A held load returns its cancellation function: the
+   * Electron owner calls it when that load is superseded, stopped, or destroyed.
    */
-  verify(refusal: CertificateRefusal, respond: CertificateResponse): void {
+  verify(refusal: CertificateRefusal, respond: CertificateResponse): (() => void) | undefined {
     const host = hostOf(refusal.url)
     const facts = certificateFacts(refusal, host, this.now())
-    const key = keyOf(host, facts.fingerprint)
+    const key = certificateKey({ host, fingerprint: facts.fingerprint })
 
     if (this.declined.has(key)) {
       answer(respond, false)
@@ -158,7 +169,7 @@ export class CertificateService {
       host,
       error: refusal.error,
       facts,
-      trusted: this.certificates
+      trusted: this.revoking.has(key) ? [] : this.certificates
     })
     if (verdict !== 'prompt') {
       this.trust({ host, fingerprint: facts.fingerprint }, refusal.error, verdict)
@@ -168,8 +179,8 @@ export class CertificateService {
 
     const held = this.waiting.get(key)
     if (held) {
-      held.responses.push(respond)
-      return
+      held.responses.add(respond)
+      return () => this.cancel(key, held, respond)
     }
     const request: CertificateRequest = {
       host,
@@ -177,10 +188,12 @@ export class CertificateService {
       subject: facts.subject,
       issuer: facts.issuer,
       error: refusal.error,
+      errors: [...new Set([refusal.error, ...facts.errors])],
       url: refusal.url,
       askedAt: this.now()
     }
-    this.waiting.set(key, { request, responses: [respond] })
+    const waiting = { request, responses: new Set([respond]) }
+    this.waiting.set(key, waiting)
     this.log.append(null, {
       type: 'certificate.prompted',
       host,
@@ -189,6 +202,16 @@ export class CertificateService {
       url: refusal.url
     })
     this.announce()
+    return () => this.cancel(key, waiting, respond)
+  }
+
+  private cancel(key: string, held: Waiting, respond: CertificateResponse): void {
+    if (this.waiting.get(key) !== held || !held.responses.delete(respond)) return
+    if (held.responses.size === 0) {
+      this.waiting.delete(key)
+      this.announce()
+    }
+    answer(respond, false)
   }
 
   /** Answers a waiting certificate. Queued, so two surfaces answering at once agree. */
@@ -206,7 +229,7 @@ export class CertificateService {
     fingerprint,
     trusted
   }: CertificateDecision): Promise<CertificateState> {
-    const key = keyOf(host, fingerprint)
+    const key = certificateKey({ host, fingerprint })
     const held = this.waiting.get(key)
     if (!held) {
       throw new RouteError(
@@ -227,6 +250,7 @@ export class CertificateService {
         subject: request.subject,
         issuer: request.issuer,
         error: request.error,
+        errors: request.errors,
         trustedAt: this.now()
       }
       // Saved first: a decision that could not be kept is not one the developer made.
@@ -234,6 +258,9 @@ export class CertificateService {
       this.certificates = [...this.certificates, certificate]
     }
 
+    // Loads can be canceled and replaced while the save is in flight. The consent is
+    // still for this exact key, so release its current waiters, never the canceled ones.
+    const active = this.waiting.get(key)
     this.waiting.delete(key)
     if (trusted) {
       this.declined.delete(key)
@@ -247,7 +274,7 @@ export class CertificateService {
         error: held.request.error
       })
     }
-    for (const respond of held.responses) answer(respond, trusted)
+    for (const respond of active?.responses ?? []) answer(respond, trusted)
     this.announce()
     return this.list()
   }
@@ -262,11 +289,20 @@ export class CertificateService {
       )
     }
     const remaining = withoutCertificate(this.certificates, { host, fingerprint })
-    await this.store.save(remaining)
+    const key = certificateKey({ host, fingerprint })
+    this.revoking.add(key)
+    try {
+      // Closing a connection may make a page immediately request another. While this
+      // is in flight, verify must not silently accept the key we are withdrawing.
+      await this.revokeConnections({ host, fingerprint })
+      await this.store.save(remaining)
+    } finally {
+      this.revoking.delete(key)
+    }
     this.certificates = remaining
     // Announced again, so trusting the replacement writes a second entry rather than
     // being swallowed as one already seen.
-    this.announced.delete(keyOf(host, fingerprint))
+    this.announced.delete(key)
     this.log.append(null, { type: 'certificate.forgotten', host, fingerprint })
     this.announce()
     return this.list()
@@ -282,7 +318,7 @@ export class CertificateService {
     error: string,
     reason: CertificateTrustReason
   ): void {
-    const key = keyOf(host, fingerprint)
+    const key = certificateKey({ host, fingerprint })
     if (this.announced.has(key)) return
     this.announced.add(key)
     this.log.append(null, { type: 'certificate.trusted', host, fingerprint, error, reason })
@@ -320,11 +356,6 @@ function answer(respond: CertificateResponse, trusted: boolean): void {
   } catch {
     // The load it belonged to is already gone.
   }
-}
-
-function keyOf(host: string, fingerprint: string): string {
-  // A host cannot hold a space, so one separates the two halves unambiguously.
-  return `${host} ${fingerprint}`
 }
 
 /**

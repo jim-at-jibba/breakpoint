@@ -156,13 +156,19 @@ certificate looks like:
 - the certificate **names a different host**
 
 Chromium reports the unreachable authority ahead of both, so Breakpoint reads the
-certificate itself rather than trusting the error string it was handed.
+certificate itself rather than trusting the error string it was handed. The question
+shows those detected faults alongside Chromium's error, and a stored decision keeps
+them so settings can explain what was waived.
 
 Every other host asks once. The window shows the question in a strip under the toolbar —
 never over a pane, because the page in that pane is the thing being asked about — with
 the host, what is wrong with the certificate, and its SHA-256 fingerprint. Trusting it
 releases every pane waiting on it and keeps the decision; refusing it lets the loads
 fail and keeps nothing, so going there again asks again.
+
+Navigating away or destroying a pane cancels its unanswered load. The question disappears
+when no pane is still waiting on that certificate; canceling one pane leaves the question
+in place for any others still waiting.
 
 **Decisions are keyed on the host *and* the fingerprint**, never the host alone. Keyed on
 the host alone, trusting a dev certificate today would silently extend that trust to every
@@ -173,7 +179,10 @@ which is mildly annoying exactly when it should be.
 Decisions are global rather than a project's, kept in `certificates.json` beside
 `presets.json` in Breakpoint's data directory, and they survive a restart. They are
 listed under **Certificates** in the toolbar, where each one can be forgotten — which
-puts that certificate back to asking. From a terminal they are in `breakpoint state`:
+puts that certificate back to asking. Forgetting also closes accepted connections in the
+affected sessions before it completes, so the next navigation cannot silently reuse one.
+Electron closes connections session-wide: other in-flight requests in those same sessions
+may be interrupted too. From a terminal they are in `breakpoint state`:
 
 ```sh
 breakpoint state --json | jq .certificates
@@ -188,6 +197,7 @@ breakpoint state --json | jq .certificates
       "subject": "staging.example.com",
       "issuer": "Acme Dev CA",
       "error": "net::ERR_CERT_AUTHORITY_INVALID",
+      "errors": ["net::ERR_CERT_AUTHORITY_INVALID"],
       "trustedAt": 1763731200000
     }
   ],
@@ -195,8 +205,10 @@ breakpoint state --json | jq .certificates
 }
 ```
 
-`waiting` carries the same fields plus the `url` whose load is waiting and the `askedAt`
-it was raised at, and the panes behind each one are **held** — not failed. `breakpoint
+`errors` records all known faults; decisions from older builds may have only `error`.
+`waiting` carries the same certificate fields, with the `url` whose load is waiting and
+the `askedAt` it was raised at instead of `trustedAt`, and the panes behind each one are
+**held** — not failed. `breakpoint
 state` says so on its last line whenever there is anything to say:
 
 ```

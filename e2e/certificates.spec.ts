@@ -12,7 +12,7 @@ import {
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { createAuthority, issueCertificate, type TestCertificate } from './certificates'
-import { startSecureFixture, type SecureFixture } from './fixture'
+import { startFixture, startSecureFixture, type SecureFixture } from './fixture'
 import { closeApp, launchApp, runCli, Sandbox, type LaunchedApp } from './harness'
 
 /**
@@ -171,6 +171,17 @@ test('an expired certificate on loopback prompts', async () => {
   await open(makeRepo('shop', `${fixture.origin}/`))
 
   await expectPrompt('localhost', certificate.fingerprint)
+  const page = await launched.app.firstWindow()
+  await expect(page.getByTestId('certificate-prompt')).toContainText('outside its validity dates')
+  await page.getByTestId('trust-certificate').click()
+  await expect.poll(async () => (await certificates()).trusted).toHaveLength(1)
+  await closeApp(launched)
+  launched = await launchApp(sandbox)
+  const reopened = await launched.app.firstWindow()
+  await reopened.getByTestId('trusted-certificates').click()
+  await expect(reopened.getByTestId('trusted-certificate')).toContainText(
+    'outside its validity dates'
+  )
 })
 
 test('a hostname mismatch on loopback prompts', async () => {
@@ -182,6 +193,8 @@ test('a hostname mismatch on loopback prompts', async () => {
   await open(makeRepo('shop', `${fixture.origin}/`))
 
   await expectPrompt('localhost', certificate.fingerprint)
+  const page = await launched.app.firstWindow()
+  await expect(page.getByTestId('certificate-prompt')).toContainText('issued for a different host')
 })
 
 test('a certificate on another host prompts once, then loads every time after', async () => {
@@ -210,6 +223,7 @@ test('a certificate on another host prompts once, then loads every time after', 
         subject: REMOTE_HOST,
         issuer: REMOTE_HOST,
         error: 'net::ERR_CERT_AUTHORITY_INVALID',
+        errors: ['net::ERR_CERT_AUTHORITY_INVALID'],
         trustedAt: expect.any(Number)
       }
     ],
@@ -321,4 +335,55 @@ test('a refused certificate is not stored, and forgetting one makes it ask again
   expect((await logs()).filter((entry) => entry.type === 'certificate.forgotten')).toEqual([
     expect.objectContaining({ pane: null, host: REMOTE_HOST })
   ])
+
+  // Reuse the same running app and origin: deleting JSON alone leaves its accepted TLS
+  // connections usable. A new path must be held, even while those connections are warm.
+  await page.getByTestId('trusted-certificates').click()
+  const next = `${fixture.origin}/after-forget`
+  await page.getByTestId('project-url').fill(next)
+  await page.getByTestId('project-url').press('Enter')
+  await expect
+    .poll(async () => (await certificates()).waiting)
+    .toEqual([expect.objectContaining({ host: REMOTE_HOST, fingerprint: certificate.fingerprint })])
+  expect(
+    (await logs()).filter((entry) => entry.type === 'pane.loaded' && entry.url === next)
+  ).toEqual([])
+  await page.getByTestId('trust-certificate').click()
+  await expectPanesLoaded(shop, next)
+})
+
+test('navigating away retires the certificate question for the canceled loads', async () => {
+  const certificate = issueCertificate({ commonName: REMOTE_HOST })
+  const fixture = await serve(certificate, REMOTE_HOST)
+  const plain = await startFixture()
+  try {
+    launched = await launchApp(sandbox, [RESOLVE_REMOTE])
+    const page = await launched.app.firstWindow()
+    const shop = makeRepo('shop', `${fixture.origin}/`)
+    await open(shop)
+    await expectPrompt(REMOTE_HOST, certificate.fingerprint)
+
+    await page.getByTestId('project-url').fill(`${plain.a}/`)
+    await page.getByTestId('project-url').press('Enter')
+    await expectPanesLoaded(shop, `${plain.a}/`)
+    await expect.poll(async () => (await certificates()).waiting).toEqual([])
+    await expect(page.getByTestId('certificate-prompt')).toHaveCount(0)
+    expect((await certificates()).trusted).toEqual([])
+  } finally {
+    await plain.close()
+  }
+})
+
+test('destroying the last waiting pane retires its certificate question', async () => {
+  const certificate = issueCertificate({ commonName: REMOTE_HOST })
+  const fixture = await serve(certificate, REMOTE_HOST)
+  launched = await launchApp(sandbox, [RESOLVE_REMOTE])
+  const shop = makeRepo('shop', `${fixture.origin}/`)
+  await open(shop)
+  await expectPrompt(REMOTE_HOST, certificate.fingerprint)
+  const page = await launched.app.firstWindow()
+  // Opening a different project destroys the old guests, without navigating those guests.
+  await open(makeRepo('other', 'http://localhost:1/'))
+  await expect.poll(async () => (await certificates()).waiting).toEqual([])
+  await expect(page.getByTestId('certificate-prompt')).toHaveCount(0)
 })

@@ -41,6 +41,8 @@ export interface CertificateFacts {
   namesHost: boolean
   /** Whether now is inside the certificate's validity window. */
   current: boolean
+  /** Faults read from the PEM, in addition to Chromium's reported error. */
+  errors: string[]
 }
 
 /**
@@ -54,12 +56,19 @@ export interface CertificateKey {
   fingerprint: string
 }
 
+/** A hostname contains no spaces, so the two parts cannot collide. */
+export function certificateKey({ host, fingerprint }: CertificateKey): string {
+  return `${host} ${fingerprint}`
+}
+
 /** A decision the developer made, kept in the app's user data directory. */
 export interface TrustedCertificate extends CertificateKey {
   subject: string
   issuer: string
   /** The net error it was trusted through, so settings can say what was waived. */
   error: string
+  /** All known faults at consent time. Older stored decisions have only `error`. */
+  errors?: string[]
   /** Milliseconds since the epoch, when the developer trusted it. */
   trustedAt: number
 }
@@ -73,6 +82,8 @@ export interface CertificateRequest extends CertificateKey {
   subject: string
   issuer: string
   error: string
+  /** Chromium's error plus independently detected faults. */
+  errors?: string[]
   /** The URL whose load is waiting on the answer. */
   url: string
   /** Milliseconds since the epoch, when the question was raised. */
@@ -158,6 +169,16 @@ export function describeCertificateError(error: string): string {
     default:
       return error
   }
+}
+
+export function describeCertificateErrors({
+  error,
+  errors = []
+}: {
+  error: string
+  errors?: readonly string[]
+}): string {
+  return [...new Set([error, ...errors])].map(describeCertificateError).join(' and ')
 }
 
 /** Why a certificate was accepted, in words, for the surfaces that print entries. */
@@ -253,6 +274,11 @@ export function parseTrustedCertificate(value: unknown): TrustedCertificate | un
   if (host === undefined || fingerprint === undefined || error === undefined) return undefined
   if (typeof raw.subject !== 'string' || typeof raw.issuer !== 'string') return undefined
   if (!Number.isFinite(raw.trustedAt)) return undefined
+  if (
+    raw.errors !== undefined &&
+    (!Array.isArray(raw.errors) || raw.errors.some((error) => typeof error !== 'string' || !error))
+  )
+    return undefined
 
   return {
     host,
@@ -260,6 +286,7 @@ export function parseTrustedCertificate(value: unknown): TrustedCertificate | un
     subject: raw.subject,
     issuer: raw.issuer,
     error,
+    ...(raw.errors === undefined ? {} : { errors: [...(raw.errors as string[])] }),
     trustedAt: raw.trustedAt as number
   }
 }
