@@ -6,6 +6,8 @@ import { app, BrowserWindow } from 'electron'
  * through a service all the same, so no adapter ever holds behaviour ([ADR-0005]).
  */
 export class AppService {
+  constructor(private readonly createWindow: () => void) {}
+
   quit(): void {
     app.quit()
   }
@@ -15,12 +17,15 @@ export class AppService {
    * macOS a window can be raised without its application being the one in front, and a
    * developer told to look at Breakpoint should be looking at Breakpoint.
    *
-   * `focused` is false when there was no window to raise, which is not a failure — the
-   * caller that cares, the launch path, opens one instead.
+   * The app remains alive without a window on macOS, so focusing also ensures there is
+   * a window to show. Its ready-to-show path performs the eventual activation.
    */
-  focus(): { focused: boolean } {
+  focus(): { focused: true } {
     const [existing] = BrowserWindow.getAllWindows()
-    if (!existing) return { focused: false }
+    if (!existing) {
+      this.createWindow()
+      return { focused: true }
+    }
     if (existing.isMinimized()) existing.restore()
     existing.show()
     existing.focus()

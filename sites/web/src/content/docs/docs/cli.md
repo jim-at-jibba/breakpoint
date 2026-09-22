@@ -500,7 +500,7 @@ Every route is reachable from every surface; there is no window-only behaviour.
 
 | Route | Params | Payload | Reached by |
 | --- | --- | --- | --- |
-| `app.focus` | none | `{ "focused": true }`, or `false` if there was no window to raise | `breakpoint .`, unless `--background` |
+| `app.focus` | none | `{ "focused": true }`; creates a window first if the app is alive without one | `breakpoint .`, unless `--background` |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
 | `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
 | `certificates.forget` | `{ "host": "staging.example.com", "fingerprint": "sha256/…" }` | the same | the window, the socket |

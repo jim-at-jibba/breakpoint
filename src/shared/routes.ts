@@ -60,11 +60,10 @@ export type Surface = 'window' | 'cli'
 export interface RouteSignatures {
   /**
    * Brings the app's window forward and gives it focus. What `breakpoint .` does after
-   * handing a repo to a running app, and what `--background` is the way to skip. Answers
-   * `{ focused: false }` when there is no window to bring forward rather than failing:
-   * not having taken focus is not an error.
+   * handing a repo to a running app, and what `--background` is the way to skip. Creates
+   * a window first when the app is alive without one on macOS.
    */
-  'app.focus': { params: undefined; payload: { focused: boolean } }
+  'app.focus': { params: undefined; payload: { focused: true } }
   'app.quit': { params: undefined; payload: { quitting: true } }
   /**
    * Answers one certificate that is waiting on the developer, naming it by the host and

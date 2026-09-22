@@ -20,6 +20,7 @@ import {
   type RouteResponse
 } from '../shared/protocol'
 import { currentPathEnvironment, resolveSocketPath } from '../shared/paths'
+import type { RouteName } from '../shared/routes'
 import { snapshotReadiness, type StateSnapshot } from '../shared/state'
 import { BACKGROUND_SWITCH } from './launch-arguments'
 
@@ -88,7 +89,7 @@ function createDiagnose(options: CliOptions): (message: string) => void {
 }
 
 /** One route call over the app's socket. Starting the app if none answers is `run`'s. */
-type Call = (route: string, params?: unknown) => Promise<RouteResponse>
+type Call = (route: RouteName, params?: unknown) => Promise<RouteResponse>
 
 async function run(
   command: CliCommandSpec,
@@ -117,7 +118,7 @@ async function run(
   // Nothing follows a failure: there is no project to look at and no panes to wait for.
   if (!response.ok) return response
 
-  if (command.activates && !options.background) await activate(call, diagnose)
+  if (command.activates && !options.background) await activate(call)
   if (!options.wait || command.waits === undefined) return response
 
   const ready = await waitForPanes(call, diagnose)
@@ -130,7 +131,7 @@ async function run(
  * Brings the window forward, best effort. The project is open either way, so a window
  * that could not be raised is said on stderr rather than failing the command.
  */
-async function activate(call: Call, diagnose: (message: string) => void): Promise<void> {
+async function activate(call: Call): Promise<void> {
   try {
     const response = await call('app.focus')
     if (response.ok) return
@@ -138,7 +139,7 @@ async function activate(call: Call, diagnose: (message: string) => void): Promis
       `breakpoint: could not bring the window forward: ${response.error.message}\n`
     )
   } catch (error) {
-    diagnose(`could not bring the window forward: ${String(error)}`)
+    process.stderr.write(`breakpoint: could not bring the window forward: ${String(error)}\n`)
   }
 }
 
@@ -198,7 +199,7 @@ function reportError({ error, options }: { error: RouteError; options: CliOption
 
 function request(
   socketPath: string,
-  route: string,
+  route: RouteName,
   params: unknown,
   diagnose: (message: string) => void
 ): Promise<RouteResponse> {

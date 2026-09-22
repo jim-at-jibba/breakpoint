@@ -40,7 +40,12 @@ function makeRepo(name: string, startUrl: string): Project {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
   // Drawn at 100%: what zoom does to a pane is #13's spec, not this one's.
-  const project: Project = { ...createProject(realpathSync.native(path)), startUrl, zoom: 100 }
+  const project: Project = {
+    ...createProject(realpathSync.native(path)),
+    startUrl,
+    allowedOrigins: [new URL(startUrl).origin],
+    zoom: 100
+  }
   const projects = join(sandbox.userDataDir, 'projects')
   mkdirSync(projects, { recursive: true })
   writeFileSync(
@@ -111,6 +116,22 @@ test('--wait blocks until every pane has loaded and passed its geometry check', 
   for (const pane of shop.panes) {
     expect(snapshot.panes[pane.id]).toMatchObject({ load: 'loaded', geometry: 'ok' })
   }
+})
+
+test('open --wait blocks for the navigation it just started', async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await runCli(sandbox, ['.', '--wait'], shop.repoPath)
+  const target = `${fixture.a}/delay?ms=1500`
+
+  const waiting = runCli(sandbox, ['open', target, '--wait', '--json'])
+  const pending = Symbol('still waiting')
+  expect(await Promise.race([waiting, delay(500).then(() => pending)])).toBe(pending)
+
+  const run = await waiting
+  expect(run.code).toBe(0)
+  expect(JSON.parse(run.stdout)).toMatchObject({ url: target })
+  expect(readiness(await state())).toEqual({ ready: true })
 })
 
 test('--wait against an unreachable URL exits 1 with TIMEOUT, naming the pane it waited on', async () => {
@@ -261,6 +282,29 @@ test('handing a repo to a running app brings the window forward, and --backgroun
   const forward = await runCli(sandbox, ['.'], shop.repoPath)
   expect(forward.code).toBe(0)
   await expect.poll(() => window('isMinimized')).toBe(false)
+})
+
+test('opening a repo recreates the window after the last one closes on macOS', async () => {
+  test.skip(process.platform !== 'darwin', 'macOS keeps the app alive after its window closes')
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  await launched.app.evaluate(
+    ({ BrowserWindow }) =>
+      new Promise<void>((resolve) => {
+        const window = BrowserWindow.getAllWindows()[0]
+        window.once('closed', resolve)
+        window.close()
+      })
+  )
+
+  const [page, run] = await Promise.all([
+    launched.app.waitForEvent('window'),
+    runCli(sandbox, ['.', '--wait', '--json'], shop.repoPath)
+  ])
+
+  expect(run.code).toBe(0)
+  expect(readiness(JSON.parse(run.stdout) as StateSnapshot)).toEqual({ ready: true })
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
 })
 
 test('--background starts the app when nothing is running, and the project opens', async () => {

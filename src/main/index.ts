@@ -47,10 +47,10 @@ let paneHost: PaneHost | undefined
 let launchReady = false
 const pendingRepoPaths: string[] = []
 /**
- * Constructed before readiness because the hand-off listeners registered below reach it:
- * it holds no state and depends on nothing, so there is nothing to wait for.
+ * Constructed before readiness because the hand-off listeners registered below reach it.
+ * Its window callback is only used after readiness.
  */
-const appService = new AppService()
+const appService = new AppService(createWindow)
 
 function launchMode(): { packaged: boolean; defaultApp: boolean } {
   return { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
@@ -136,7 +136,7 @@ function createWindow(): void {
 }
 
 function focusExistingWindow(): void {
-  if (!appService.focus().focused) createWindow()
+  appService.focus()
 }
 
 if (!hasSingleInstanceLock) {
