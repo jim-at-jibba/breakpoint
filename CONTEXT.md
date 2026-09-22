@@ -69,6 +69,13 @@ the window ([ADR-0015](docs/adr/0015-repo-less-projects-are-ephemeral.md)). A UR
 project's identity, because a port is a lease rather than a name.
 _Avoid_: workspace, site, app, canvas (for the repo-less case — it is a project too)
 
+**Project switcher**:
+Every project Breakpoint has stored, and the way to move between them without restarting.
+Read from the project directory rather than from an index, so it cannot fall out of step
+with what is on disk; a project whose file will not load is listed as **unopenable** and
+says why when it is chosen, rather than being dropped.
+_Avoid_: project list, recent projects, palette (the command palette is a different thing)
+
 **Session**:
 An isolated store of cookies, cache and local storage that panes can share or be assigned
 individually, so one pane can be an admin and another a customer.

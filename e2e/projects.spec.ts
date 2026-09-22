@@ -22,8 +22,10 @@ import {
   isRunning,
   launchApp,
   MAIN_ENTRY,
+  requestLine,
   runCli,
   Sandbox,
+  sendRaw,
   waitFor,
   type LaunchedApp
 } from './harness'
@@ -451,4 +453,164 @@ test('a native macOS open-file request opens the repo and recreates a closed win
   await expect(page.getByTestId('project-name')).toHaveText('shop')
   const state = await runCli(sandbox, ['state', '--json'])
   expect(JSON.parse(state.stdout).project.repoPath).toBe(shop)
+})
+
+/**
+ * The project switcher (#19, PRD J3): the list, and what choosing one does.
+ *
+ * Everything here is probed through the window, because the switcher is a surface and
+ * not a service. What it causes is read back over the CLI, which reaches the same route
+ * table it does.
+ */
+
+/** Opens the switcher on its shortcut and waits for the list to have been read. */
+async function openSwitcher(page: Page): Promise<void> {
+  await page.keyboard.press('ControlOrMeta+p')
+  await expect(page.getByTestId('project-list')).toBeVisible()
+  await expect(page.getByTestId('project-option').first()).toBeVisible()
+}
+
+/** What the switcher lists, in the order it lists it: each entry's repo path or file. */
+function listedProjects(page: Page): Promise<string[]> {
+  return page
+    .getByTestId('project-option')
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute('data-project') ?? '')
+    )
+}
+
+async function chooseProject(page: Page, project: string): Promise<void> {
+  await page.locator(`[data-testid="project-option"][data-project="${project}"]`).click()
+}
+
+/** The pane ids the canvas is drawing, which is how a swapped pane set is visible. */
+function drawnPanes(page: Page): Promise<string[]> {
+  return page
+    .locator('webview[data-pane]')
+    .evaluateAll((elements) => elements.map((element) => element.getAttribute('data-pane') ?? ''))
+}
+
+test('the switcher opens on its shortcut and lists every stored project', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const admin = makeRepo('admin')
+  await openProject(shop)
+  await openProject(admin)
+
+  await openSwitcher(page)
+
+  expect(await listedProjects(page)).toEqual([admin, shop])
+  await expect(page.getByTestId('project-switcher-message')).toHaveCount(0)
+})
+
+test('choosing a project swaps panes, layout, zoom and URL without a restart, and switching back restores the first as it was left', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const admin = makeRepo('admin')
+
+  // Shop is left somewhere a freshly created project never is: on a different layout, a
+  // different zoom and a different URL from the defaults admin will be created with.
+  const opened = await openProject(shop)
+  const shopPanes = opened.project?.panes.map((pane) => pane.id) ?? []
+  await sendRaw(sandbox.socketPath, requestLine('project.setZoom', { zoom: 50 }))
+  await sendRaw(
+    sandbox.socketPath,
+    requestLine('project.setLayout', { layout: 'focus', focusedPane: shopPanes[2] })
+  )
+  await sendRaw(
+    sandbox.socketPath,
+    requestLine('project.navigate', { url: 'http://localhost:3000/checkout' })
+  )
+  const created = await openProject(admin)
+  const adminPanes = created.project?.panes.map((pane) => pane.id) ?? []
+  await expect(page.getByTestId('project-name')).toHaveText('admin')
+
+  await openSwitcher(page)
+  await chooseProject(page, shop)
+
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+  await expect(page.getByTestId('project-url')).toHaveValue('http://localhost:3000/checkout')
+  await expect.poll(() => drawnPanes(page)).toEqual(shopPanes)
+  expect((await quietSnapshot()).project).toMatchObject({
+    repoPath: shop,
+    layout: 'focus',
+    focusedPane: shopPanes[2],
+    zoom: 50,
+    startUrl: 'http://localhost:3000/checkout'
+  })
+
+  // Away, and back: the first project comes back as it was left, from its own file.
+  await openSwitcher(page)
+  await chooseProject(page, admin)
+  await expect(page.getByTestId('project-name')).toHaveText('admin')
+  await expect.poll(() => drawnPanes(page)).toEqual(adminPanes)
+  await openSwitcher(page)
+  await chooseProject(page, shop)
+
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+  await expect.poll(() => drawnPanes(page)).toEqual(shopPanes)
+  expect((await quietSnapshot()).project).toMatchObject({
+    layout: 'focus',
+    focusedPane: shopPanes[2],
+    zoom: 50,
+    startUrl: 'http://localhost:3000/checkout'
+  })
+  // One app throughout: nothing restarted to get from one project to the other.
+  expect(launched.app.process().exitCode).toBeNull()
+})
+
+test('a project whose file refuses to load is listed, reports why when chosen, and does not break the list', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const future = makeRepo('future')
+  await openProject(shop)
+  writeFileSync(
+    join(projectsDir(), projectFileName(future)),
+    JSON.stringify({
+      version: PROJECT_FILE_VERSION + 1,
+      project: { name: 'future', repoPath: future, hologram: true }
+    })
+  )
+
+  await openSwitcher(page)
+
+  expect(await listedProjects(page)).toEqual([future, shop])
+  await expect(
+    page.locator(`[data-testid="project-option"][data-project="${future}"]`)
+  ).toHaveAttribute('data-openable', 'false')
+
+  await chooseProject(page, future)
+
+  await expect(page.getByTestId('project-switcher-message')).toContainText(
+    `file version ${PROJECT_FILE_VERSION + 1}`
+  )
+  // The list is still the list, and the open project is untouched by the refusal.
+  expect(await listedProjects(page)).toEqual([future, shop])
+  await chooseProject(page, shop)
+  await expect(page.getByTestId('project-list')).toHaveCount(0)
+  await expect(page.getByTestId('project-name')).toHaveText('shop')
+})
+
+test('the list is the project directory, not an index kept beside it', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const store = makeRepo('store')
+  await openProject(store)
+  await openProject(shop)
+  const file = join(projectsDir(), projectFileName(store))
+  const written = readFileSync(file, 'utf8')
+
+  // Nothing is told the file has gone; the next read of the directory is what says so.
+  rmSync(file)
+  await openSwitcher(page)
+  expect(await listedProjects(page)).toEqual([shop])
+
+  await page.keyboard.press('Escape')
+  writeFileSync(file, written)
+  await openSwitcher(page)
+  expect(await listedProjects(page)).toEqual([shop, store])
 })

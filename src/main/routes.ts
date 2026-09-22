@@ -461,6 +461,10 @@ export function createRouteTable(services: Services): RouteTable {
       parseParams: expectNoParams,
       handle: async () => ({ payload: await services.presets.list() })
     },
+    'project.list': {
+      parseParams: expectNoParams,
+      handle: async () => ({ payload: await services.project.list() })
+    },
     'project.navigate': {
       parseParams: expectNavigation,
       handle: async ({ url }, { surface }) => ({

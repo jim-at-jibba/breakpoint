@@ -4,6 +4,7 @@ import { AllowedOrigins } from '@renderer/components/allowed-origins'
 import { Canvas } from '@renderer/components/canvas'
 import { CanvasControls } from '@renderer/components/canvas-controls'
 import { CertificatePrompt } from '@renderer/components/certificate-prompt'
+import { ProjectSwitcher } from '@renderer/components/project-switcher'
 import { TrustedCertificates } from '@renderer/components/trusted-certificates'
 import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
@@ -81,20 +82,15 @@ export default function App(): React.JSX.Element {
         className="bp-drag border-border flex shrink-0 items-center gap-3 border-b"
         style={{ height: 'var(--bp-toolbar-h)', paddingLeft: 88 }}
       >
+        {/* The switcher is mounted whether or not a project is open: with nothing open it
+            is the way in, and it names the open project when there is one. */}
+        <ProjectSwitcher project={project} />
         {project ? (
-          <>
-            <span
-              className="text-[length:var(--bp-text-sm)] font-medium text-[color:var(--bp-ink)]"
-              data-testid="project-name"
-            >
-              {project.name}
-            </span>
-            <AddressBar
-              key={project.repoPath}
-              project={project}
-              onNavigate={(url) => invokeAction('project.navigate', { url })}
-            />
-          </>
+          <AddressBar
+            key={project.repoPath}
+            project={project}
+            onNavigate={(url) => invokeAction('project.navigate', { url })}
+          />
         ) : (
           <span className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
             {state.status === 'fetching' ? 'Loading project…' : 'No project open'}

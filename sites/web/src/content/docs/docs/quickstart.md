@@ -20,6 +20,18 @@ restores the canvas you left: the same panes, the same zoom, the same layout mod
 If the app is already running, `breakpoint .` hands the arguments to the running
 instance rather than starting a second one.
 
+### Switching between projects
+
+Every project Breakpoint has stored is in the switcher: press `⌘P`, or click the project's
+name in the toolbar. Choosing one swaps the panes, layout, zoom and URL to that project's
+stored state without restarting, and the project you came from is waiting exactly as you
+left it when you switch back.
+
+The list is the project directory itself rather than an index kept beside it, so it never
+disagrees with what is stored. A project whose file Breakpoint cannot read — one written by
+a newer build, or one that has been damaged — is listed with the rest and says why when you
+choose it, instead of quietly disappearing.
+
 ## 2. Read the canvas
 
 Three panes open by default — mobile, tablet and desktop. Each has its own emulated

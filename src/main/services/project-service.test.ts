@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createProject, writeProjectFile, type Project } from '../../shared/project'
+import {
+  createProject,
+  projectFileName,
+  writeProjectFile,
+  type Project
+} from '../../shared/project'
 import { EventLog } from '../../shared/event-log'
 import type { RevisionedPatch } from '../../shared/state'
 import { StateFeed } from '../state-feed'
@@ -459,5 +464,94 @@ describe('allowed origins', () => {
     await expect(service.setAllowedOrigins([])).rejects.toMatchObject({
       code: 'PROJECT_NOT_OPEN'
     })
+  })
+})
+
+describe('the project list the switcher reads', () => {
+  it('is empty before anything has been stored, rather than a failure', async () => {
+    expect(await service.list()).toEqual({ projects: [] })
+  })
+
+  it('is the project directory read, in name order', async () => {
+    const admin = join(root, 'admin')
+    await mkdir(admin)
+    await service.open(shop)
+    await service.open(admin)
+
+    expect((await service.list()).projects).toEqual([
+      { file: projectFileName(admin), openable: true, name: 'admin', repoPath: admin },
+      { file: projectFileName(shop), openable: true, name: 'shop', repoPath: shop }
+    ])
+  })
+
+  it('sees a project this run never opened, because nothing but the directory is the list', async () => {
+    await store.save(createProject(other))
+
+    expect((await service.list()).projects).toMatchObject([
+      { openable: true, name: 'other', repoPath: other }
+    ])
+  })
+
+  it('lists a file written by a newer build as unopenable, keeping the name it can still read', async () => {
+    await service.open(shop)
+    const file = store.fileFor(other)
+    await writeFile(
+      file,
+      JSON.stringify({ version: 99, project: { name: 'other', repoPath: other } })
+    )
+
+    const { projects } = await service.list()
+
+    expect(projects).toEqual([
+      {
+        file: projectFileName(other),
+        openable: false,
+        name: 'other',
+        repoPath: other,
+        reason: 'newer',
+        message: expect.stringContaining('file version 99')
+      },
+      { file: projectFileName(shop), openable: true, name: 'shop', repoPath: shop }
+    ])
+  })
+
+  it('lists a file that is not JSON under its own name, and still lists the rest', async () => {
+    await service.open(shop)
+    await writeFile(join(root, 'projects', 'aaaa.json'), 'not json at all')
+
+    expect((await service.list()).projects).toEqual([
+      {
+        file: 'aaaa.json',
+        openable: false,
+        name: null,
+        repoPath: null,
+        reason: 'corrupt',
+        message: 'the file is not JSON'
+      },
+      { file: projectFileName(shop), openable: true, name: 'shop', repoPath: shop }
+    ])
+  })
+
+  it('refuses a file that is not the one its repo path is stored in, so the open cannot open something else', async () => {
+    await service.open(shop)
+    await writeFile(
+      join(root, 'projects', 'aaaa.json'),
+      JSON.stringify(writeProjectFile(createProject(other)))
+    )
+
+    expect((await service.list()).projects[0]).toMatchObject({
+      file: 'aaaa.json',
+      openable: false,
+      name: 'other',
+      repoPath: other,
+      reason: 'corrupt'
+    })
+  })
+
+  it('ignores a partial write left beside a project file', async () => {
+    await service.open(shop)
+    await writeFile(`${store.fileFor(shop)}.999.tmp`, '{')
+
+    expect((await service.list()).projects).toHaveLength(1)
   })
 })
