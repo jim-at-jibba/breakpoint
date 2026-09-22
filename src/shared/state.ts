@@ -1,3 +1,4 @@
+import type { CertificateState } from './certificates'
 import { reconcilePaneStatuses, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
 
@@ -28,6 +29,13 @@ export interface StateSnapshot {
    * a pane's status is true of this run only. Empty when nothing is open.
    */
   panes: Record<string, PaneStatus>
+  /**
+   * Certificate trust: the decisions stored on this machine, and the certificates
+   * waiting on the developer right now. Not a property of the open project — a
+   * certificate belongs to a host ([ADR-0012]) — so it is here beside `project` rather
+   * than inside it, and it survives a project closing.
+   */
+  certificates: CertificateState
 }
 
 export type StatePatch =
@@ -50,6 +58,12 @@ export type StatePatch =
   | { type: 'project.url'; url: string }
   /** The origins automation may navigate to ([ADR-0013]). */
   | { type: 'project.allowedOrigins'; origins: string[] }
+  /**
+   * Certificate trust after a change: both lists together, because trusting a waiting
+   * certificate moves it from one to the other and two patches would let a surface draw
+   * the moment where it was in neither.
+   */
+  | { type: 'certificates.changed'; certificates: CertificateState }
 
 export interface RevisionedPatch {
   revision: number
@@ -66,8 +80,8 @@ export function applyPatch(
   switch (patch.type) {
     case 'project.opened':
       return {
+        ...before,
         revision,
-        cursor: before.cursor,
         project: patch.project,
         panes: paneStatusesFor(patch.project, before.panes)
       }
@@ -122,6 +136,10 @@ export function applyPatch(
       if (!project) return { ...before, revision }
       return { ...before, revision, project: { ...project, allowedOrigins: patch.origins } }
     }
+    // Certificate trust is the app's, not a project's, so this one lands whether or not
+    // anything is open.
+    case 'certificates.changed':
+      return { ...before, revision, certificates: patch.certificates }
   }
 }
 

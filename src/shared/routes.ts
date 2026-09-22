@@ -9,6 +9,7 @@
  * renderer, the main process and the CLI all see at once.
  */
 
+import type { CertificateKey, CertificateState } from './certificates'
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
 import type { PaneStatus, Size } from './panes'
@@ -21,6 +22,9 @@ export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
 export const ROUTE_NAMES = [
   'app.quit',
+  'certificates.decide',
+  'certificates.forget',
+  'certificates.list',
   'log.read',
   'panes.add',
   'panes.list',
@@ -54,6 +58,25 @@ export type Surface = 'window' | 'cli'
  */
 export interface RouteSignatures {
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Answers one certificate that is waiting on the developer, naming it by the host and
+   * fingerprint it is keyed on ([ADR-0012]). Trusting it releases every pane held by it
+   * and keeps the decision; refusing it releases them with the load failed and keeps
+   * nothing, so the next attempt asks again. Either way the request is gone, and a host
+   * and fingerprint nothing is waiting on is `CERTIFICATE_NOT_FOUND`.
+   */
+  'certificates.decide': { params: CertificateDecision; payload: CertificateState }
+  /**
+   * Drops a stored decision, so that certificate on that host prompts the next time it
+   * is served. A host and fingerprint nothing is stored for is `CERTIFICATE_NOT_FOUND`.
+   */
+  'certificates.forget': { params: CertificateKey; payload: CertificateState }
+  /**
+   * Every certificate decision stored on this machine, and every certificate waiting on
+   * the developer right now. Global rather than a project's: a certificate belongs to a
+   * host, and two projects on one staging server are one decision.
+   */
+  'certificates.list': { params: undefined; payload: CertificateState }
   /**
    * Everything the event log holds after a cursor position. Omitting `since` reads from
    * the beginning, which is everything the ring buffers still hold rather than
@@ -138,6 +161,9 @@ export interface RouteSignatures {
 }
 
 export type PaneListing = Pane & { status: PaneStatus }
+
+/** Answering one waiting certificate: which, and whether it is trusted. */
+export type CertificateDecision = CertificateKey & { trusted: boolean }
 
 /** Where the project now points, and the panes that were sent there. */
 export interface Navigation {

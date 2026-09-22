@@ -1,4 +1,5 @@
 import { realpath, stat } from 'node:fs/promises'
+import type { CertificateState } from '../../shared/certificates'
 import type { EventLog } from '../../shared/event-log'
 import { clampZoom } from '../../shared/canvas'
 import { rotateSize } from '../../shared/panes'
@@ -31,6 +32,15 @@ import type { ProjectStore } from './project-store'
  * through a dialog only a human sees ([ADR-0006]). That covers the launch path too,
  * where there is no caller holding the rejection.
  */
+
+/**
+ * What the snapshot needs from certificate trust. A certificate belongs to a host rather
+ * than to a project ([ADR-0012]), so this service does not own the lists — it only has
+ * to put them in the one snapshot every surface renders from.
+ */
+export interface SnapshotCertificates {
+  list(): CertificateState
+}
 export class ProjectService {
   private current: Project | null = null
   /** Opens and pane changes, one at a time, in the order they were asked for. */
@@ -41,7 +51,8 @@ export class ProjectService {
     private readonly feed: StateFeed,
     private readonly log: EventLog,
     private readonly panes: PaneService,
-    private readonly presets: PresetService
+    private readonly presets: PresetService,
+    private readonly certificates: SnapshotCertificates
   ) {}
 
   /**
@@ -318,7 +329,8 @@ export class ProjectService {
       revision: this.feed.revision,
       cursor: this.log.cursor,
       project: this.current,
-      panes: this.panes.statuses()
+      panes: this.panes.statuses(),
+      certificates: this.certificates.list()
     }
   }
 }

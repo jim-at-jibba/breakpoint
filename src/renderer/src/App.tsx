@@ -3,6 +3,8 @@ import { AddressBar } from '@renderer/components/address-bar'
 import { AllowedOrigins } from '@renderer/components/allowed-origins'
 import { Canvas } from '@renderer/components/canvas'
 import { CanvasControls } from '@renderer/components/canvas-controls'
+import { CertificatePrompt } from '@renderer/components/certificate-prompt'
+import { TrustedCertificates } from '@renderer/components/trusted-certificates'
 import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
 import { useState } from 'react'
@@ -127,29 +129,42 @@ export default function App(): React.JSX.Element {
             Could not update canvas: {actionError}
           </span>
         )}
-        {project && (
+        {snapshot && (
           <div className="ml-auto flex items-center gap-[var(--bp-space-3)]">
-            <AllowedOrigins key={project.repoPath} project={project} />
-            <AddPane />
-            <CanvasControls
-              project={project}
-              zoom={activeZoomPreview ?? zoom}
-              previewing={activeZoomPreview !== null}
-              onLayout={setLayout}
-              onZoomPreview={previewZoom}
-              onZoomCommit={commitZoom}
-            />
+            {/* Certificate trust is the app's, not a project's ([ADR-0012]), so the
+                decisions stay reachable with nothing open. Everything beside it is the
+                open project's and goes with it. */}
+            <TrustedCertificates certificates={snapshot.certificates.trusted} />
+            {project && (
+              <>
+                <AllowedOrigins key={project.repoPath} project={project} />
+                <AddPane />
+                <CanvasControls
+                  project={project}
+                  zoom={activeZoomPreview ?? zoom}
+                  previewing={activeZoomPreview !== null}
+                  onLayout={setLayout}
+                  onZoomPreview={previewZoom}
+                  onZoomCommit={commitZoom}
+                />
+              </>
+            )}
           </div>
         )}
         <Button
           size="sm"
           variant="outline"
-          className={project ? 'mr-[var(--bp-space-4)]' : 'ml-auto mr-[var(--bp-space-4)]'}
+          className={snapshot ? 'mr-[var(--bp-space-4)]' : 'ml-auto mr-[var(--bp-space-4)]'}
           onClick={() => void window.breakpoint.invoke('app.quit')}
         >
           Quit
         </Button>
       </header>
+      {/* The app's own ground, above the canvas: a certificate question is never drawn
+          over a pane, because the page in that pane is the thing being asked about. */}
+      {snapshot && snapshot.certificates.waiting.length > 0 && (
+        <CertificatePrompt waiting={snapshot.certificates.waiting} />
+      )}
       {project && snapshot ? (
         <Canvas
           project={project}

@@ -8,7 +8,13 @@ const store = createProject('/repos/store')
 const [mobile, tablet, desktop] = shop.panes.map((pane) => pane.id)
 const failed = foldPaneStatus(initialPaneStatus(), { type: 'attachFailed', message: 'refused' })
 
-const nothingOpen: StateSnapshot = { revision: 0, cursor: 4, project: null, panes: {} }
+const nothingOpen: StateSnapshot = {
+  revision: 0,
+  cursor: 4,
+  project: null,
+  panes: {},
+  certificates: { trusted: [], waiting: [] }
+}
 
 describe('applying a patch', () => {
   it('gives every pane of a newly opened project a fresh status', () => {
@@ -24,7 +30,9 @@ describe('applying a patch', () => {
         [mobile]: initialPaneStatus(),
         [tablet]: initialPaneStatus(),
         [desktop]: initialPaneStatus()
-      }
+      },
+      // Certificate trust is the app's, not a project's: opening one leaves it alone.
+      certificates: nothingOpen.certificates
     })
   })
 
@@ -252,5 +260,41 @@ describe('applying a patch', () => {
     expect(
       applyPatch(nothingOpen, { revision: 1, patch: { type: 'pane.changed', pane: ghost } })
     ).toEqual({ ...nothingOpen, revision: 1 })
+  })
+})
+
+describe('certificate trust in the snapshot', () => {
+  const certificates = {
+    trusted: [
+      {
+        host: 'staging.example.com',
+        fingerprint: 'sha256/AAAA',
+        subject: 'staging.example.com',
+        issuer: 'Acme Dev CA',
+        error: 'net::ERR_CERT_AUTHORITY_INVALID',
+        trustedAt: 1
+      }
+    ],
+    waiting: []
+  }
+
+  it('lands whether or not a project is open: a certificate belongs to a host', () => {
+    const next = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'certificates.changed', certificates }
+    })
+    expect(next).toEqual({ ...nothingOpen, revision: 1, certificates })
+  })
+
+  it('survives a project opening and closing over it', () => {
+    const trusted = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'certificates.changed', certificates }
+    })
+    const opened = applyPatch(trusted, {
+      revision: 2,
+      patch: { type: 'project.opened', project: shop }
+    })
+    expect(opened.certificates).toEqual(certificates)
   })
 })

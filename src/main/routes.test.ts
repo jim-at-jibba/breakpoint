@@ -116,3 +116,107 @@ describe('project.setAllowedOrigins', () => {
     expect(setAllowedOrigins).not.toHaveBeenCalled()
   })
 })
+
+describe('the certificate routes', () => {
+  interface CertificateDispatcher {
+    dispatch: Dispatch
+    decide: ReturnType<typeof vi.fn>
+    forget: ReturnType<typeof vi.fn>
+  }
+
+  const empty = { trusted: [], waiting: [] }
+
+  function certificateDispatcher(): CertificateDispatcher {
+    const decide = vi.fn().mockResolvedValue(empty)
+    const forget = vi.fn().mockResolvedValue(empty)
+    const certificates = { decide, forget, list: () => empty }
+    return {
+      dispatch: createDispatch(createRouteTable({ certificates } as unknown as Services)),
+      decide,
+      forget
+    }
+  }
+
+  it('hands the decision to the service as a host, a fingerprint and an answer', async () => {
+    const { dispatch, decide } = certificateDispatcher()
+
+    const { response } = await dispatch(
+      {
+        id: '1',
+        route: 'certificates.decide',
+        params: { host: 'staging.example.com', fingerprint: 'sha256/AAAA', trusted: true }
+      },
+      { surface: 'window' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(decide).toHaveBeenCalledWith({
+      host: 'staging.example.com',
+      fingerprint: 'sha256/AAAA',
+      trusted: true
+    })
+  })
+
+  // No answer at all, no host, no fingerprint, an answer that is not a boolean, and a
+  // field the route does not take: a misspelt one would be a decision that decides
+  // nothing.
+  it.each([
+    { host: 'staging.example.com', fingerprint: 'sha256/AAAA' },
+    { host: '', fingerprint: 'sha256/AAAA', trusted: true },
+    { host: 'staging.example.com', fingerprint: '', trusted: true },
+    { host: 'staging.example.com', fingerprint: 'sha256/AAAA', trusted: 'yes' },
+    { host: 'staging.example.com', fingerprint: 'sha256/AAAA', trusted: true, port: 443 }
+  ])('refuses %j without reaching the service', async (params) => {
+    const { dispatch, decide } = certificateDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'certificates.decide', params },
+      { surface: 'cli' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(decide).not.toHaveBeenCalled()
+  })
+
+  it('forgets by the same key, and takes nothing else', async () => {
+    const { dispatch, forget } = certificateDispatcher()
+
+    const { response } = await dispatch(
+      {
+        id: '1',
+        route: 'certificates.forget',
+        params: { host: 'staging.example.com', fingerprint: 'sha256/AAAA' }
+      },
+      { surface: 'cli' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(forget).toHaveBeenCalledWith({
+      host: 'staging.example.com',
+      fingerprint: 'sha256/AAAA'
+    })
+
+    const refused = await dispatch(
+      {
+        id: '2',
+        route: 'certificates.forget',
+        params: { host: 'staging.example.com', fingerprint: 'sha256/AAAA', trusted: false }
+      },
+      { surface: 'cli' }
+    )
+    expect(refused.response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+  })
+
+  it('lists without params, and refuses any', async () => {
+    const { dispatch } = certificateDispatcher()
+
+    const listed = await dispatch({ id: '1', route: 'certificates.list' }, { surface: 'cli' })
+    expect(listed.response).toMatchObject({ ok: true, data: empty })
+
+    const refused = await dispatch(
+      { id: '2', route: 'certificates.list', params: { host: 'staging.example.com' } },
+      { surface: 'cli' }
+    )
+    expect(refused.response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+  })
+})
