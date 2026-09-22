@@ -80,6 +80,13 @@ export type AttachmentState = 'pending' | 'attached' | 'failed'
 export type GeometryState = 'unchecked' | 'ok' | 'mismatch'
 
 /**
+ * Whether the pane's page has finished loading where the pane was last sent. `pending`
+ * from the moment a load starts, which a navigation is: what a pane finished loading
+ * before it was pointed somewhere else is not where it is now.
+ */
+export type LoadState = 'pending' | 'loaded' | 'failed'
+
+/**
  * Whether one emulation capability is in force on the pane's guest: `pending` until the
  * current overrides have completed, including after a setting changes. A pane whose
  * attachment failed never gets past pending.
@@ -99,6 +106,8 @@ export interface PaneDegradation {
 
 export interface PaneStatus {
   attachment: AttachmentState
+  /** Where the pane's page got to on the load it is on now. */
+  load: LoadState
   geometry: GeometryState
   /** What is actually emulated, as opposed to what the pane declares. */
   emulation: EmulationState
@@ -112,6 +121,20 @@ export interface PaneStatus {
   errors: number
 }
 
+/**
+ * Whether a pane has finished loading where it was sent and is drawn at the size it
+ * claims. This is what `--wait` resolves on, and deliberately nothing more: ready is
+ * weaker than the `settle` Phase 3 adds network idle and log quiet to, and the two are
+ * kept apart by name so a later `settle` cannot be mistaken for this.
+ *
+ * Emulation is not part of it. A pane whose attachment or an override was refused is
+ * degraded and says so, but it is still a pane the developer is looking at, and waiting
+ * for a capability that will never arrive would be waiting forever.
+ */
+export function isPaneReady(status: PaneStatus): boolean {
+  return status.load === 'loaded' && status.geometry === 'ok'
+}
+
 /** One reason as a person reads it, the same in the window and on a terminal. */
 export function describeDegradation({ cause, message }: PaneDegradation): string {
   return `${cause}: ${message}`
@@ -123,6 +146,10 @@ export type PaneObservation =
   | { type: 'attached' }
   | { type: 'attachFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
+  /** A load started, which a navigation is. Whatever was loaded before is not this one. */
+  | { type: 'loading' }
+  /** The page in the pane finished loading. */
+  | { type: 'loaded' }
   /** The page in the pane failed to load. One error, counted; the pane still renders. */
   | { type: 'loadFailed' }
   | { type: 'emulationPending'; capabilities: readonly EmulationCapability[] }
@@ -133,7 +160,14 @@ export function initialPaneStatus(): PaneStatus {
   const emulation = Object.fromEntries(
     EMULATION_CAPABILITIES.map((capability) => [capability, 'pending'])
   ) as EmulationState
-  return { attachment: 'pending', geometry: 'unchecked', emulation, degraded: [], errors: 0 }
+  return {
+    attachment: 'pending',
+    load: 'pending',
+    geometry: 'unchecked',
+    emulation,
+    degraded: [],
+    errors: 0
+  }
 }
 
 export function foldPaneStatus(status: PaneStatus, observation: PaneObservation): PaneStatus {
@@ -144,8 +178,12 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
       return initialPaneStatus()
     case 'attached':
       return { ...status, attachment: 'attached', degraded: without(status, 'attachment') }
+    case 'loading':
+      return { ...status, load: 'pending' }
+    case 'loaded':
+      return { ...status, load: 'loaded' }
     case 'loadFailed':
-      return { ...status, errors: status.errors + 1 }
+      return { ...status, load: 'failed', errors: status.errors + 1 }
     case 'attachFailed':
       return {
         ...status,

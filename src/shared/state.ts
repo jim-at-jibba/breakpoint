@@ -1,4 +1,4 @@
-import { reconcilePaneStatuses, type PaneStatus } from './panes'
+import { isPaneReady, reconcilePaneStatuses, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
 
 /**
@@ -147,4 +147,39 @@ export function paneStatusesFor(
     previous,
     project.panes.map((pane) => pane.id)
   )
+}
+
+/**
+ * Whether every pane of the open project is ready — loaded where it was sent and drawn
+ * at the size it claims — and what is holding it up if not.
+ *
+ * This is what `--wait` resolves on ([#16]). The reason is written for the terminal that
+ * gave up waiting: an agent told the wait timed out needs to know which pane never
+ * arrived, and "the page never loaded" and "the pane is the wrong size" are different
+ * bugs to go and look at.
+ */
+export type Readiness = { ready: true } | { ready: false; reason: string }
+
+export function snapshotReadiness(snapshot: StateSnapshot): Readiness {
+  const { project } = snapshot
+  // Nothing open is not a quiet success: there are no panes to have loaded, so a caller
+  // waiting for them is waiting for something that is not going to happen on its own.
+  if (!project) return { ready: false, reason: 'no project is open' }
+
+  const outstanding = project.panes
+    .map((pane) => describeOutstanding(pane.name, snapshot.panes[pane.id]))
+    .filter((reason): reason is string => reason !== null)
+
+  if (outstanding.length === 0) return { ready: true }
+  return { ready: false, reason: outstanding.join('; ') }
+}
+
+/** Why one pane is not ready yet, or null if it is. Load first: geometry follows it. */
+function describeOutstanding(name: string, status: PaneStatus | undefined): string | null {
+  if (!status) return `${name} has not reported yet`
+  if (isPaneReady(status)) return null
+  if (status.load === 'pending') return `${name} is still loading`
+  if (status.load === 'failed') return `${name} could not load its page`
+  if (status.geometry === 'unchecked') return `${name} has not been measured`
+  return `${name} is not drawn at its declared size`
 }

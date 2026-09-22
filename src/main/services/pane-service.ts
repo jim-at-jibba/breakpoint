@@ -172,8 +172,17 @@ export class PaneService {
     this.observe(pane, { type: 'attachFailed', message })
   }
 
+  /**
+   * A load has started, which a navigation is. No entry: the log records where a pane
+   * got to, and "it set off" is said by the navigation entry that caused it.
+   */
+  loading(pane: string): void {
+    this.observe(pane, { type: 'loading' })
+  }
+
   loaded(pane: string, url: string): void {
     this.record(pane, { type: 'pane.loaded', url })
+    this.observe(pane, { type: 'loaded' })
   }
 
   /**

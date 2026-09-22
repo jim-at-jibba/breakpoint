@@ -5,6 +5,7 @@ import {
   foldPaneStatus,
   initialPaneStatus,
   isPaneDimension,
+  isPaneReady,
   PANE_DIMENSION_RANGE,
   PANE_PREFERENCE,
   paneIdFromPreferences,
@@ -43,9 +44,10 @@ describe('compareGeometry', () => {
 describe('a pane status', () => {
   const mismatch = compareGeometry({ width: 390, height: 844 }, { width: 390, height: 150 })
 
-  it('starts waiting for its attachment, unchecked, unemulated, and not degraded', () => {
+  it('starts waiting for its attachment, its page, unchecked, unemulated, and not degraded', () => {
     expect(initialPaneStatus()).toEqual({
       attachment: 'pending',
+      load: 'pending',
       geometry: 'unchecked',
       emulation: {
         viewport: 'pending',
@@ -69,6 +71,27 @@ describe('a pane status', () => {
   it('forgets the errors of a guest that has been replaced', () => {
     const failed = foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' })
     expect(foldPaneStatus(failed, { type: 'guestCreated' }).errors).toBe(0)
+  })
+
+  it('follows its page from loading to loaded and back again', () => {
+    const loaded = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'loading' }), {
+      type: 'loaded'
+    })
+    expect(loaded.load).toBe('loaded')
+    // A navigation starts another load: what the pane finished is no longer what it is on.
+    expect(foldPaneStatus(loaded, { type: 'loading' }).load).toBe('pending')
+  })
+
+  it('marks a page that could not be loaded as failed rather than as still loading', () => {
+    const failed = foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' })
+    expect(failed.load).toBe('failed')
+    expect(failed.degraded).toEqual([])
+  })
+
+  it('forgets what a replaced guest had loaded', () => {
+    const loaded = foldPaneStatus(initialPaneStatus(), { type: 'loaded' })
+    expect(foldPaneStatus(loaded, { type: 'guestCreated' }).load).toBe('pending')
+    expect(foldPaneStatus(loaded, { type: 'guestDestroyed' }).load).toBe('pending')
   })
 
   it('is degraded with the reason when its attachment fails, and still has geometry of its own', () => {
@@ -236,5 +259,42 @@ describe('rotateSize', () => {
       width: 390,
       height: 844
     })
+  })
+})
+
+describe('isPaneReady', () => {
+  const loaded = foldPaneStatus(initialPaneStatus(), { type: 'loaded' })
+  const checked = foldPaneStatus(loaded, { type: 'geometryChecked', result: { ok: true } })
+
+  it('is ready once the page has loaded and the pane is drawn at its declared size', () => {
+    expect(isPaneReady(checked)).toBe(true)
+  })
+
+  it('is not ready while the page is still loading', () => {
+    const loading = foldPaneStatus(checked, { type: 'loading' })
+    expect(isPaneReady(loading)).toBe(false)
+  })
+
+  it('is not ready when the page could not be loaded', () => {
+    expect(isPaneReady(foldPaneStatus(checked, { type: 'loadFailed' }))).toBe(false)
+  })
+
+  it('is not ready for a pane that has loaded but is not the size it claims', () => {
+    const mismatched = foldPaneStatus(checked, {
+      type: 'geometryChecked',
+      result: compareGeometry({ width: 390, height: 844 }, { width: 390, height: 150 })
+    })
+    expect(mismatched.load).toBe('loaded')
+    expect(isPaneReady(mismatched)).toBe(false)
+  })
+
+  it('is not ready before the pane has been measured at all', () => {
+    expect(isPaneReady(loaded)).toBe(false)
+  })
+
+  it('says nothing about emulation: a degraded pane that is loaded and drawn right is ready', () => {
+    const degraded = foldPaneStatus(checked, { type: 'attachFailed', message: 'no debugger' })
+    expect(degraded.degraded).toHaveLength(1)
+    expect(isPaneReady(degraded)).toBe(true)
   })
 })

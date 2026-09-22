@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { repoPathFromArguments } from './launch-arguments'
+import { backgroundFromArguments, repoPathFromArguments } from './launch-arguments'
 
 const electron = '/app/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
 const entry = '/app/out/main/index.js'
@@ -90,5 +90,42 @@ describe('repoPathFromArguments', () => {
         '/cwd'
       )
     ).toBeUndefined()
+  })
+})
+
+describe('backgroundFromArguments', () => {
+  const development = { packaged: false, defaultApp: true }
+  const packaged = { packaged: true, defaultApp: false }
+
+  it('is off for an ordinary launch', () => {
+    expect(backgroundFromArguments([electron, entry, '/repos/shop'], development)).toBe(false)
+    expect(backgroundFromArguments([electron, '/repos/shop'], packaged)).toBe(false)
+  })
+
+  it('is on when the CLI launched the app in the background, in either launch mode', () => {
+    expect(backgroundFromArguments([electron, entry, '--background'], development)).toBe(true)
+    expect(backgroundFromArguments([electron, '--background'], packaged)).toBe(true)
+  })
+
+  it('reads it beside a repo path, whichever order they arrive in', () => {
+    const argv = [electron, entry, '--background', '/repos/shop']
+    expect(backgroundFromArguments(argv, development)).toBe(true)
+    expect(repoPathFromArguments(argv, development, '/cwd')).toBe('/repos/shop')
+    expect(
+      backgroundFromArguments([electron, entry, '/repos/shop', '--background'], development)
+    ).toBe(true)
+  })
+
+  it('never reads a switch Electron put in ahead of our entry script as ours', () => {
+    expect(backgroundFromArguments([electron, '--background', entry], development)).toBe(false)
+  })
+
+  it('never reads argv when neither packaged nor the default app', () => {
+    expect(
+      backgroundFromArguments(['/usr/bin/node', 'vitest', '--background'], {
+        packaged: false,
+        defaultApp: false
+      })
+    ).toBe(false)
   })
 })

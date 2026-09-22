@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Dispatch } from './routes'
 
+const electron = '/app/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
+const entry = '/app/out/main/index.js'
+const argv = process.argv
+
+/** Electron's default app running our entry script, which is what a dev launch is. */
+function launchedAs(...args: string[]): void {
+  ;(process as { defaultApp?: boolean }).defaultApp = true
+  process.argv = [electron, entry, ...args]
+}
+
 /** A launch is the command line, whichever way the argv reached the app. */
 function launchCall(path: string): Parameters<Dispatch> {
   return [{ id: 'launch', route: 'project.open', params: { path } }, { surface: 'cli' }]
@@ -8,6 +18,7 @@ function launchCall(path: string): Parameters<Dispatch> {
 
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (...args: unknown[]) => void>(),
+  windowListeners: new Map<string, (...args: unknown[]) => void>(),
   app: {
     setName: vi.fn(),
     setPath: vi.fn(),
@@ -15,7 +26,8 @@ const mocks = vi.hoisted(() => ({
     on: vi.fn(),
     whenReady: vi.fn((): Promise<void> => Promise.resolve()),
     quit: vi.fn(),
-    exit: vi.fn()
+    exit: vi.fn(),
+    focus: vi.fn()
   },
   createWindow: vi.fn(),
   window: {
@@ -24,6 +36,7 @@ const mocks = vi.hoisted(() => ({
     loadFile: vi.fn(),
     isMinimized: (): boolean => false,
     show: vi.fn(),
+    showInactive: vi.fn(),
     focus: vi.fn()
   },
   dispatch: vi.fn<Dispatch>(),
@@ -38,6 +51,8 @@ vi.mock('electron', () => ({
     on = mocks.window.on
     webContents = mocks.window.webContents
     loadFile = mocks.window.loadFile
+    show = mocks.window.show
+    showInactive = mocks.window.showInactive
 
     constructor() {
       mocks.createWindow()
@@ -63,9 +78,16 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.createWindow.mockReset()
   mocks.listeners.clear()
+  mocks.windowListeners.clear()
+  process.argv = [electron, entry]
   mocks.app.on.mockImplementation((event: string, listener: (...args: unknown[]) => void): void => {
     mocks.listeners.set(event, listener)
   })
+  mocks.window.on.mockImplementation(
+    (event: string, listener: (...args: unknown[]) => void): void => {
+      mocks.windowListeners.set(event, listener)
+    }
+  )
   mocks.dispatch.mockResolvedValue({ response: { id: 'launch', ok: true, data: null } })
   mocks.startSocket.mockResolvedValue({ socketPath: 'test.sock', close: mocks.closeSocket })
   vi.spyOn(console, 'log').mockImplementation((): void => {})
@@ -74,6 +96,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  process.argv = argv
+  delete (process as { defaultApp?: boolean }).defaultApp
 })
 
 it('logs, releases the socket and exits nonzero when window creation fails after readiness', async () => {
@@ -153,4 +177,26 @@ it('opens a native request in the ready app and focuses its window', async () =>
   expect(preventDefault).toHaveBeenCalledOnce()
   expect(mocks.dispatch).toHaveBeenCalledWith(...launchCall('/repos/shop'))
   expect(mocks.window.focus).toHaveBeenCalledOnce()
+})
+
+it('shows the window without taking focus when the CLI launched it in the background', async () => {
+  launchedAs('--background', '/repos/shop')
+
+  await import('./index')
+  await vi.waitFor(() => expect(mocks.createWindow).toHaveBeenCalledOnce())
+  mocks.windowListeners.get('ready-to-show')?.()
+
+  expect(mocks.window.showInactive).toHaveBeenCalledOnce()
+  expect(mocks.window.show).not.toHaveBeenCalled()
+})
+
+it('shows the window the ordinary way for a launch that did not ask for the background', async () => {
+  launchedAs('/repos/shop')
+
+  await import('./index')
+  await vi.waitFor(() => expect(mocks.createWindow).toHaveBeenCalledOnce())
+  mocks.windowListeners.get('ready-to-show')?.()
+
+  expect(mocks.window.show).toHaveBeenCalledOnce()
+  expect(mocks.window.showInactive).not.toHaveBeenCalled()
 })

@@ -362,6 +362,10 @@ export interface Services {
 
 export function createRouteTable(services: Services): RouteTable {
   return {
+    'app.focus': {
+      parseParams: expectNoParams,
+      handle: () => ({ payload: services.app.focus() })
+    },
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })

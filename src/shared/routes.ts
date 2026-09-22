@@ -20,6 +20,7 @@ import type { StateSnapshot } from './state'
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
 export const ROUTE_NAMES = [
+  'app.focus',
   'app.quit',
   'log.read',
   'panes.add',
@@ -53,6 +54,13 @@ export type Surface = 'window' | 'cli'
  * crosses this boundary, because the socket could not carry one.
  */
 export interface RouteSignatures {
+  /**
+   * Brings the app's window forward and gives it focus. What `breakpoint .` does after
+   * handing a repo to a running app, and what `--background` is the way to skip. Answers
+   * `{ focused: false }` when there is no window to bring forward rather than failing:
+   * not having taken focus is not an error.
+   */
+  'app.focus': { params: undefined; payload: { focused: boolean } }
   'app.quit': { params: undefined; payload: { quitting: true } }
   /**
    * Everything the event log holds after a cursor position. Omitting `since` reads from

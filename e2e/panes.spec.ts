@@ -226,6 +226,7 @@ test('a pane whose attachment fails still renders, degraded with the reason, and
   for (const pane of shop.panes) {
     expect(snapshot.panes[pane.id]).toEqual({
       attachment: 'failed',
+      load: 'loaded',
       geometry: 'ok',
       // Nothing can be emulated without the attachment, so nothing claims to be.
       emulation: {

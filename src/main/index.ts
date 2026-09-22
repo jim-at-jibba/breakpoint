@@ -13,10 +13,10 @@ import { registerIpcAdapter } from './adapters/ipc'
 import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
 import { EventLog } from '../shared/event-log'
-import { repoPathFromArguments } from './launch-arguments'
+import { backgroundFromArguments, repoPathFromArguments } from './launch-arguments'
 import { HOST_WINDOW_PREFERENCES, PaneHost } from './pane-host'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
-import { AppService } from './services/app-service'
+import { AppService, focusWindow } from './services/app-service'
 import { PaneService } from './services/pane-service'
 import { PresetService } from './services/preset-service'
 import { PresetStore } from './services/preset-store'
@@ -44,9 +44,19 @@ let paneHost: PaneHost | undefined
 let launchReady = false
 const pendingRepoPaths: string[] = []
 
+function launchMode(): { packaged: boolean; defaultApp: boolean } {
+  return { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
+}
+
+/**
+ * Whether this launch was asked not to take focus, which only the CLI's `--background`
+ * asks for. Read once, from the argv that started this process: a later hand-off is a
+ * command of its own and says for itself whether it activates the window.
+ */
+const launchedInBackground = backgroundFromArguments(process.argv, launchMode())
+
 function openFromArguments(argv: readonly string[], workingDirectory: string): void {
-  const mode = { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
-  const path = repoPathFromArguments(argv, mode, workingDirectory)
+  const path = repoPathFromArguments(argv, launchMode(), workingDirectory)
   if (path) openProject(path)
 }
 
@@ -92,7 +102,10 @@ function createWindow(): void {
   paneHost?.adopt(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // Best effort on macOS in this phase: the window is drawn without being made key, so
+    // an agent starting the app does not take the developer's typing. Hardening is Phase 6.
+    if (launchedInBackground) mainWindow.showInactive()
+    else mainWindow.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -110,14 +123,7 @@ function createWindow(): void {
 }
 
 function focusExistingWindow(): void {
-  const [existing] = BrowserWindow.getAllWindows()
-  if (!existing) {
-    createWindow()
-    return
-  }
-  if (existing.isMinimized()) existing.restore()
-  existing.show()
-  existing.focus()
+  if (!focusWindow()) createWindow()
 }
 
 if (!hasSingleInstanceLock) {

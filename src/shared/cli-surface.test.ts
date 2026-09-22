@@ -9,10 +9,16 @@ import {
   type CliCommandSpec,
   type ParsedValue
 } from './cli-surface'
+import type { CliOptions } from './cli-surface'
 import type { LogRead, ReadParams } from './event-log'
 import { foldPaneStatus } from './panes'
 import { createProject } from './project'
 import { paneStatusesFor, type StateSnapshot } from './state'
+
+/** Every option off, with the ones a case is about turned on. */
+function options(on: Partial<CliOptions> = {}): CliOptions {
+  return { json: false, noLaunch: false, verbose: false, wait: false, background: false, ...on }
+}
 
 describe('the declared surface', () => {
   it('checks command parsers against their route parameters', () => {
@@ -62,7 +68,7 @@ describe('the declared surface', () => {
   })
 
   it('gives every flag something to set, so the declaration is what the parser reads', () => {
-    const optionKeys = new Set(['json', 'noLaunch', 'verbose', 'help'])
+    const optionKeys = new Set(['json', 'noLaunch', 'verbose', 'wait', 'background', 'help'])
     for (const flag of CLI_FLAGS) expect(optionKeys).toContain(flag.sets)
   })
 
@@ -96,11 +102,7 @@ describe('parseArgv', () => {
     const result = parseArgv(['quit'], '/cwd')
     expect(result.kind).toBe('command')
     expect(result.kind === 'command' && result.command.name).toBe('quit')
-    expect(result.kind === 'command' && result.options).toEqual({
-      json: false,
-      noLaunch: false,
-      verbose: false
-    })
+    expect(result.kind === 'command' && result.options).toEqual(options())
   })
 
   it('reads flags before and after the command', () => {
@@ -112,11 +114,9 @@ describe('parseArgv', () => {
 
   it('reads every flag together', () => {
     const result = parseArgv(['quit', '--json', '--no-launch', '--verbose'], '/cwd')
-    expect(result.kind === 'command' && result.options).toEqual({
-      json: true,
-      noLaunch: true,
-      verbose: true
-    })
+    expect(result.kind === 'command' && result.options).toEqual(
+      options({ json: true, noLaunch: true, verbose: true })
+    )
   })
 
   it('treats --help and its -h alias as help, wherever they appear', () => {
@@ -129,7 +129,7 @@ describe('parseArgv', () => {
     expect(parseArgv([], '/cwd')).toEqual({
       kind: 'error',
       message: expect.stringContaining('command'),
-      options: { json: false, noLaunch: false, verbose: false }
+      options: options()
     })
   })
 
@@ -203,11 +203,9 @@ describe('opening a project from the command line', () => {
 
   it('takes flags around the path', () => {
     const result = parseArgv(['--json', '.', '--no-launch'], cwd)
-    expect(result.kind === 'command' && result.options).toEqual({
-      json: true,
-      noLaunch: true,
-      verbose: false
-    })
+    expect(result.kind === 'command' && result.options).toEqual(
+      options({ json: true, noLaunch: true })
+    )
   })
 
   it('refuses a path and a command together', () => {
@@ -246,11 +244,9 @@ describe('reading the event log from a terminal', () => {
   it('takes the cursor with the other flags around it', () => {
     const result = read(['--json', 'logs', '--since', '12', '--verbose'])
     expect(result.kind === 'command' && result.params).toEqual({ since: 12 })
-    expect(result.kind === 'command' && result.options).toEqual({
-      json: true,
-      noLaunch: false,
-      verbose: true
-    })
+    expect(result.kind === 'command' && result.options).toEqual(
+      options({ json: true, verbose: true })
+    )
   })
 
   it('refuses a cursor that is not a position', () => {
@@ -436,9 +432,9 @@ describe('the state as a terminal reads it', () => {
     const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
-    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x`)
+    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x  loading`)
     expect(lines).toContain(
-      '  Tablet    820×1180 @2x  degraded: attachment: Debugger is already attached to the target'
+      '  Tablet    820×1180 @2x  loading  degraded: attachment: Debugger is already attached to the target'
     )
   })
 
@@ -448,9 +444,20 @@ describe('the state as a terminal reads it', () => {
     const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
-    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x  errors: 1`)
+    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x  load failed  errors: 1`)
     // A pane with nothing wrong says nothing, rather than saying zero.
-    expect(lines).toContain(`  ${tablet.name.padEnd(10)}820×1180 @2x`)
+    expect(lines).toContain(`  ${tablet.name.padEnd(10)}820×1180 @2x  loading`)
+  })
+
+  it('says nothing about a pane that has arrived: the ones that have not are the news', () => {
+    const panes = paneStatusesFor(shop, {})
+    for (const id of Object.keys(panes)) {
+      panes[id] = foldPaneStatus(panes[id], { type: 'loaded' })
+    }
+    const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
+
+    const lines = (state?.render(snapshot) ?? '').split('\n')
+    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x`)
   })
 })
 
@@ -512,5 +519,78 @@ describe('breakpoint open', () => {
 
   it('shows its argument in the help text', () => {
     expect(helpText()).toContain('open <url>')
+  })
+})
+
+describe('waiting for the panes to be ready', () => {
+  const read = (argv: string[]): ReturnType<typeof parseArgv> => parseArgv(argv, '/repos/shop')
+
+  it.each([
+    ['.', 'project.open'],
+    ['state', 'project.state']
+  ])('takes --wait on %s, which leaves the panes loading', (name: string, route: string) => {
+    const result = read([name, '--wait'])
+    expect(result.kind, name).toBe('command')
+    expect(result.kind === 'command' && result.command.route).toBe(route)
+    expect(result.kind === 'command' && result.options.wait).toBe(true)
+  })
+
+  it('takes --wait on open, whose panes are loading when it answers', () => {
+    const result = read(['open', '3000', '--wait'])
+    expect(result.kind === 'command' && result.options.wait).toBe(true)
+    expect(result.kind === 'command' && result.params).toEqual({ url: '3000' })
+  })
+
+  it.each(['quit', 'logs'])(
+    'refuses --wait on %s, which has no panes to wait for',
+    (name: string) => {
+      const result = read([name, '--wait'])
+      expect(result.kind, name).toBe('error')
+      expect(result.kind === 'error' && result.message).toContain('--wait')
+      expect(result.kind === 'error' && result.message).toContain(name)
+    }
+  )
+
+  it('keeps JSON mode when it refuses the flag, so the refusal still pipes', () => {
+    const result = read(['quit', '--wait', '--json'])
+    expect(result.kind).toBe('error')
+    expect(result.options.json).toBe(true)
+  })
+
+  it('replaces the payload with the ready snapshot only where the payload is one', () => {
+    const waiting = CLI_COMMANDS.filter((command) => command.waits !== undefined)
+    expect(waiting.map((command) => [command.name, command.waits])).toEqual([
+      ['<path>', 'snapshot'],
+      ['open', 'payload'],
+      ['state', 'snapshot']
+    ])
+  })
+
+  it('shows --wait in the help text beside each command that takes it', () => {
+    const lines = helpText().split('\n')
+    for (const command of CLI_COMMANDS) {
+      const line = lines.find((candidate) => candidate.trim().startsWith(command.name))
+      expect(line, command.name).toBeDefined()
+      expect(line?.includes('[--wait]'), command.name).toBe(command.waits !== undefined)
+    }
+  })
+})
+
+describe('starting or handing off in the background', () => {
+  it('takes --background on any command: every one of them may start the app', () => {
+    for (const command of CLI_COMMANDS) {
+      const argv = command.argument ? [command.name, '3000'] : [command.name]
+      const result = parseArgv([...argv, '--background'], '/repos/shop')
+      expect(result.kind, command.name).toBe('command')
+      expect(result.kind === 'command' && result.options.background).toBe(true)
+    }
+  })
+
+  it('is the only thing that stops a path bringing the window forward', () => {
+    const path = CLI_COMMANDS.find((command) => command.name === '<path>')
+    expect(path?.activates).toBe(true)
+    expect(CLI_COMMANDS.filter((command) => command.activates).map((c) => c.name)).toEqual([
+      '<path>'
+    ])
   })
 })

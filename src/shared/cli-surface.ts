@@ -2,7 +2,7 @@ import { resolve } from 'node:path'
 import { focusedPaneOf } from './canvas'
 import { isCursorPosition, type Entry, type LogRead } from './event-log'
 import { formatDpr } from './pane-header'
-import { describeDegradation } from './panes'
+import { describeDegradation, type LoadState } from './panes'
 import { looksLikePath } from './paths'
 import type { Project, Zoom } from './project'
 import type { Navigation, RouteName, RouteParams } from './routes'
@@ -40,6 +40,20 @@ interface CommandSpec<N extends RouteName> {
    * usage error rather than a param the app has to refuse.
    */
   flags?: readonly CliValueFlagSpec[]
+  /**
+   * Whether `--wait` is a flag of this command, and what it prints once the panes have
+   * ready. `snapshot` replaces the route's payload with the snapshot the wait ended
+   * on, because that payload *is* a snapshot and the one taken before the panes loaded
+   * would be a lie. `payload` keeps what the route answered. Absent, `--wait` is a usage
+   * error: `quit` and `logs` have no panes to wait for.
+   */
+  waits?: 'snapshot' | 'payload'
+  /**
+   * Whether this command brings the window forward when it succeeds, which `--background`
+   * is the way to skip. Only opening a project does: the developer ran it to look at
+   * something, and everything else is a question rather than an act.
+   */
+  activates?: true
   parseParams(input: CliCommandInput): ParsedValue<RouteParams<N>>
   /** How the route's payload reads on a terminal, when `--json` was not asked for. */
   render(data: unknown): string
@@ -83,6 +97,8 @@ export const PATH_COMMAND: CliCommandSpec<'project.open'> = {
   name: '<path>',
   route: 'project.open',
   summary: 'Open the project for that repo, creating it the first time',
+  waits: 'snapshot',
+  activates: true,
   parseParams: ({
     cwd,
     positional
@@ -103,6 +119,7 @@ const NAVIGATE_COMMAND: CliCommandSpec<'project.navigate'> = {
   route: 'project.navigate',
   summary: 'Point every pane at a URL, or at a port on this machine',
   argument: URL_ARGUMENT,
+  waits: 'payload',
   // A missing argument is already a usage error by the time this runs; whitespace is
   // the case only the command itself can see.
   parseParams: ({ argument }: CliCommandInput): ParsedValue<RouteParams<'project.navigate'>> =>
@@ -127,6 +144,7 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
     name: 'state',
     route: 'project.state',
     summary: 'Print the open project: name, repo, the URL its panes are on, and the panes',
+    waits: 'snapshot',
     parseParams: (): ParsedValue<RouteParams<'project.state'>> => ({ ok: true, value: undefined }),
     render: (data) => renderSnapshot(data, 'Open')
   },
@@ -169,6 +187,9 @@ function renderSnapshot(data: unknown, verb: string): string {
   const panes = project.panes.map((pane) => {
     const status = snapshot?.panes?.[pane.id]
     let line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} ${formatDpr(pane.dpr)}`
+    // Where the pane's page got to, which is half of what `--wait` waits for. A pane
+    // that has arrived says nothing, so the ones that have not are what stands out.
+    line += describeLoad(status?.load ?? 'pending')
     // The same two things the pane's header says, for the surface that has no header.
     if (status?.errors) line += `  errors: ${status.errors}`
     const degraded = status?.degraded ?? []
@@ -184,6 +205,16 @@ function renderSnapshot(data: unknown, verb: string): string {
     // The position to hand to `logs --since`, which is the point of printing it.
     cursor
   ].join('\n')
+}
+
+const LOAD_DESCRIPTIONS: Readonly<Record<LoadState, string>> = {
+  pending: '  loading',
+  loaded: '',
+  failed: '  load failed'
+}
+
+function describeLoad(load: LoadState): string {
+  return LOAD_DESCRIPTIONS[load]
 }
 
 /** `Fit` where the project says Fit: what Fit draws to is the window's, and not stored. */
@@ -265,7 +296,16 @@ export interface CliOptions {
   json: boolean
   noLaunch: boolean
   verbose: boolean
+  wait: boolean
+  background: boolean
 }
+
+/**
+ * How long `--wait` gives the panes before it reports `TIMEOUT`. Generous enough for a
+ * cold dev server to compile the page, and finite because an agent blocked forever is
+ * worse than one told the app never got there.
+ */
+export const WAIT_TIMEOUT_MS = 30_000
 
 export interface CliFlagSpec {
   name: string
@@ -285,6 +325,16 @@ export const CLI_FLAGS: readonly CliFlagSpec[] = [
     name: '--no-launch',
     summary: 'Exit 3 rather than starting the app if it is not running',
     sets: 'noLaunch'
+  },
+  {
+    name: '--wait',
+    summary: `Block until every pane has loaded and is drawn at its declared size, for up to ${WAIT_TIMEOUT_MS / 1000}s`,
+    sets: 'wait'
+  },
+  {
+    name: '--background',
+    summary: 'Start or hand off without bringing the window forward',
+    sets: 'background'
   },
   {
     name: '--verbose',
@@ -359,7 +409,13 @@ interface GivenValueFlag {
  * that knows.
  */
 export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
-  const options: CliOptions = { json: false, noLaunch: false, verbose: false }
+  const options: CliOptions = {
+    json: false,
+    noLaunch: false,
+    verbose: false,
+    wait: false,
+    background: false
+  }
   const given: GivenValueFlag[] = []
   /** The command name, then its one argument. Anything further is a usage error. */
   const positionals: string[] = []
@@ -426,6 +482,10 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
     return { kind: 'error', message: needsArgument(command.name, command.argument), options }
   }
 
+  if (options.wait && command.waits === undefined) {
+    return { kind: 'error', message: `--wait is not a flag of ${command.name}`, options }
+  }
+
   const values = readValueFlags(command, given)
   if (!values.ok) return { kind: 'error', message: values.message, options }
   const params = command.parseParams({ cwd, positional, argument, values: values.value })
@@ -457,7 +517,8 @@ export function helpText(): string {
     [
       command.name,
       ...(command.argument ? [command.argument.placeholder] : []),
-      ...(command.flags ?? []).map((flag) => `[${flag.name} ${flag.placeholder}]`)
+      ...(command.flags ?? []).map((flag) => `[${flag.name} ${flag.placeholder}]`),
+      ...(command.waits ? ['[--wait]'] : [])
     ].join(' ')
 
   const labels = [...CLI_COMMANDS.map(commandLabel), ...CLI_FLAGS.map(flagLabel)]
@@ -478,6 +539,7 @@ export function helpText(): string {
     '',
     'Examples:',
     '  breakpoint .',
+    '  breakpoint . --wait --json',
     '  breakpoint open 3000',
     '  breakpoint open https://staging.example.com/cart --json',
     '  breakpoint state --json | jq .project.panes',
