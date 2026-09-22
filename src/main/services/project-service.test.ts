@@ -37,9 +37,9 @@ beforeEach(async () => {
   })
   log = new EventLog()
   const presets = new PresetService(new PresetStore(join(root, 'presets.json')))
-  const panes = new PaneService(feed, log, presets, {
+  const panes = new PaneService(feed, log, {
     updatePane: (pane, changes) => service.updatePane(pane, changes),
-    addPane: (draft) => service.addPane(draft),
+    addPane: (creation) => service.addPane(creation),
     removePane: (pane) => service.removePane(pane),
     rotatePane: (pane) => service.rotatePane(pane)
   })

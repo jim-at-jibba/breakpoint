@@ -161,9 +161,9 @@ if (!hasSingleInstanceLock) {
     const presets = new PresetService(new PresetStore(join(userDataDir, 'presets.json')))
     // The two services reach each other: opening a project resets its panes, and changing
     // a pane changes the project. Neither calls the other while being constructed.
-    const panes = new PaneService(feed, log, presets, {
+    const panes = new PaneService(feed, log, {
       updatePane: (pane, changes) => projects.updatePane(pane, changes),
-      addPane: (draft) => projects.addPane(draft),
+      addPane: (creation) => projects.addPane(creation),
       removePane: (pane) => projects.removePane(pane),
       rotatePane: (pane) => projects.rotatePane(pane)
     })

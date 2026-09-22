@@ -6,7 +6,6 @@ import {
   type PaneObservation,
   type PaneStatus
 } from '../../shared/panes'
-import { paneFromPreset, paneFromSize, presetById, type PaneDraft } from '../../shared/presets'
 import type { Pane, PaneChanges, Project } from '../../shared/project'
 import type {
   EmulationSetting,
@@ -18,7 +17,6 @@ import type {
 import { paneStatusesFor } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
-import type { PresetService } from './preset-service'
 
 interface AttachmentFailure {
   pane: string
@@ -58,7 +56,7 @@ export interface PaneAddition {
  */
 export interface PaneProjects {
   updatePane(pane: string, changes: PaneChanges): Promise<PaneUpdate>
-  addPane(draft: PaneDraft): Promise<PaneAddition>
+  addPane(creation: PaneCreation): Promise<PaneAddition>
   removePane(pane: string): Promise<{ pane: Pane }>
   rotatePane(pane: string): Promise<PaneUpdate>
 }
@@ -79,7 +77,6 @@ export class PaneService {
   constructor(
     private readonly feed: StateFeed,
     private readonly log: EventLog,
-    private readonly presets: PresetService,
     private readonly projects: PaneProjects
   ) {}
 
@@ -113,13 +110,12 @@ export class PaneService {
   }
 
   /**
-   * Adds a pane from a preset or at a size the caller gave. The preset is resolved into
-   * the pane's own values here, once, and the pane remembers only which preset it came
-   * from ([ADR-0011]) — so a preset edited afterwards leaves this pane exactly as it is.
+   * Adds a pane from a preset or at a size the caller gave. The queued project mutation
+   * resolves a preset into the pane's own values once, and the pane remembers only which
+   * preset it came from ([ADR-0011]) — so later edits leave this pane exactly as it is.
    */
   async add(creation: PaneCreation): Promise<{ pane: PaneListing; index: number }> {
-    const draft = await this.draftFor(creation)
-    const { pane, index } = await this.projects.addPane(draft)
+    const { pane, index } = await this.projects.addPane(creation)
     this.record(pane.id, {
       type: 'pane.added',
       width: pane.width,
@@ -127,18 +123,6 @@ export class PaneService {
       preset: pane.preset
     })
     return { pane: { ...pane, status: this.current[pane.id] }, index }
-  }
-
-  private async draftFor(creation: PaneCreation): Promise<PaneDraft> {
-    if (!('preset' in creation)) {
-      return paneFromSize({ width: creation.width, height: creation.height })
-    }
-    const { presets } = await this.presets.list()
-    const preset = presetById(presets, creation.preset)
-    if (!preset) {
-      throw new RouteError('PRESET_NOT_FOUND', `no preset ${creation.preset} in the presets file`)
-    }
-    return paneFromPreset(preset)
   }
 
   /**

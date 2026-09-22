@@ -163,6 +163,27 @@ function PaneHeader({
   degraded: PaneStatus['degraded']
 }): React.JSX.Element {
   const reasons = degraded.map(describeDegradation).join('\n')
+  const [message, setMessage] = useState<string | null>(null)
+  const actionVersion = useRef(0)
+
+  async function runAction(
+    action: () => Promise<{ ok: true } | { ok: false; error: { message: string } }>
+  ): Promise<void> {
+    const version = actionVersion.current + 1
+    actionVersion.current = version
+    setMessage(null)
+    try {
+      const response = await action()
+      if (actionVersion.current !== version) return
+      setMessage(response.ok ? null : response.error.message)
+    } catch (error) {
+      if (actionVersion.current === version) setMessage(errorMessage(error))
+    }
+  }
+
+  function resize(size: { width: number } | { height: number }): Promise<void> {
+    return runAction(() => window.breakpoint.invoke('panes.resize', { pane: pane.id, ...size }))
+  }
 
   return (
     <div
@@ -177,7 +198,17 @@ function PaneHeader({
       <span className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] whitespace-nowrap text-[color:var(--bp-ink)]">
         {pane.name}
       </span>
-      <PaneSize pane={pane} />
+      <PaneSize pane={pane} onResize={resize} />
+      {message !== null && (
+        <span
+          role="alert"
+          data-testid="pane-action-error"
+          title={message}
+          className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-error)]"
+        >
+          {message}
+        </span>
+      )}
       {degraded.length > 0 && (
         <span
           className="flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-warn)]"
@@ -192,7 +223,9 @@ function PaneHeader({
           label="Rotate"
           testId="pane-rotate"
           pane={pane.id}
-          onClick={() => window.breakpoint.invoke('panes.rotate', { pane: pane.id })}
+          onClick={() =>
+            void runAction(() => window.breakpoint.invoke('panes.rotate', { pane: pane.id }))
+          }
         >
           ⤢
         </PaneAction>
@@ -200,7 +233,9 @@ function PaneHeader({
           label="Remove"
           testId="pane-remove"
           pane={pane.id}
-          onClick={() => window.breakpoint.invoke('panes.remove', { pane: pane.id })}
+          onClick={() =>
+            void runAction(() => window.breakpoint.invoke('panes.remove', { pane: pane.id }))
+          }
         >
           ×
         </PaneAction>
@@ -214,25 +249,27 @@ function PaneHeader({
  * edited, and commits only itself, so committing a width can never carry a height the
  * pane no longer has.
  */
-function PaneSize({ pane }: { pane: Pane }): React.JSX.Element {
-  function resize(size: { width: number } | { height: number }): void {
-    void window.breakpoint.invoke('panes.resize', { pane: pane.id, ...size })
-  }
-
+function PaneSize({
+  pane,
+  onResize
+}: {
+  pane: Pane
+  onResize(size: { width: number } | { height: number }): Promise<void>
+}): React.JSX.Element {
   return (
     <span className="flex flex-none items-center font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-muted)]">
       <SizeInput
         label="Width"
         pane={pane.id}
         declared={pane.width}
-        onCommit={(width) => resize({ width })}
+        onCommit={(width) => void onResize({ width })}
       />
       ×
       <SizeInput
         label="Height"
         pane={pane.id}
         declared={pane.height}
-        onCommit={(height) => resize({ height })}
+        onCommit={(height) => void onResize({ height })}
       />
     </span>
   )
@@ -276,12 +313,15 @@ function SizeInput({
         if (event.key === 'Enter') event.currentTarget.blur()
         if (event.key === 'Escape') {
           setDraft(null)
-          event.currentTarget.blur()
         }
       }}
       className="w-[var(--bp-field-w-inline)] rounded-[var(--bp-radius-xs)] bg-transparent text-center tabular-nums outline-none hover:bg-[var(--bp-hover)] focus:bg-[var(--bp-chrome-sunken)] focus:text-[color:var(--bp-ink)]"
     />
   )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function PaneAction({

@@ -1,7 +1,7 @@
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { isPaneDimension } from '../../../shared/panes'
 import type { Preset } from '../../../shared/presets'
 import type { PaneCreation } from '../../../shared/routes'
@@ -17,25 +17,37 @@ export function AddPane(): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [presets, setPresets] = useState<Preset[] | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const loadVersion = useRef(0)
 
-  async function load(): Promise<void> {
-    const response = await window.breakpoint.invoke('presets.list')
-    if (response.ok) {
-      setPresets(response.data.presets)
-      setMessage(null)
-      return
+  async function load(version: number): Promise<void> {
+    try {
+      const response = await window.breakpoint.invoke('presets.list')
+      if (version !== loadVersion.current) return
+      if (response.ok) {
+        setPresets(response.data.presets)
+        setMessage(null)
+        return
+      }
+      setPresets([])
+      setMessage(response.error.message)
+    } catch (error) {
+      if (version !== loadVersion.current) return
+      setPresets([])
+      setMessage(errorMessage(error))
     }
-    setPresets([])
-    setMessage(response.error.message)
   }
 
   async function add(creation: PaneCreation): Promise<void> {
-    const response = await window.breakpoint.invoke('panes.add', creation)
-    if (!response.ok) {
-      setMessage(response.error.message)
-      return
+    try {
+      const response = await window.breakpoint.invoke('panes.add', creation)
+      if (!response.ok) {
+        setMessage(response.error.message)
+        return
+      }
+      setOpen(false)
+    } catch (error) {
+      setMessage(errorMessage(error))
     }
-    setOpen(false)
   }
 
   return (
@@ -44,8 +56,12 @@ export function AddPane(): React.JSX.Element {
       onOpenChange={(next: boolean) => {
         setOpen(next)
         if (next) {
+          setPresets(null)
           setMessage(null)
-          void load()
+          loadVersion.current += 1
+          void load(loadVersion.current)
+        } else {
+          loadVersion.current += 1
         }
       }}
     >
@@ -98,6 +114,10 @@ export function AddPane(): React.JSX.Element {
       </PopoverContent>
     </Popover>
   )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /** A pane at a size the developer types, which belongs to no preset. */

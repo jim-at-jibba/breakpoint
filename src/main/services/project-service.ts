@@ -1,7 +1,7 @@
 import { realpath, stat } from 'node:fs/promises'
 import type { EventLog } from '../../shared/event-log'
 import { rotateSize } from '../../shared/panes'
-import type { PaneDraft } from '../../shared/presets'
+import { paneFromPreset, paneFromSize, presetById, type PaneDraft } from '../../shared/presets'
 import {
   createProject,
   newPaneId,
@@ -10,6 +10,7 @@ import {
   type Project
 } from '../../shared/project'
 import type { StateSnapshot } from '../../shared/state'
+import type { PaneCreation } from '../../shared/routes'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
 import type { PaneAddition, PaneService, PaneUpdate } from './pane-service'
@@ -116,9 +117,9 @@ export class ProjectService {
     })
   }
 
-  /** Appends a pane already resolved from a preset or a size ([ADR-0011]). */
-  addPane(draft: PaneDraft): Promise<PaneAddition> {
-    return this.queued(() => this.appendPane(draft))
+  /** Resolves and appends a pane in one queued operation ([ADR-0011]). */
+  addPane(creation: PaneCreation): Promise<PaneAddition> {
+    return this.queued(() => this.appendPane(creation))
   }
 
   removePane(id: string): Promise<{ pane: Pane }> {
@@ -135,9 +136,10 @@ export class ProjectService {
     return done
   }
 
-  private async appendPane(draft: PaneDraft): Promise<PaneAddition> {
+  private async appendPane(creation: PaneCreation): Promise<PaneAddition> {
     const project = this.current
     if (!project) throw new RouteError('PANE_NOT_FOUND', 'no project is open')
+    const draft = await this.draftFor(creation)
 
     // The project's first session is its default; a pane on a session it does not have
     // is a project that will not load again.
@@ -147,6 +149,18 @@ export class ProjectService {
     const index = panes.length - 1
     this.feed.publish({ type: 'pane.added', pane, index })
     return { pane, index }
+  }
+
+  private async draftFor(creation: PaneCreation): Promise<PaneDraft> {
+    if (creation.preset === undefined) {
+      return paneFromSize({ width: creation.width, height: creation.height })
+    }
+    const { presets } = await this.presets.list()
+    const preset = presetById(presets, creation.preset)
+    if (!preset) {
+      throw new RouteError('PRESET_NOT_FOUND', `no preset ${creation.preset} in the presets file`)
+    }
+    return paneFromPreset(preset)
   }
 
   private async dropPane(id: string): Promise<{ pane: Pane }> {

@@ -161,14 +161,17 @@ function expectPaneResize(raw: unknown): ParamsOk<'panes.resize'> | ParamsBad {
       return { ok: false, message: `${shape}, in ${DIMENSIONS}` }
     }
   }
-  return {
-    ok: true,
-    params: {
-      pane: named.pane,
-      ...(width !== undefined && { width: width as number }),
-      ...(height !== undefined && { height: height as number })
+  if (width !== undefined) {
+    return {
+      ok: true,
+      params: {
+        pane: named.pane,
+        width: width as number,
+        ...(height !== undefined && { height: height as number })
+      }
     }
   }
+  return { ok: true, params: { pane: named.pane, height: height as number } }
 }
 
 const CREATION_FIELDS = ['preset', 'width', 'height'] as const

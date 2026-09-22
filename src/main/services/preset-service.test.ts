@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_PRESETS, readPresetFile, writePresetFile, type Preset } from '../../shared/presets'
 import { PresetService } from './preset-service'
 import { PresetStore } from './preset-store'
@@ -30,6 +30,25 @@ describe('the first read', () => {
 
     const written: unknown = JSON.parse(await readFile(store.file, 'utf8'))
     expect(readPresetFile(written)).toEqual({ ok: true, presets: [...DEFAULT_PRESETS] })
+  })
+
+  it('serialises overlapping seeds so every caller succeeds', async () => {
+    vi.spyOn(store, 'load')
+      .mockResolvedValueOnce({ status: 'missing' })
+      .mockResolvedValueOnce({ status: 'missing' })
+    let active = 0
+    let mostActive = 0
+    vi.spyOn(store, 'save').mockImplementation(async () => {
+      active += 1
+      mostActive = Math.max(mostActive, active)
+      await new Promise<void>((resolve) => setImmediate(resolve))
+      active -= 1
+    })
+
+    const results = await Promise.all([service.list(), service.list()])
+
+    expect(results).toEqual([{ presets: [...DEFAULT_PRESETS] }, { presets: [...DEFAULT_PRESETS] }])
+    expect(mostActive).toBe(1)
   })
 })
 

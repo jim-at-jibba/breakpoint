@@ -11,9 +11,20 @@ import type { PresetStore } from './preset-store'
  * function in the shared module ([ADR-0011]), and this only decides which presets exist.
  */
 export class PresetService {
+  private queue: Promise<void> = Promise.resolve()
+
   constructor(private readonly store: PresetStore) {}
 
-  async list(): Promise<{ presets: Preset[] }> {
+  list(): Promise<{ presets: Preset[] }> {
+    const done = this.queue.then(() => this.read())
+    this.queue = done.then(
+      () => undefined,
+      () => undefined
+    )
+    return done
+  }
+
+  private async read(): Promise<{ presets: Preset[] }> {
     const loaded = await this.store.load()
     if (loaded.status === 'refused') {
       // Left untouched on disk: re-seeding over a file the developer wrote is how one

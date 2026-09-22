@@ -45,9 +45,9 @@ beforeEach(async () => {
     patches.push(patch)
   })
   log = new EventLog()
-  panes = new PaneService(feed, log, presetService, {
+  panes = new PaneService(feed, log, {
     updatePane: (pane, changes) => projects.updatePane(pane, changes),
-    addPane: (draft) => projects.addPane(draft),
+    addPane: (creation) => projects.addPane(creation),
     removePane: (pane) => projects.removePane(pane),
     rotatePane: (pane) => projects.rotatePane(pane)
   })
@@ -337,6 +337,20 @@ describe('adding a pane', () => {
     await expect(panes.add({ preset: 'laptop' })).rejects.toMatchObject({
       code: 'PANE_NOT_FOUND'
     })
+  })
+
+  it('finishes an add before an open requested after it, so the pane stays with its project', async () => {
+    await openShop()
+    const other = join(root, 'other')
+    await mkdir(other)
+
+    const adding = panes.add({ width: 1024, height: 768 })
+    const opening = projects.open(other)
+    const [{ pane }, opened] = await Promise.all([adding, opening])
+
+    expect(opened.project?.repoPath).toBe(other)
+    expect(opened.project?.panes.some((candidate) => candidate.id === pane.id)).toBe(false)
+    expect((await projects.open(shop)).project?.panes.at(-1)?.id).toBe(pane.id)
   })
 })
 

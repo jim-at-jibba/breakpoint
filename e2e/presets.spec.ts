@@ -10,6 +10,7 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import { ROUTE_CHANNEL } from '../src/shared/ipc'
 import {
   DEFAULT_PRESETS,
   readPresetFile,
@@ -400,6 +401,169 @@ test('a pane resized by typing exact dimensions lays its page out at the new siz
   expect(await webviewBox(page, mobile.id)).toEqual({ width: 500, height: 700 })
   // The emulated viewport followed: the page's bottom-right corner is the pane's.
   await cornerIsHit(page, mobile.id)
+})
+
+test('Escape cancels a typed pane size without saving it', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop.repoPath)
+  const [mobile] = shop.panes
+  await drawn(
+    page,
+    shop.panes.map((pane) => pane.id)
+  )
+
+  const width = page
+    .locator(`[data-testid="pane"][data-pane="${mobile.id}"]`)
+    .getByTestId('pane-width')
+  await width.fill('500')
+  await width.press('Escape')
+  await expect(width).toHaveValue(String(mobile.width))
+
+  await expect.poll(async () => panesOf(await state())[0].width).toBe(mobile.width)
+})
+
+test('pane controls show structured route failures in the pane header', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop.repoPath)
+  const [mobile] = shop.panes
+  await drawn(
+    page,
+    shop.panes.map((pane) => pane.id)
+  )
+  await launched.app.evaluate(({ ipcMain }, route) => {
+    ipcMain.removeHandler(route)
+    ipcMain.handle(route, (_event, request: { id: string; route: string }) => ({
+      id: request.id,
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: `${request.route} failed` }
+    }))
+  }, ROUTE_CHANNEL)
+
+  const header = page.locator(`[data-testid="pane"][data-pane="${mobile.id}"]`)
+  await header.getByTestId('pane-rotate').click()
+  await expect(header.getByTestId('pane-action-error')).toHaveAttribute(
+    'title',
+    'panes.rotate failed'
+  )
+  await header.getByTestId('pane-remove').click()
+  await expect(header.getByTestId('pane-action-error')).toHaveAttribute(
+    'title',
+    'panes.remove failed'
+  )
+  await header.getByTestId('pane-width').fill('500')
+  await header.getByTestId('pane-width').press('Enter')
+  await expect(header.getByTestId('pane-action-error')).toHaveAttribute(
+    'title',
+    'panes.resize failed'
+  )
+})
+
+test('pane controls show rejected IPC calls in the pane header', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop.repoPath)
+  const [mobile] = shop.panes
+  await drawn(
+    page,
+    shop.panes.map((pane) => pane.id)
+  )
+  await launched.app.evaluate(({ ipcMain }, route) => {
+    ipcMain.removeHandler(route)
+    ipcMain.handle(route, (_event, request: { route: string }) => {
+      throw new Error(`${request.route} unavailable`)
+    })
+  }, ROUTE_CHANNEL)
+
+  const header = page.locator(`[data-testid="pane"][data-pane="${mobile.id}"]`)
+  await header.getByTestId('pane-rotate').click()
+  await expect(header.getByTestId('pane-action-error')).toContainText('panes.rotate unavailable')
+  await header.getByTestId('pane-remove').click()
+  await expect(header.getByTestId('pane-action-error')).toContainText('panes.remove unavailable')
+  await header.getByTestId('pane-width').fill('500')
+  await header.getByTestId('pane-width').press('Enter')
+  await expect(header.getByTestId('pane-action-error')).toContainText('panes.resize unavailable')
+})
+
+test('an obsolete pane action failure cannot replace a newer successful result', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop.repoPath)
+  const [mobile] = shop.panes
+  await drawn(
+    page,
+    shop.panes.map((pane) => pane.id)
+  )
+  await launched.app.evaluate(({ ipcMain }, route) => {
+    ipcMain.removeHandler(route)
+    ipcMain.handle(route, async (_event, request: { id: string; route: string }) => {
+      if (request.route === 'panes.rotate') {
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        return {
+          id: request.id,
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'obsolete rotate failure' }
+        }
+      }
+      return { id: request.id, ok: true, data: {} }
+    })
+  }, ROUTE_CHANNEL)
+
+  const header = page.locator(`[data-testid="pane"][data-pane="${mobile.id}"]`)
+  await header.getByTestId('pane-rotate').click()
+  await header.getByTestId('pane-remove').click()
+  await page.waitForTimeout(300)
+  await expect(header.getByTestId('pane-action-error')).toHaveCount(0)
+})
+
+test('reopening the add menu hides stale presets and ignores an older read finishing last', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop.repoPath)
+  await page.getByTestId('add-pane').click()
+  await expect(page.getByTestId('add-pane-preset')).toHaveCount(DEFAULT_PRESETS.length)
+  await page.getByTestId('add-pane').click()
+
+  const edited = presetsWith('laptop', { name: 'Laptop HD', width: 1366 })
+  await launched.app.evaluate(
+    ({ ipcMain }, { route, stale, current }) => {
+      ipcMain.removeHandler(route)
+      let reads = 0
+      ipcMain.handle(route, async (_event, request: { id: string; route: string }) => {
+        if (request.route !== 'presets.list') {
+          return {
+            id: request.id,
+            ok: false,
+            error: { code: 'INTERNAL_ERROR', message: 'not part of this test' }
+          }
+        }
+        reads += 1
+        const first = reads === 1
+        await new Promise((resolve) => setTimeout(resolve, first ? 250 : 25))
+        return { id: request.id, ok: true, data: { presets: first ? stale : current } }
+      })
+    },
+    { route: ROUTE_CHANNEL, stale: DEFAULT_PRESETS, current: edited }
+  )
+
+  await page.getByTestId('add-pane').click()
+  await expect(page.getByText('Reading presets…')).toBeVisible()
+  await expect(page.getByTestId('add-pane-preset')).toHaveCount(0)
+  await page.getByTestId('add-pane').click()
+  await page.getByTestId('add-pane').click()
+  await expect(page.locator('[data-testid="add-pane-preset"][data-preset="laptop"]')).toContainText(
+    'Laptop HD'
+  )
+  await page.waitForTimeout(300)
+  await expect(page.locator('[data-testid="add-pane-preset"][data-preset="laptop"]')).toContainText(
+    'Laptop HD'
+  )
 })
 
 test('rotating a pane swaps its dimensions, and twice is where it started', async () => {

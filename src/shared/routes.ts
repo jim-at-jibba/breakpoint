@@ -106,9 +106,13 @@ export type EmulationSetting = EmulationChanges & { pane: string }
 
 /** A pane from a preset, or one at a size the developer typed. Never both. */
 export type PaneCreation =
-  { preset: string; name?: string } | { width: number; height: number; name?: string }
+  | { preset: string; width?: never; height?: never }
+  | { preset?: never; width: number; height: number }
 
-export type PaneResize = Partial<Size> & { pane: string }
+/** At least one dimension is required; each may be committed independently. */
+export type PaneResize = { pane: string } & (
+  { width: number; height?: number } | { width?: number; height: number }
+)
 
 export type RouteParams<N extends RouteName> = RouteSignatures[N]['params']
 export type RoutePayload<N extends RouteName> = RouteSignatures[N]['payload']
