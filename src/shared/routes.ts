@@ -21,6 +21,7 @@ import type { StateSnapshot } from './state'
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
 export const ROUTE_NAMES = [
+  'app.focus',
   'app.quit',
   'certificates.decide',
   'certificates.forget',
@@ -57,6 +58,12 @@ export type Surface = 'window' | 'cli'
  * crosses this boundary, because the socket could not carry one.
  */
 export interface RouteSignatures {
+  /**
+   * Brings the app's window forward and gives it focus. What `breakpoint .` does after
+   * handing a repo to a running app, and what `--background` is the way to skip. Creates
+   * a window first when the app is alive without one on macOS.
+   */
+  'app.focus': { params: undefined; payload: { focused: true } }
   'app.quit': { params: undefined; payload: { quitting: true } }
   /**
    * Answers one certificate that is waiting on the developer, naming it by the host and

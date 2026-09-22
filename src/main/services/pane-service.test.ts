@@ -596,6 +596,54 @@ describe('reporting what emulation applied', () => {
   })
 })
 
+describe('following a pane’s page', () => {
+  it('records the load and announces it, so a waiting caller can see the pane arrive', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.loading(mobile.id)
+    panes.loaded(mobile.id, 'http://localhost:3000/')
+
+    expect(panes.statuses()[mobile.id].load).toBe('loaded')
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({
+        pane: mobile.id,
+        type: 'pane.loaded',
+        url: 'http://localhost:3000/'
+      })
+    ])
+    expect(patches.map(({ patch }) => patch.type)).toEqual(['pane.status'])
+  })
+
+  it('puts a pane that has been sent somewhere else back to loading', async () => {
+    const [mobile] = await openShop()
+    panes.loaded(mobile.id, 'http://localhost:3000/')
+
+    panes.loading(mobile.id)
+
+    expect(panes.statuses()[mobile.id].load).toBe('pending')
+  })
+
+  it('writes no entry for a load starting: the log says where a pane got to, not that it set off', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.loading(mobile.id)
+
+    expect(log.read({ since: cursor }).entries).toEqual([])
+  })
+
+  it('leaves a pane it does not have alone', async () => {
+    await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.loading('ghost')
+
+    expect(log.read({ since: cursor }).entries).toEqual([])
+    expect(patches).toEqual([])
+  })
+})
+
 describe('counting a pane’s errors', () => {
   it('counts a load that failed, announces it, and keeps the pane out of degraded', async () => {
     const [mobile] = await openShop()
@@ -608,6 +656,8 @@ describe('counting a pane’s errors', () => {
     })
 
     expect(panes.statuses()[mobile.id].errors).toBe(1)
+    // The page never arrived, so the pane is not waiting for it any more either.
+    expect(panes.statuses()[mobile.id].load).toBe('failed')
     // A dev server that is down is not an instrument that failed.
     expect(panes.statuses()[mobile.id].degraded).toEqual([])
     expect(patches.map(({ patch }) => patch.type)).toEqual(['pane.status'])

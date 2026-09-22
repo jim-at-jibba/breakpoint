@@ -1,5 +1,5 @@
 import type { CertificateState } from './certificates'
-import { reconcilePaneStatuses, type PaneStatus } from './panes'
+import { reconcilePaneStatuses, whyPaneIsNotReady, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
 
 /**
@@ -165,4 +165,37 @@ export function paneStatusesFor(
     previous,
     project.panes.map((pane) => pane.id)
   )
+}
+
+/**
+ * Whether every pane of the open project is ready — loaded where it was sent and drawn
+ * at the size it claims — and what is holding it up if not.
+ *
+ * This is what `--wait` resolves on ([#16]). The reason is written for the terminal that
+ * gave up waiting: an agent told the wait timed out needs to know which pane never
+ * arrived, and "the page never loaded" and "the pane is the wrong size" are different
+ * bugs to go and look at.
+ */
+export type Readiness = { ready: true } | { ready: false; reason: string }
+
+export function snapshotReadiness(snapshot: StateSnapshot): Readiness {
+  const { project } = snapshot
+  // Nothing open is not a quiet success: there are no panes to have loaded, so a caller
+  // waiting for them is waiting for something that is not going to happen on its own.
+  if (!project) return { ready: false, reason: 'no project is open' }
+
+  const outstanding = project.panes
+    .map((pane) => describeOutstanding(pane.name, snapshot.panes[pane.id]))
+    .filter((reason): reason is string => reason !== null)
+
+  if (outstanding.length === 0) return { ready: true }
+  return { ready: false, reason: outstanding.join('; ') }
+}
+
+/** One pane's reason with its name on the front, or null if that pane is ready. */
+function describeOutstanding(name: string, status: PaneStatus | undefined): string | null {
+  // A pane the snapshot has no status for is a desync, not a pane in some state.
+  if (!status) return `${name} has not reported yet`
+  const why = whyPaneIsNotReady(status)
+  return why === null ? null : `${name} ${why}`
 }

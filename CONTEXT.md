@@ -110,6 +110,12 @@ One record in the event log, tagged with the pane it came from, or with nothing 
 itself produced it.
 _Avoid_: event, message, line, row
 
+**Ready**:
+A pane that has finished loading where it was sent and is drawn at the size it claims. What
+`--wait` resolves on, and all it resolves on: a degraded pane still renders the page, so it
+is ready. Weaker than settle, which Phase 3 adds network idle and log quiet on top of.
+_Avoid_: settled (that is Phase 3's and stronger), loaded (that is half of it), idle
+
 **Cursor**:
 A monotonic position in the event log. A reader asks for everything after its cursor and is
 told if anything was evicted before it arrived.

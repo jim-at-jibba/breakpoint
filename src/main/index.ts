@@ -13,7 +13,7 @@ import { registerIpcAdapter } from './adapters/ipc'
 import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
 import { EventLog } from '../shared/event-log'
-import { repoPathFromArguments } from './launch-arguments'
+import { backgroundFromArguments, repoPathFromArguments } from './launch-arguments'
 import { HOST_WINDOW_PREFERENCES, PaneHost } from './pane-host'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
@@ -46,10 +46,26 @@ let dispatch: Dispatch | undefined
 let paneHost: PaneHost | undefined
 let launchReady = false
 const pendingRepoPaths: string[] = []
+/**
+ * Constructed before readiness because the hand-off listeners registered below reach it.
+ * Its window callback is only used after readiness.
+ */
+const appService = new AppService(createWindow)
+
+function launchMode(): { packaged: boolean; defaultApp: boolean } {
+  return { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
+}
+
+/**
+ * Whether the window this launch is about to open should be drawn without taking focus,
+ * which only the CLI's `--background` asks for. Spent on the first window: a window
+ * opened later — from the Dock, or by a hand-off that found none — is a person asking
+ * for Breakpoint, and a switch the terminal threw once is not an answer to that.
+ */
+let backgroundLaunchPending = backgroundFromArguments(process.argv, launchMode())
 
 function openFromArguments(argv: readonly string[], workingDirectory: string): void {
-  const mode = { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
-  const path = repoPathFromArguments(argv, mode, workingDirectory)
+  const path = repoPathFromArguments(argv, launchMode(), workingDirectory)
   if (path) openProject(path)
 }
 
@@ -95,7 +111,14 @@ function createWindow(): void {
   paneHost?.adopt(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // Best effort on macOS in this phase: the window is drawn without being made key, so
+    // an agent starting the app does not take the developer's typing. Hardening is Phase 6.
+    if (backgroundLaunchPending) {
+      backgroundLaunchPending = false
+      mainWindow.showInactive()
+    } else {
+      mainWindow.show()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -113,14 +136,7 @@ function createWindow(): void {
 }
 
 function focusExistingWindow(): void {
-  const [existing] = BrowserWindow.getAllWindows()
-  if (!existing) {
-    createWindow()
-    return
-  }
-  if (existing.isMinimized()) existing.restore()
-  existing.show()
-  existing.focus()
+  appService.focus()
 }
 
 if (!hasSingleInstanceLock) {
@@ -186,7 +202,7 @@ if (!hasSingleInstanceLock) {
     paneHost.install(app)
     dispatch = createDispatch(
       createRouteTable({
-        app: new AppService(),
+        app: appService,
         certificates,
         log,
         panes,

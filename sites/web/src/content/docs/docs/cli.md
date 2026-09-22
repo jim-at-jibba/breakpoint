@@ -23,9 +23,11 @@ after. If the app is not running it is started first; if it is, the running wind
 switches to the project.
 
 ```sh
-breakpoint .              # the repo you are in
-breakpoint ../store       # a sibling repo
-breakpoint . --json       # print the project as JSON
+breakpoint .                 # the repo you are in
+breakpoint ../store          # a sibling repo
+breakpoint . --json          # print the project as JSON
+breakpoint . --wait --json   # and not until the panes are showing it
+breakpoint . --background    # without taking focus from what you were typing
 ```
 
 A path is `.`, `..`, or anything containing a slash. A bare word is always read as a
@@ -37,6 +39,10 @@ A new project is named after its directory, starts on `http://localhost:3000`, a
 that origin, and has three panes: Mobile 390×844 @3x, Tablet 820×1180 @2x and Desktop
 1440×900 @1x. The window shows them side by side on a canvas that scrolls sideways, each
 loading the start URL at its declared size.
+
+Opening a project brings the window forward, because you ran the command to look at
+something. `--background` is how an agent opens one without interrupting your typing;
+see [Taking focus](#taking-focus).
 
 The path has to be a directory that exists, or the command fails with `INVALID_PARAMS`.
 A project whose stored file this build will not read — one written by a newer
@@ -52,10 +58,22 @@ event log cursor the snapshot was taken at. With `--json` this is the snapshot t
 breakpoint state
 breakpoint state --json | jq .project.panes
 breakpoint state --json | jq .cursor        # hand this to `logs --since`
+breakpoint state --wait --json              # once every pane is showing the page
 ```
 
 If nothing is open, `project` is `null` and the text output says so. The JSON payload
 carries `cursor` either way.
+
+A pane that has not finished loading says `loading`, and one whose page could not be
+loaded says `load failed`. A pane that has arrived says neither, so the ones that have
+not are what stands out:
+
+```
+Panes:
+  Mobile    390×844 @3x
+  Tablet    820×1180 @2x  loading
+  Desktop   1440×900 @1x  load failed  errors: 1
+```
 
 A pane that is rendering but not fully trustworthy is **degraded**, and says why. The
 text output puts the reason on the pane's line:
@@ -103,9 +121,9 @@ The payload names where the panes were sent and which ones were sent there:
 ```
 
 The command returns as soon as the panes have been pointed; it does not wait for them to
-finish loading. Poll `breakpoint logs --since <cursor>` for each pane's `pane.loaded`.
-Navigating to the URL the project already holds still moves the panes, because a pane may
-have followed a link inside itself since.
+finish loading unless you pass [`--wait`](#waiting-for-the-panes). Navigating to the URL
+the project already holds still moves the panes, because a pane may have followed a link
+inside itself since.
 
 Where the project points is kept with the project, so it reopens where you left it.
 
@@ -337,12 +355,81 @@ than the launch:
 breakpoint quit --no-launch   # exits 3 if the app is not running, and starts nothing
 ```
 
+## Waiting for the panes
+
+`breakpoint . --wait --json` is the first command an agent should run. It blocks until
+every pane has finished loading where it was sent **and** passed its host-side geometry
+check, and only then prints the payload — so the next command is not racing the app.
+
+```sh
+breakpoint . --wait --json              # open, wait, then print the ready snapshot
+breakpoint open 3000 --wait             # navigate, and return once the panes are there
+breakpoint state --wait --json | jq .   # wait for panes something else set loading
+```
+
+Nothing weaker counts. A pane that has loaded but is not drawn at the size it claims is
+not ready: a pane that fails its geometry check is one our model of it is wrong about,
+and reporting it as ready is the thing the check exists to prevent.
+
+Degradation is **not** part of it. A pane whose attachment or an emulation override was
+refused still renders the page, so it is ready — and the payload still says it is
+degraded and why. Waiting for a capability that is never going to arrive would be
+waiting forever.
+
+`--wait` gives the panes 30 seconds. After that it exits `1` with `TIMEOUT` and names
+what it was still waiting on, so the failure says which pane never arrived:
+
+```sh
+breakpoint . --wait --json
+# stderr: {"error":{"code":"TIMEOUT","message":"the panes were not ready after 30s: Mobile could not load its page"}}
+# exit 1
+```
+
+A page that fails to load is never a ready pane, however quickly it fails: `--wait`
+against a dev server that is not running waits out the full timeout and then reports it.
+
+Where the route's payload is the state snapshot — `breakpoint .` and `breakpoint state`
+— the printed payload is the snapshot the wait ended on, not the one taken before the
+panes had loaded. `breakpoint open --wait` prints what the navigation answered, which is
+where the panes were sent.
+
+`--wait` is only a flag of the commands that leave panes loading. On `quit` or `logs` it
+is a usage error, and exits `2`.
+
+This is **ready**, and deliberately weaker than the `settle` of a later phase, which
+adds network idle and log quiet on top of it. They are different words on purpose.
+
+## Taking focus
+
+`breakpoint .` brings the window forward when it opens a project, whether it started the
+app or handed the repo to a running one. `--background` skips that:
+
+```sh
+breakpoint . --background --wait --json
+```
+
+It is best effort on macOS in this phase, and there is one place it leaks: opening a
+project whose panes do not exist yet creates them, and creating them raises the window.
+That is Chromium's doing rather than the command's, so the first `--background` open of
+a session may still come forward. Every open after it does not.
+
+Otherwise: when the command starts the app, the window is drawn without being made key;
+when it hands off to a running app, the window is left exactly where it was, minimized
+included. Nothing else takes focus — `state`, `logs` and `open` never did — so
+`--background` changes nothing for them, though every command accepts it because every
+command may be the one that starts the app.
+
+Opening Breakpoint from the Dock or from Finder always activates it. That is a person
+asking for it, and `--background` has nothing to say about it.
+
 ## Flags
 
 | Flag | What it does |
 | --- | --- |
 | `--json` | Prints the route's payload object on stdout and nothing else |
 | `--since <cursor>` | `logs` only. Reads what followed that cursor position. `--since=12` is the same flag |
+| `--wait` | `breakpoint .`, `open` and `state` only. Blocks until every pane has loaded and is drawn at its declared size, for up to 30s. A usage error on any other command |
+| `--background` | Starts or hands off without bringing the window forward |
 | `--no-launch` | Exits 3 rather than starting the app if it is not running |
 | `--verbose` | Prints diagnostics on stderr, where they cannot pollute stdout |
 | `--help`, `-h` | Prints the help and exits 0 |
@@ -403,7 +490,7 @@ first ten come back from the app; the rest are raised by the command itself.
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
-| `TIMEOUT` | `1` | The app accepted the connection but did not answer in time |
+| `TIMEOUT` | `1` | The app accepted the connection but did not answer in time, or `--wait` gave up before the panes were ready. The message names what it was still waiting on |
 | `TRANSPORT_ERROR` | `1` | The connection failed, or the reply could not be read |
 
 ## Routes
@@ -413,6 +500,7 @@ Every route is reachable from every surface; there is no window-only behaviour.
 
 | Route | Params | Payload | Reached by |
 | --- | --- | --- | --- |
+| `app.focus` | none | `{ "focused": true }`; creates a window first if the app is alive without one | `breakpoint .`, unless `--background` |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
 | `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
 | `certificates.forget` | `{ "host": "staging.example.com", "fingerprint": "sha256/…" }` | the same | the window, the socket |
@@ -441,16 +529,34 @@ The top-level `panes` is what is observed of each pane while the app runs, keyed
 ```json
 {
   "attachment": "attached",
+  "load": "loaded",
   "geometry": "ok",
-  "degraded": []
+  "emulation": {
+    "viewport": "applied",
+    "userAgent": "applied",
+    "touch": "applied",
+    "colorScheme": "applied"
+  },
+  "degraded": [],
+  "errors": 0
 }
 ```
 
-`attachment` is `pending`, `attached` or `failed`. `geometry` is the last check of the
-pane's drawn size: `unchecked`, `ok` or `mismatch`. `degraded` holds one
-`{ "cause", "message" }` per reason the pane is degraded, with `cause` `attachment` or
-`geometry`, and is empty for a healthy pane. `panes.list` returns the same statuses
-joined to the stored panes, as `{ "panes": [ { "id": …, "name": …, …, "status": { … } } ] }`.
+`attachment` is `pending`, `attached` or `failed`. `load` is where the pane's page got to
+on the load it is on now: `pending`, `loaded` or `failed` — a navigation puts every pane
+back to `pending`, because what a pane finished loading before it was pointed somewhere
+else is not where it is now. `geometry` is the last check of the pane's drawn size:
+`unchecked`, `ok` or `mismatch`. `emulation` is what is **actually** in force on the
+page, capability by capability — `viewport`, `userAgent`, `touch` and `colorScheme`, each
+`pending`, `applied` or `failed` — as opposed to what the pane declares. `degraded` holds
+one `{ "cause", "message" }` per reason the pane is degraded, with `cause` `attachment`,
+`geometry`, or the name of an emulation capability, and is empty for a healthy pane.
+`errors` counts what has gone wrong with the page in this pane since its guest was
+created. `panes.list` returns the same statuses joined to the stored panes, as
+`{ "panes": [ { "id": …, "name": …, …, "status": { … } } ] }`.
+
+`--wait` resolves on `load` and `geometry` alone: a pane can be `loaded`, `ok` and
+degraded at the same time, and that pane is ready and says why it is degraded.
 
 `panes.reportGeometry` is how the window reports what it measured; it answers
 `PANE_NOT_FOUND` for a pane the open project does not have. It is a route like any
@@ -501,7 +607,8 @@ and a failure carries the code instead:
 The socket lives in Breakpoint's own data directory with owner-only permissions, and it
 is on by default — there is no configuration step and no first command that fails.
 
-The shape a harness wants is already here: take `cursor` from `breakpoint state`, do the
-work, then `breakpoint logs --since <cursor> --json`. What the log carries grows with
+The shape a harness wants is already here: `breakpoint . --wait --json` to know the app
+is ready and see what the developer is looking at, take `cursor` from that payload, do
+the work, then `breakpoint logs --since <cursor> --json`. What the log carries grows with
 each phase — the console, network and layout producers arrive with the features that
 observe them — and the cursor it is read by does not change.

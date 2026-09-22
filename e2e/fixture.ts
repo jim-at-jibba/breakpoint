@@ -165,11 +165,19 @@ function respond(
       response.writeHead(302, { location: target.searchParams.get('to') ?? '/' }).end()
       return
     }
-    response.writeHead(200, {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store'
-    })
-    response.end(page(origin(), other()))
+    const sendPage = (): void => {
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store'
+      })
+      response.end(page(origin(), other()))
+    }
+    if (target.pathname === '/delay') {
+      const milliseconds = Math.max(0, Number(target.searchParams.get('ms')) || 0)
+      setTimeout(sendPage, milliseconds)
+      return
+    }
+    sendPage()
   }
 }
 

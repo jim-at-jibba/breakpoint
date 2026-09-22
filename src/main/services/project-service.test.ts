@@ -21,6 +21,7 @@ let shop: string
 let other: string
 let store: ProjectStore
 let service: ProjectService
+let panes: PaneService
 let log: EventLog
 let patches: RevisionedPatch[]
 
@@ -37,7 +38,7 @@ beforeEach(async () => {
   })
   log = new EventLog()
   const presets = new PresetService(new PresetStore(join(root, 'presets.json')))
-  const panes = new PaneService(feed, log, {
+  panes = new PaneService(feed, log, {
     updatePane: (pane, changes) => service.updatePane(pane, changes),
     addPane: (creation) => service.addPane(creation),
     removePane: (pane) => service.removePane(pane),
@@ -316,6 +317,34 @@ describe('navigation', () => {
       url: opened.project!.startUrl
     })
     expect(log.read().entries).toHaveLength(1)
+  })
+
+  it('marks every pane loading before it announces the navigation', async () => {
+    const opened = await service.open(shop)
+    for (const pane of opened.project!.panes) {
+      panes.loaded(pane.id, opened.project!.startUrl)
+      panes.reportGeometry({
+        pane: pane.id,
+        expected: { width: pane.width, height: pane.height },
+        measured: { width: pane.width, height: pane.height }
+      })
+    }
+    expect(
+      Object.values(service.snapshot().panes).every((status) => status.load === 'loaded')
+    ).toBe(true)
+
+    const before = patches.length
+    await service.navigate('http://localhost:3000/checkout', 'window')
+
+    expect(
+      Object.values(service.snapshot().panes).every((status) => status.load === 'pending')
+    ).toBe(true)
+    expect(patches.slice(before).map(({ patch }) => patch.type)).toEqual([
+      'pane.status',
+      'pane.status',
+      'pane.status',
+      'project.url'
+    ])
   })
 
   it('refuses navigation from the CLI outside the allowed origins, and moves nothing', async () => {

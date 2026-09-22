@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { foldPaneStatus, initialPaneStatus } from './panes'
+import { foldPaneStatus, initialPaneStatus, type PaneStatus } from './panes'
 import { createProject } from './project'
-import { applyPatch, type StateSnapshot } from './state'
+import { applyPatch, snapshotReadiness, type StateSnapshot } from './state'
 
 const shop = createProject('/repos/shop')
 const store = createProject('/repos/store')
@@ -261,6 +261,103 @@ describe('applying a patch', () => {
       applyPatch(nothingOpen, { revision: 1, patch: { type: 'pane.changed', pane: ghost } })
     ).toEqual({ ...nothingOpen, revision: 1 })
   })
+})
+
+describe('snapshotReadiness', () => {
+  const ready = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'loaded' }), {
+    type: 'geometryChecked',
+    result: { ok: true }
+  })
+
+  function open(panes: Record<string, PaneStatus>): StateSnapshot {
+    return { revision: 1, cursor: 4, project: shop, panes, certificates: nothingOpen.certificates }
+  }
+
+  it('is ready once every pane has loaded and passed its geometry check', () => {
+    const snapshot = open({ [mobile]: ready, [tablet]: ready, [desktop]: ready })
+    expect(snapshotReadiness(snapshot)).toEqual({ ready: true })
+  })
+
+  it('names the pane that is still loading, and is not ready for it', () => {
+    const snapshot = open({ [mobile]: ready, [tablet]: initialPaneStatus(), [desktop]: ready })
+    expect(snapshotReadiness(snapshot)).toEqual({
+      ready: false,
+      reason: 'Tablet is still loading'
+    })
+  })
+
+  it('is not ready for a pane that loaded but is not the size it claims', () => {
+    const mismatched = foldPaneStatus(ready, {
+      type: 'geometryChecked',
+      result: { ok: false, message: 'drawn 390×150, declared 390×844 at this zoom' }
+    })
+    expect(snapshotReadiness(open({ ...allReady(), [mobile]: mismatched }))).toEqual({
+      ready: false,
+      reason: 'Mobile is not drawn at its declared size'
+    })
+  })
+
+  it('is not ready for a pane whose page could not be loaded', () => {
+    const broken = foldPaneStatus(ready, { type: 'loadFailed' })
+    expect(snapshotReadiness(open({ ...allReady(), [desktop]: broken }))).toEqual({
+      ready: false,
+      reason: 'Desktop could not load its page'
+    })
+  })
+
+  it('is not ready for a pane that has never been measured', () => {
+    const unmeasured = foldPaneStatus(initialPaneStatus(), { type: 'loaded' })
+    expect(snapshotReadiness(open({ ...allReady(), [tablet]: unmeasured }))).toEqual({
+      ready: false,
+      reason: 'Tablet has not been measured'
+    })
+  })
+
+  it('names every pane that is holding it up, so one reason does not hide the rest', () => {
+    const snapshot = open({ ...allReady(), [mobile]: initialPaneStatus(), [tablet]: ready })
+    const desktopLoading = open({
+      ...allReady(),
+      [mobile]: initialPaneStatus(),
+      [desktop]: initialPaneStatus()
+    })
+    expect(snapshotReadiness(snapshot)).toEqual({
+      ready: false,
+      reason: 'Mobile is still loading'
+    })
+    expect(snapshotReadiness(desktopLoading)).toEqual({
+      ready: false,
+      reason: 'Mobile is still loading; Desktop is still loading'
+    })
+  })
+
+  it('is not ready with nothing open: there are no panes to have loaded', () => {
+    expect(snapshotReadiness(nothingOpen)).toEqual({
+      ready: false,
+      reason: 'no project is open'
+    })
+  })
+
+  it('is ready for an open project with no panes at all', () => {
+    const empty: StateSnapshot = {
+      revision: 1,
+      cursor: 4,
+      project: { ...shop, panes: [] },
+      panes: {},
+      certificates: nothingOpen.certificates
+    }
+    expect(snapshotReadiness(empty)).toEqual({ ready: true })
+  })
+
+  it('is not ready for a pane the snapshot has no status for', () => {
+    expect(snapshotReadiness(open({ [mobile]: ready, [tablet]: ready }))).toEqual({
+      ready: false,
+      reason: 'Desktop has not reported yet'
+    })
+  })
+
+  function allReady(): Record<string, PaneStatus> {
+    return { [mobile]: ready, [tablet]: ready, [desktop]: ready }
+  }
 })
 
 describe('certificate trust in the snapshot', () => {

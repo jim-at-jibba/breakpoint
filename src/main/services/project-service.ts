@@ -293,6 +293,9 @@ export class ProjectService {
     // URL has not moved.
     if (project.startUrl !== url) await this.save({ ...project, startUrl: url })
     this.log.append(null, { type: 'project.navigated', url })
+    // Reset readiness before announcing the navigation. Waiting callers can poll as soon
+    // as the route answers, before Electron has emitted did-start-loading for each guest.
+    for (const pane of project.panes) this.panes.loading(pane.id)
     this.feed.publish({ type: 'project.url', url })
     // The pane set is what it was: navigating moves the pages, not the panes.
     return { url, panes: project.panes.map((pane) => pane.id) }
