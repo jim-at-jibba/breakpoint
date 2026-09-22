@@ -1,5 +1,7 @@
+import { useRef } from 'react'
 import { MAX_ZOOM, MIN_ZOOM } from '../../../shared/canvas'
 import type { Layout, Project, Zoom } from '../../../shared/project'
+import type { LayoutSetting } from '../../../shared/routes'
 
 const LAYOUTS: ReadonlyArray<{ value: Layout; label: string }> = [
   { value: 'horizontal', label: 'Horizontal' },
@@ -17,7 +19,11 @@ const LAYOUTS: ReadonlyArray<{ value: Layout; label: string }> = [
  */
 export function CanvasControls({
   project,
-  zoom
+  zoom,
+  previewing,
+  onLayout,
+  onZoomPreview,
+  onZoomCommit
 }: {
   project: Project
   /**
@@ -25,17 +31,21 @@ export function CanvasControls({
    * again here, so the slider can never sit somewhere the panes deny.
    */
   zoom: number
+  previewing: boolean
+  onLayout: (setting: LayoutSetting) => void
+  onZoomPreview: (zoom: number) => void
+  onZoomCommit: (zoom: Zoom) => void
 }): React.JSX.Element {
   // Focus draws its pane at 100%, so there is nothing for the zoom to say about it; the
   // stored value is the one Horizontal comes back to.
   const zoomable = project.layout === 'horizontal'
-  const fitting = zoomable && project.zoom === 'fit'
+  const fitting = zoomable && project.zoom === 'fit' && !previewing
+  const commitPending = useRef(false)
 
-  const setLayout = (layout: Layout): void => {
-    void window.breakpoint.invoke('project.setLayout', { layout })
-  }
-  const setZoom = (value: Zoom): void => {
-    void window.breakpoint.invoke('project.setZoom', { zoom: value })
+  const commitSlider = (element: HTMLInputElement): void => {
+    if (!previewing || commitPending.current) return
+    commitPending.current = true
+    onZoomCommit(Number(element.value))
   }
 
   return (
@@ -43,7 +53,7 @@ export function CanvasControls({
       <div
         role="group"
         aria-label="Layout"
-        className="flex items-center gap-px rounded-[var(--bp-radius-sm)] border border-[color:var(--bp-border)] bg-[var(--bp-chrome-sunken)] p-[var(--bp-space-1)]"
+        className="flex items-center gap-[var(--bp-stroke)] rounded-[var(--bp-radius-sm)] border border-[color:var(--bp-border)] bg-[var(--bp-chrome-sunken)] p-[var(--bp-space-1)]"
       >
         {LAYOUTS.map(({ value, label }) => (
           <button
@@ -52,7 +62,7 @@ export function CanvasControls({
             data-testid="layout"
             data-layout={value}
             aria-pressed={project.layout === value}
-            onClick={() => setLayout(value)}
+            onClick={() => onLayout({ layout: value })}
             className="h-[var(--bp-row-sm)] cursor-pointer rounded-[var(--bp-radius-xs)] px-[var(--bp-space-3)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-muted)] aria-pressed:bg-[var(--bp-surface)] aria-pressed:text-[color:var(--bp-ink)]"
           >
             {label}
@@ -71,7 +81,14 @@ export function CanvasControls({
           disabled={!zoomable}
           title={zoomable ? undefined : 'Focus draws its pane at 100%'}
           className="w-[var(--bp-zoom-slider-w)] disabled:opacity-50"
-          onChange={(event) => setZoom(Number(event.target.value))}
+          onChange={(event) => {
+            commitPending.current = false
+            onZoomPreview(Number(event.target.value))
+          }}
+          onPointerUp={(event) => commitSlider(event.currentTarget)}
+          onPointerCancel={(event) => commitSlider(event.currentTarget)}
+          onKeyUp={(event) => commitSlider(event.currentTarget)}
+          onBlur={(event) => commitSlider(event.currentTarget)}
         />
         <span
           data-testid="zoom-value"
@@ -86,7 +103,7 @@ export function CanvasControls({
         data-testid="zoom-fit"
         aria-pressed={fitting}
         disabled={!zoomable}
-        onClick={() => setZoom('fit')}
+        onClick={() => onZoomCommit('fit')}
         className="h-[var(--bp-row-md)] cursor-pointer rounded-[var(--bp-radius-sm)] border border-[color:var(--bp-border-strong)] px-[var(--bp-space-3)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-muted)] disabled:opacity-50 aria-pressed:border-[color:var(--bp-accent)] aria-pressed:bg-[var(--bp-accent-wash)] aria-pressed:text-[color:var(--bp-accent-ink)]"
       >
         Fit

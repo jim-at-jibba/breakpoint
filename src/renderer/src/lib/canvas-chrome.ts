@@ -23,3 +23,8 @@ export function readCanvasChrome(element: Element): CanvasChrome {
 export function readStripHeight(element: Element): number {
   return Number.parseFloat(getComputedStyle(element).getPropertyValue('--bp-strip-h')) || 0
 }
+
+/** The gap between panes in the Focus strip. */
+export function readStripGap(element: Element): number {
+  return Number.parseFloat(getComputedStyle(element).getPropertyValue('--bp-space-3')) || 0
+}

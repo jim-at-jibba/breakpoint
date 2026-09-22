@@ -1,6 +1,13 @@
-import { readCanvasChrome, readStripHeight } from '@renderer/lib/canvas-chrome'
+import { readCanvasChrome, readStripGap, readStripHeight } from '@renderer/lib/canvas-chrome'
 import { useEffect, useRef, useState } from 'react'
-import { fitZoom, focusedPaneOf, MAX_ZOOM, resolveZoom, stripZoom } from '../../../shared/canvas'
+import {
+  fitZoom,
+  focusedPaneOf,
+  MAX_ZOOM,
+  resolveZoom,
+  stripZoom,
+  type CanvasChrome
+} from '../../../shared/canvas'
 import type { PaneStatus, Size } from '../../../shared/panes'
 import { describeDegradation, paneWebPreferences } from '../../../shared/panes'
 import type { Pane, Project } from '../../../shared/project'
@@ -20,115 +27,131 @@ import type { Pane, Project } from '../../../shared/project'
 export function Canvas({
   project,
   statuses,
-  onZoom
+  zoomPreview,
+  onZoom,
+  onFocusPane
 }: {
   project: Project
   statuses: Readonly<Record<string, PaneStatus>>
+  /** A slider value being manipulated, before it is committed to the project. */
+  zoomPreview: number | null
   /** What the canvas settled on drawing at, so the toolbar cannot read a different number. */
   onZoom: (zoom: number) => void
+  onFocusPane: (pane: string) => void
 }): React.JSX.Element {
   const canvas = useRef<HTMLDivElement>(null)
   const fit = useFit(canvas, project)
+  const [focusChrome] = useState(() => {
+    const root = document.documentElement
+    return {
+      canvas: readCanvasChrome(root),
+      stripGap: readStripGap(root),
+      stripHeight: readStripHeight(root)
+    }
+  })
   // Focus draws its pane at 100%, so Fit has nothing to say about that layout.
-  const zoom = project.layout === 'focus' ? MAX_ZOOM : resolveZoom(project.zoom, fit)
+  const zoom =
+    project.layout === 'focus' ? MAX_ZOOM : (zoomPreview ?? resolveZoom(project.zoom, fit))
+  const focused = focusedPaneOf(project.panes, project.focusedPane)
+  const focus =
+    project.layout === 'focus'
+      ? arrangeFocus(project.panes, focused, focusChrome.canvas, focusChrome)
+      : undefined
 
   useEffect(() => {
     onZoom(zoom)
   }, [onZoom, zoom])
-
-  if (project.layout === 'focus') {
-    return <FocusLayout ref={canvas} project={project} statuses={statuses} />
-  }
 
   return (
     <div
       ref={canvas}
       className="min-h-0 flex-1 overflow-auto bg-[var(--bp-canvas)]"
       data-testid="canvas"
-      data-layout="horizontal"
+      data-layout={project.layout}
       data-zoom={zoom}
     >
-      <div className="flex min-h-full w-max items-start gap-[var(--bp-space-5)] p-[var(--bp-space-5)]">
-        {project.panes.map((pane, index) => (
-          <PaneView
-            key={pane.id}
-            pane={pane}
-            index={index}
-            zoom={zoom}
-            url={project.startUrl}
-            status={statuses[pane.id]}
-          />
-        ))}
+      <div
+        className={
+          project.layout === 'horizontal'
+            ? 'flex min-h-full w-max items-start gap-[var(--bp-space-5)] p-[var(--bp-space-5)]'
+            : 'relative min-h-full'
+        }
+        style={focus?.stage}
+      >
+        {project.panes.map((pane, index) => {
+          const focusedPane = project.layout === 'focus' && pane.id === focused?.id
+          const paneZoom =
+            project.layout === 'horizontal'
+              ? zoom
+              : focusedPane
+                ? MAX_ZOOM
+                : stripZoom(pane, focusChrome.stripHeight)
+          return (
+            <PaneView
+              key={pane.id}
+              pane={pane}
+              index={index}
+              zoom={paneZoom}
+              url={project.startUrl}
+              status={statuses[pane.id]}
+              focused={focusedPane}
+              strip={project.layout === 'focus' && !focusedPane}
+              placement={focus?.panes.get(pane.id)}
+              onFocus={
+                project.layout === 'focus' && !focusedPane ? () => onFocusPane(pane.id) : undefined
+              }
+            />
+          )
+        })}
       </div>
     </div>
   )
 }
 
-/**
- * One pane at 100% on the canvas, the others as a strip above it. The strip is a picker:
- * its panes render live, but nothing inside one is clickable, so a click on one is a
- * click on the pane rather than on the page it is showing.
- */
-function FocusLayout({
-  ref,
-  project,
-  statuses
-}: {
-  ref: React.RefObject<HTMLDivElement | null>
-  project: Project
-  statuses: Readonly<Record<string, PaneStatus>>
-}): React.JSX.Element {
-  // The token, read once: it is on the root and does not change while the window is open.
-  const [stripHeight] = useState(() => readStripHeight(document.documentElement))
-  const focused = focusedPaneOf(project.panes, project.focusedPane)
+interface FocusChrome {
+  stripGap: number
+  stripHeight: number
+}
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[var(--bp-canvas)]">
-      <div
-        className="flex shrink-0 items-start gap-[var(--bp-space-3)] overflow-x-auto px-[var(--bp-space-5)] pt-[var(--bp-space-5)]"
-        data-testid="strip"
-      >
-        {project.panes.map((pane, index) =>
-          pane.id === focused?.id ? null : (
-            <PaneView
-              key={pane.id}
-              pane={pane}
-              index={index}
-              zoom={stripZoom(pane, stripHeight)}
-              url={project.startUrl}
-              status={statuses[pane.id]}
-              onFocus={() =>
-                void window.breakpoint.invoke('project.setLayout', {
-                  layout: 'focus',
-                  focusedPane: pane.id
-                })
-              }
-            />
-          )
-        )}
-      </div>
-      <div
-        ref={ref}
-        className="min-h-0 flex-1 overflow-auto"
-        data-testid="canvas"
-        data-layout="focus"
-        data-zoom={MAX_ZOOM}
-      >
-        <div className="flex min-h-full w-max items-start p-[var(--bp-space-5)]">
-          {focused && (
-            <PaneView
-              pane={focused}
-              index={project.panes.indexOf(focused)}
-              zoom={MAX_ZOOM}
-              url={project.startUrl}
-              status={statuses[focused.id]}
-              focused
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  )
+interface FocusArrangement {
+  stage: React.CSSProperties
+  panes: ReadonlyMap<string, React.CSSProperties>
+}
+
+/** One stable pane tree, positioned into a strip and a 100% work area without remounting guests. */
+function arrangeFocus(
+  panes: readonly Pane[],
+  focused: Pane | undefined,
+  chrome: CanvasChrome,
+  focusChrome: FocusChrome
+): FocusArrangement {
+  const positions = new Map<string, React.CSSProperties>()
+  const strip = panes.filter((pane) => pane.id !== focused?.id)
+  let left = chrome.padding
+  let stripHeight = 0
+
+  for (const pane of strip) {
+    const zoom = stripZoom(pane, focusChrome.stripHeight)
+    const frame = frameSize(pane, zoom, chrome)
+    positions.set(pane.id, { position: 'absolute', left, top: chrome.padding })
+    left += frame.width + focusChrome.stripGap
+    stripHeight = Math.max(stripHeight, frame.height)
+  }
+
+  const stripWidth = strip.length > 0 ? left - chrome.padding - focusChrome.stripGap : 0
+  const focusedFrame = focused ? frameSize(focused, MAX_ZOOM, chrome) : { width: 0, height: 0 }
+  const focusedTop = chrome.padding + (strip.length > 0 ? stripHeight + chrome.gap : 0)
+  if (focused) {
+    positions.set(focused.id, { position: 'absolute', left: chrome.padding, top: focusedTop })
+  }
+
+  return {
+    stage: {
+      width: chrome.padding * 2 + Math.max(stripWidth, focusedFrame.width),
+      height: focusedTop + focusedFrame.height + chrome.padding
+    },
+    panes: positions
+  }
 }
 
 /**
@@ -173,6 +196,8 @@ function PaneView({
   url,
   status,
   focused,
+  strip,
+  placement,
   onFocus
 }: {
   pane: Pane
@@ -182,6 +207,8 @@ function PaneView({
   url: string
   status: PaneStatus | undefined
   focused?: boolean
+  strip?: boolean
+  placement?: React.CSSProperties
   /** Given to a pane in the Focus strip: clicking it makes it the focused pane. */
   onFocus?: () => void
 }): React.JSX.Element {
@@ -198,9 +225,11 @@ function PaneView({
       data-pane={pane.id}
       data-zoom={zoom}
       data-focused={focused ? 'true' : undefined}
+      data-strip={strip ? 'true' : undefined}
       data-degraded={degraded.length > 0 ? 'true' : undefined}
       style={
         {
+          ...placement,
           // A degraded pane is a rim-and-header event: drawn on ground we own, never over the page.
           boxShadow:
             degraded.length > 0
@@ -288,6 +317,11 @@ function useGeometryCheck(
 /** Screen pixels: what a pane declares, drawn at the zoom it is drawn at. */
 function drawnSize({ width, height }: Size, zoom: number): Size {
   return { width: (width * zoom) / 100, height: (height * zoom) / 100 }
+}
+
+function frameSize(pane: Pane, zoom: number, chrome: CanvasChrome): Size {
+  const page = drawnSize(pane, zoom)
+  return { width: page.width + chrome.pane.width, height: page.height + chrome.pane.height }
 }
 
 /**

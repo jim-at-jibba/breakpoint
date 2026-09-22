@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { MAX_ZOOM, MIN_ZOOM } from '../src/shared/canvas'
 import type { Entry, LogRead } from '../src/shared/event-log'
+import { ROUTE_CHANNEL } from '../src/shared/ipc'
 import {
   createProject,
   projectFileName,
@@ -101,6 +102,24 @@ function webviewBox(page: Page, pane: string): Promise<{ width: number; height: 
   })
 }
 
+function guestId(page: Page, pane: string): Promise<number> {
+  return page.locator(`webview[data-pane="${pane}"]`).evaluate((element) =>
+    (
+      element as unknown as {
+        getWebContentsId(): number
+      }
+    ).getWebContentsId()
+  )
+}
+
+async function guestIds(page: Page, project: Project): Promise<Record<string, number>> {
+  return Object.fromEntries(
+    await Promise.all(
+      project.panes.map(async (pane) => [pane.id, await guestId(page, pane.id)] as const)
+    )
+  )
+}
+
 /** What the canvas says it is drawing at, which is what the geometry check is made against. */
 async function canvasZoom(page: Page): Promise<number> {
   return Number(await page.getByTestId('canvas').getAttribute('data-zoom'))
@@ -192,6 +211,7 @@ test('touching the zoom control while on Fit leaves a concrete zoom with nothing
   await expect(page.getByTestId('zoom')).toHaveValue(String(fitting))
 
   await page.getByTestId('zoom').fill('60')
+  await page.getByTestId('zoom').press('Enter')
 
   await expect.poll(async () => (await state()).project?.zoom).toBe(60)
   await expect(page.getByTestId('zoom-value')).toHaveText('60%')
@@ -206,6 +226,50 @@ test('touching the zoom control while on Fit leaves a concrete zoom with nothing
   await page.getByTestId('zoom-fit').click()
   await expect.poll(async () => (await state()).project?.zoom).toBe('fit')
   await expect(page.getByTestId('zoom-value')).toHaveText('Fit')
+})
+
+test('dragging the zoom previews every value but persists only the committed value', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop', { zoom: 'fit' })
+  await open(shop)
+  await settled(shop)
+  const { cursor } = await state()
+
+  const slider = page.getByTestId('zoom')
+  for (const value of ['40', '50', '60']) await slider.fill(value)
+
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-zoom', '60')
+  expect((await state()).project?.zoom).toBe('fit')
+
+  await slider.dispatchEvent('pointerup')
+  await expect.poll(async () => (await state()).project?.zoom).toBe(60)
+  expect(ofType(await logs(cursor), 'project.zoomChanged')).toEqual([
+    expect.objectContaining({ zoom: 60 })
+  ])
+})
+
+test('a failed canvas action is visible in app-owned chrome', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop', { zoom: 100 })
+  await open(shop)
+  await settled(shop)
+
+  await launched.app.evaluate(({ ipcMain }, channel: string) => {
+    ipcMain.removeHandler(channel)
+    ipcMain.handle(channel, (_event, request: { id: string }) => ({
+      id: request.id,
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: 'disk full' }
+    }))
+  }, ROUTE_CHANNEL)
+
+  await page.getByTestId('zoom-fit').click()
+
+  await expect(page.getByRole('alert')).toHaveText(
+    'Could not update canvas: INTERNAL_ERROR: disk full'
+  )
 })
 
 test('a zoom past the ends of the control is clamped, and a zoom that is not one is refused', async () => {
@@ -246,6 +310,7 @@ test('Focus draws one pane at 100% with the rest as a strip, and the focused pan
   await open(shop)
   await settled(shop)
   const [mobile, tablet, desktop] = shop.panes
+  const guests = await guestIds(page, shop)
 
   expect(
     await sendRaw(
@@ -259,6 +324,7 @@ test('Focus draws one pane at 100% with the rest as a strip, and the focused pan
     'data-pane',
     tablet.id
   )
+  expect(await guestIds(page, shop)).toEqual(guests)
   await expect
     .poll(async () => webviewBox(page, tablet.id))
     .toEqual({
@@ -272,7 +338,7 @@ test('Focus draws one pane at 100% with the rest as a strip, and the focused pan
   await expect(page.getByTestId('zoom')).toBeDisabled()
 
   // The others as a strip, every one of them drawn to the same height whatever it declares.
-  const strip = page.getByTestId('strip').getByTestId('pane')
+  const strip = page.locator('[data-testid="pane"][data-strip="true"]')
   await expect(strip).toHaveCount(2)
   expect(
     await strip.evaluateAll((elements) => elements.map((e) => e.getAttribute('data-pane')))
@@ -295,12 +361,17 @@ test('Focus draws one pane at 100% with the rest as a strip, and the focused pan
     'data-pane',
     desktop.id
   )
+  expect(await guestIds(page, shop)).toEqual(guests)
   await expect
     .poll(async () => webviewBox(page, desktop.id))
     .toEqual({
       width: desktop.width,
       height: desktop.height
     })
+
+  for (const pane of shop.panes) {
+    expect(await guestViewport(page, pane.id)).toEqual({ width: pane.width, height: pane.height })
+  }
 
   expect((await runCli(sandbox, ['state'])).stdout).toContain('Focus on Desktop')
 })
