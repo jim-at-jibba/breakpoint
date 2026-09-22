@@ -20,6 +20,10 @@ export const WIRE_ERROR_CODES = [
   'PROJECT_UNREADABLE',
   /** No pane with that id in the open project, or no project open. */
   'PANE_NOT_FOUND',
+  /** The global presets file is on disk but this build will not read it: corrupt, or newer. */
+  'PRESETS_UNREADABLE',
+  /** No preset with that id, which is what an edited presets file makes possible. */
+  'PRESET_NOT_FOUND',
   /** The route changes the open project and there is no project open. */
   'PROJECT_NOT_OPEN'
 ] as const

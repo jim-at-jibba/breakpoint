@@ -4,10 +4,13 @@ import {
   describeDegradation,
   foldPaneStatus,
   initialPaneStatus,
+  isPaneDimension,
+  PANE_DIMENSION_RANGE,
   PANE_PREFERENCE,
   paneIdFromPreferences,
   paneWebPreferences,
-  reconcilePaneStatuses
+  reconcilePaneStatuses,
+  rotateSize
 } from './panes'
 import type { EmulationResult } from './emulation'
 
@@ -190,5 +193,34 @@ describe('the pane a guest is for', () => {
   it('refuses an id the attribute syntax could not carry intact', () => {
     expect(() => paneWebPreferences('a,sandbox=no')).toThrow()
     expect(() => paneWebPreferences('a=b')).toThrow()
+  })
+})
+
+describe('isPaneDimension', () => {
+  it('accepts a whole number of CSS pixels inside the range a pane may be drawn at', () => {
+    expect(isPaneDimension(PANE_DIMENSION_RANGE.min)).toBe(true)
+    expect(isPaneDimension(390)).toBe(true)
+    expect(isPaneDimension(PANE_DIMENSION_RANGE.max)).toBe(true)
+  })
+
+  it('refuses a fraction, a number outside the range, and anything that is not one', () => {
+    expect(isPaneDimension(390.5)).toBe(false)
+    expect(isPaneDimension(0)).toBe(false)
+    expect(isPaneDimension(-390)).toBe(false)
+    expect(isPaneDimension(PANE_DIMENSION_RANGE.max + 1)).toBe(false)
+    expect(isPaneDimension(Number.NaN)).toBe(false)
+    expect(isPaneDimension(Number.POSITIVE_INFINITY)).toBe(false)
+    expect(isPaneDimension('390')).toBe(false)
+    expect(isPaneDimension(undefined)).toBe(false)
+  })
+})
+
+describe('rotateSize', () => {
+  it('swaps a pane\u2019s dimensions, and twice is where it started', () => {
+    expect(rotateSize({ width: 390, height: 844 })).toEqual({ width: 844, height: 390 })
+    expect(rotateSize(rotateSize({ width: 390, height: 844 }))).toEqual({
+      width: 390,
+      height: 844
+    })
   })
 })

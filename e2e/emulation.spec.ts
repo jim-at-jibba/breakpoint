@@ -651,15 +651,19 @@ test('panes.setEmulation refuses malformed settings and unknown panes, changing 
   const before = await state()
 
   for (const [params, message] of [
-    [undefined, 'this route takes { pane } and at least one of colorScheme, dpr, mobile'],
-    [{ pane: mobile.id }, 'this route takes { pane } and at least one of colorScheme, dpr, mobile'],
+    [undefined, 'this route takes { pane } and at least one of colorScheme, dpr, mobile, touch'],
+    [
+      { pane: mobile.id },
+      'this route takes { pane } and at least one of colorScheme, dpr, mobile, touch'
+    ],
     [
       { pane: mobile.id, scheme: 'dark' },
-      'this route takes { pane } and at least one of colorScheme, dpr, mobile, not scheme'
+      'this route takes { pane } and at least one of colorScheme, dpr, mobile, touch, not scheme'
     ],
     [{ pane: mobile.id, colorScheme: 'sepia' }, 'colorScheme must be light, dark or system'],
     [{ pane: mobile.id, dpr: 0 }, 'dpr must be a finite number above 0'],
     [{ pane: mobile.id, mobile: 'yes' }, 'mobile must be true or false'],
+    [{ pane: mobile.id, touch: 'yes' }, 'touch must be true or false'],
     [{ colorScheme: 'dark' }, 'pane must be a non-empty string']
   ] as const) {
     expect(await sendRaw(sandbox.socketPath, requestLine('panes.setEmulation', params))).toEqual({

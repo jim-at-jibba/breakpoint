@@ -62,6 +62,18 @@ export type ProjectEntryBody =
  * its host-side geometry check failing and recovering, and the guest going away.
  */
 export type PaneEntryBody =
+  /** The pane was declared: added to the project, from a preset or at a size given. */
+  | {
+      readonly type: 'pane.added'
+      readonly width: number
+      readonly height: number
+      /** The preset it was resolved from, or `null` for a size the developer typed. */
+      readonly preset: string | null
+    }
+  /** The pane was taken out of the project. Its guest going is `pane.destroyed`. */
+  | { readonly type: 'pane.removed' }
+  /** The pane's declared size changed, by exact dimensions or by rotation. */
+  | { readonly type: 'pane.resized'; readonly width: number; readonly height: number }
   | { readonly type: 'pane.created'; readonly url: string }
   | { readonly type: 'pane.attached'; readonly attempt: number }
   | {
@@ -257,6 +269,10 @@ function copyBody(body: EntryBody): EntryBody {
   switch (body.type) {
     case 'project.openFailed':
       return { type: body.type, path: body.path, code: body.code, message: body.message }
+    case 'pane.added':
+      return { type: body.type, width: body.width, height: body.height, preset: body.preset }
+    case 'pane.resized':
+      return { type: body.type, width: body.width, height: body.height }
     case 'project.layoutChanged':
       return { type: body.type, layout: body.layout, focusedPane: body.focusedPane }
     case 'project.zoomChanged':
@@ -289,6 +305,7 @@ function copyBody(body: EntryBody): EntryBody {
     case 'pane.emulationRecovered':
       return { type: body.type, capability: body.capability }
     case 'pane.geometryMatched':
+    case 'pane.removed':
     case 'pane.destroyed':
       return { type: body.type }
   }

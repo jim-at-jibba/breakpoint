@@ -1,5 +1,15 @@
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
+import { PANE_DIMENSION_RANGE } from './panes'
+import {
+  DEFAULT_PANE_PRESETS,
+  DEFAULT_PRESETS,
+  paneFromPreset,
+  parseViewportProperties,
+  presetById,
+  type Preset,
+  type ViewportProperties
+} from './presets'
 import { isWebUrl } from './urls'
 
 /**
@@ -19,18 +29,23 @@ export type Zoom = number | 'fit'
 export type ColorScheme = 'light' | 'dark' | 'system'
 
 /** A pane stores its own resolved values; the preset is remembered for display only ([ADR-0011]). */
-export interface Pane {
+export interface Pane extends ViewportProperties {
   id: string
   name: string
-  width: number
-  height: number
-  dpr: number
-  mobile: boolean
   colorScheme: ColorScheme
   /** The id of the session this pane's cookies, cache and storage live in. */
   session: string
   preset: string | null
 }
+
+/**
+ * What can change about a pane once it exists. Its id, its session and the preset it was
+ * created from are not here: identity does not change, and the preset is a record of
+ * where the pane came from rather than a value to be edited ([ADR-0011]).
+ */
+export type PaneChanges = Partial<
+  Pick<Pane, 'width' | 'height' | 'dpr' | 'mobile' | 'touch' | 'colorScheme'>
+>
 
 export interface Session {
   id: string
@@ -57,53 +72,36 @@ export interface Project {
 const DEFAULT_START_URL = 'http://localhost:3000'
 const DEFAULT_SESSION: Session = { id: 'default', name: 'Default' }
 
-/** PRD 6.2 V1: the pane set a project is useful with before anything is configured. */
-const DEFAULT_PANES: ReadonlyArray<Omit<Pane, 'id' | 'session'>> = [
-  {
-    name: 'Mobile',
-    width: 390,
-    height: 844,
-    dpr: 3,
-    mobile: true,
-    colorScheme: 'system',
-    preset: 'mobile'
-  },
-  {
-    name: 'Tablet',
-    width: 820,
-    height: 1180,
-    dpr: 2,
-    mobile: true,
-    colorScheme: 'system',
-    preset: 'tablet'
-  },
-  {
-    name: 'Desktop',
-    width: 1440,
-    height: 900,
-    dpr: 1,
-    mobile: false,
-    colorScheme: 'system',
-    preset: 'desktop'
-  }
-]
-
-export function createProject(repoPath: string): Project {
+/**
+ * A new project's three panes are resolved from the presets the caller holds, exactly as
+ * a pane added later is: there is one path from a preset to a pane, and a new project
+ * takes it three times. A default whose preset the user has deleted falls back to the
+ * built-in one, so a new project is never short of the set PRD 6.2 V1 promises.
+ */
+export function createProject(
+  repoPath: string,
+  presets: readonly Preset[] = DEFAULT_PRESETS
+): Project {
+  const panes = DEFAULT_PANE_PRESETS.map((id) => {
+    const preset = presetById(presets, id) ?? presetById(DEFAULT_PRESETS, id)!
+    return { ...paneFromPreset(preset), id: newPaneId(), session: DEFAULT_SESSION.id }
+  })
   return {
     name: basename(repoPath),
     repoPath,
     startUrl: DEFAULT_START_URL,
     allowedOrigins: [new URL(DEFAULT_START_URL).origin],
-    panes: DEFAULT_PANES.map((pane) => ({
-      ...pane,
-      id: globalThis.crypto.randomUUID(),
-      session: DEFAULT_SESSION.id
-    })),
+    panes,
     layout: 'horizontal',
     zoom: 'fit',
     focusedPane: null,
     sessions: [DEFAULT_SESSION]
   }
+}
+
+/** One place a pane's identity is minted, whether it arrives with a project or later. */
+export function newPaneId(): string {
+  return globalThis.crypto.randomUUID()
 }
 
 // ---------------------------------------------------------------------------------------
@@ -116,7 +114,7 @@ export function createProject(repoPath: string): Project {
  * a later build added, and then saving over them, is how a downgrade quietly corrupts a
  * project.
  */
-export const PROJECT_FILE_VERSION = 2
+export const PROJECT_FILE_VERSION = 3
 
 export interface ProjectFile {
   version: number
@@ -138,7 +136,51 @@ const addFocusedPane: ProjectMigration = (file) => {
   return { ...file, project: { focusedPane: null, ...project } }
 }
 
-export const PROJECT_MIGRATIONS: ProjectMigrations = { 1: addFocusedPane }
+/**
+ * Version 2 panes had neither `touch` nor `userAgent`: touch followed the mobile flag,
+ * and the user agent was always Breakpoint's own. Both are written down as they were in
+ * force, so a project opened after the upgrade renders exactly as it did before it (#12).
+ *
+ * Version 2 also took any positive size, where a pane is now whole pixels inside
+ * `PANE_DIMENSION_RANGE`. A dimension outside that is brought into it here rather than
+ * refusing the file: a tightened rule is what a migration is for, and a project that will
+ * not open is a worse answer than a pane a pixel from where it was.
+ */
+function addViewportProperties(file: Record<string, unknown>): Record<string, unknown> {
+  const project = file.project
+  if (typeof project !== 'object' || project === null || Array.isArray(project)) return file
+  const panes = (project as { panes?: unknown }).panes
+  if (!Array.isArray(panes)) return file
+  return {
+    ...file,
+    project: {
+      ...project,
+      panes: panes.map((pane: unknown) => {
+        if (typeof pane !== 'object' || pane === null) return pane
+        const { mobile, width, height } = pane as Record<string, unknown>
+        return {
+          ...pane,
+          width: asPaneDimension(width),
+          height: asPaneDimension(height),
+          touch: mobile === true,
+          userAgent: null
+        }
+      })
+    }
+  }
+}
+
+/** Left alone if it is not a number at all: that is corruption, not an old rule. */
+function asPaneDimension(value: unknown): unknown {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return value
+  const { min, max } = PANE_DIMENSION_RANGE
+  return Math.min(Math.max(Math.round(value), min), max)
+}
+
+export const PROJECT_MIGRATIONS: ProjectMigrations = {
+  1: addFocusedPane,
+  2: addViewportProperties
+}
 
 /** Why a file on disk is refused. Reported to the caller as `details.reason`. */
 export type RefusalReason = 'newer' | 'corrupt'
@@ -223,10 +265,6 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isString)
 }
 
-function isPositive(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-}
-
 function parseZoom(value: unknown): Zoom | undefined {
   if (value === 'fit') return value
   if (typeof value === 'number' && value >= 25 && value <= 100) return value
@@ -243,21 +281,18 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
   const pane = asRecord(value)
   if (!pane) return undefined
   if (!isString(pane.id) || !isString(pane.name)) return undefined
-  if (!isPositive(pane.width) || !isPositive(pane.height) || !isPositive(pane.dpr)) return undefined
-  if (typeof pane.mobile !== 'boolean') return undefined
   if (!isColorScheme(pane.colorScheme)) return undefined
   if (!isString(pane.session) || !sessionIds.has(pane.session)) return undefined
   if (pane.preset !== null && !isString(pane.preset)) return undefined
+  const properties = parseViewportProperties(pane)
+  if (!properties) return undefined
   return {
     id: pane.id,
     name: pane.name,
-    width: pane.width,
-    height: pane.height,
-    dpr: pane.dpr,
-    mobile: pane.mobile,
     colorScheme: pane.colorScheme,
     session: pane.session,
-    preset: pane.preset
+    preset: pane.preset,
+    ...properties
   }
 }
 

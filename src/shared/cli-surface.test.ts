@@ -364,6 +364,40 @@ describe('the log as a terminal reads it', () => {
     ])
   })
 
+  it('prints a pane joining, changing size and leaving the project', () => {
+    const text = render({
+      entries: [
+        {
+          cursor: 6,
+          time: 0,
+          pane: 'p-2',
+          type: 'pane.added',
+          width: 1280,
+          height: 800,
+          preset: 'laptop'
+        },
+        { cursor: 7, time: 0, pane: 'p-2', type: 'pane.resized', width: 800, height: 1280 },
+        {
+          cursor: 8,
+          time: 0,
+          pane: 'p-3',
+          type: 'pane.added',
+          width: 1024,
+          height: 768,
+          preset: null
+        },
+        { cursor: 9, time: 0, pane: 'p-3', type: 'pane.removed' }
+      ],
+      cursor: 9
+    })
+    expect(text.split('\n')).toEqual([
+      '6  p-2  added at 1280×800 from the laptop preset',
+      '7  p-2  resized to 800×1280',
+      '8  p-3  added at 1024×768',
+      '9  p-3  removed from the project'
+    ])
+  })
+
   it('says what was evicted before what it is about to print', () => {
     const text = render({
       entries: [

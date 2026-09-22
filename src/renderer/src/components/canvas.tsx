@@ -9,7 +9,7 @@ import {
   type CanvasChrome
 } from '../../../shared/canvas'
 import type { PaneStatus, Size } from '../../../shared/panes'
-import { describeDegradation, paneWebPreferences } from '../../../shared/panes'
+import { describeDegradation, isPaneDimension, paneWebPreferences } from '../../../shared/panes'
 import type { Pane, Project } from '../../../shared/project'
 
 /**
@@ -78,6 +78,14 @@ export function Canvas({
         }
         style={focus?.stage}
       >
+        {project.panes.length === 0 && (
+          <p
+            className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]"
+            data-testid="canvas-empty"
+          >
+            No panes. Add one from a preset or at a size of your own.
+          </p>
+        )}
         {project.panes.map((pane, index) => {
           const focusedPane = project.layout === 'focus' && pane.id === focused?.id
           const paneZoom =
@@ -326,7 +334,12 @@ function frameSize(pane: Pane, zoom: number, chrome: CanvasChrome): Size {
 
 /**
  * Holds its screen size whatever the zoom and is clipped by its own pane, so it can never
- * claim width the pane does not have. The degradation ladder is #14.
+ * claim width the pane does not have.
+ *
+ * The size fields, rotate and remove are the developer's end of `panes.resize`,
+ * `panes.rotate` and `panes.remove` — no route here the terminal cannot reach
+ * ([ADR-0005]). They are drawn at every width for now; tiering them away as the pane
+ * narrows is the degradation ladder's business (#14, [ADR-0010]).
  */
 function PaneHeader({
   pane,
@@ -340,6 +353,27 @@ function PaneHeader({
   degraded: PaneStatus['degraded']
 }): React.JSX.Element {
   const reasons = degraded.map(describeDegradation).join('\n')
+  const [message, setMessage] = useState<string | null>(null)
+  const actionVersion = useRef(0)
+
+  async function runAction(
+    action: () => Promise<{ ok: true } | { ok: false; error: { message: string } }>
+  ): Promise<void> {
+    const version = actionVersion.current + 1
+    actionVersion.current = version
+    setMessage(null)
+    try {
+      const response = await action()
+      if (actionVersion.current !== version) return
+      setMessage(response.ok ? null : response.error.message)
+    } catch (error) {
+      if (actionVersion.current === version) setMessage(errorMessage(error))
+    }
+  }
+
+  function resize(size: { width: number } | { height: number }): Promise<void> {
+    return runAction(() => window.breakpoint.invoke('panes.resize', { pane: pane.id, ...size }))
+  }
 
   return (
     <div
@@ -352,17 +386,158 @@ function PaneHeader({
         aria-hidden
       />
       <span className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] whitespace-nowrap text-[color:var(--bp-ink)]">
-        {pane.name} {pane.width}×{pane.height}
+        {pane.name}
       </span>
+      <PaneSize pane={pane} onResize={resize} />
+      {message !== null && (
+        <span
+          role="alert"
+          data-testid="pane-action-error"
+          title={message}
+          className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-error)]"
+        >
+          {message}
+        </span>
+      )}
       {degraded.length > 0 && (
         <span
-          className="ml-auto flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-warn)]"
+          className="flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-warn)]"
           data-testid="pane-degraded"
           title={reasons}
         >
           degraded
         </span>
       )}
+      <div className="ml-auto flex flex-none items-center gap-[var(--bp-space-1)]">
+        <PaneAction
+          label="Rotate"
+          testId="pane-rotate"
+          pane={pane.id}
+          onClick={() =>
+            void runAction(() => window.breakpoint.invoke('panes.rotate', { pane: pane.id }))
+          }
+        >
+          ⤢
+        </PaneAction>
+        <PaneAction
+          label="Remove"
+          testId="pane-remove"
+          pane={pane.id}
+          onClick={() =>
+            void runAction(() => window.breakpoint.invoke('panes.remove', { pane: pane.id }))
+          }
+        >
+          ×
+        </PaneAction>
+      </div>
     </div>
+  )
+}
+
+/**
+ * The pane's declared size, typed. Each field shows what the pane declares until it is
+ * edited, and commits only itself, so committing a width can never carry a height the
+ * pane no longer has.
+ */
+function PaneSize({
+  pane,
+  onResize
+}: {
+  pane: Pane
+  onResize(size: { width: number } | { height: number }): Promise<void>
+}): React.JSX.Element {
+  return (
+    <span className="flex flex-none items-center font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-muted)]">
+      <SizeInput
+        label="Width"
+        pane={pane.id}
+        declared={pane.width}
+        onCommit={(width) => void onResize({ width })}
+      />
+      ×
+      <SizeInput
+        label="Height"
+        pane={pane.id}
+        declared={pane.height}
+        onCommit={(height) => void onResize({ height })}
+      />
+    </span>
+  )
+}
+
+/**
+ * Shows the declared value while it is not being edited, so a resize from anywhere — the
+ * CLI, a rotation, another window — is simply what the field says next. A value the route
+ * would refuse is never sent; the field goes back to showing what the pane declares.
+ */
+function SizeInput({
+  label,
+  pane,
+  declared,
+  onCommit
+}: {
+  label: string
+  pane: string
+  declared: number
+  onCommit(value: number): void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<string | null>(null)
+  const value = draft ?? String(declared)
+
+  function commit(): void {
+    const next = Number(draft)
+    setDraft(null)
+    if (draft === null || !isPaneDimension(next) || next === declared) return
+    onCommit(next)
+  }
+
+  return (
+    <input
+      aria-label={`${label} of ${pane}`}
+      data-testid={`pane-${label.toLowerCase()}`}
+      inputMode="numeric"
+      value={value}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur()
+        if (event.key === 'Escape') {
+          setDraft(null)
+        }
+      }}
+      className="w-[var(--bp-field-w-inline)] rounded-[var(--bp-radius-xs)] bg-transparent text-center tabular-nums outline-none hover:bg-[var(--bp-hover)] focus:bg-[var(--bp-chrome-sunken)] focus:text-[color:var(--bp-ink)]"
+    />
+  )
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function PaneAction({
+  label,
+  testId,
+  pane,
+  onClick,
+  children
+}: {
+  label: string
+  testId: string
+  pane: string
+  onClick(): void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      title={label}
+      aria-label={`${label} ${pane}`}
+      data-testid={testId}
+      data-pane={pane}
+      onClick={onClick}
+      className="grid size-[var(--bp-pane-tab-h)] place-items-center rounded-[var(--bp-radius-xs)] text-[length:var(--bp-text-micro)] leading-none text-[color:var(--bp-ink-faint)] hover:bg-[var(--bp-hover)] hover:text-[color:var(--bp-ink)]"
+    >
+      {children}
+    </button>
   )
 }

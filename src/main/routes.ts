@@ -1,10 +1,12 @@
 import { isCursorPosition, type EventLog } from '../shared/event-log'
+import { isPaneDimension, PANE_DIMENSION_RANGE } from '../shared/panes'
 import { isColorScheme, isLayout } from '../shared/project'
 import { failure, success, type RouteRequest, type RouteResponse } from '../shared/protocol'
 import { isRouteName, type RouteName, type RouteParams, type RoutePayload } from '../shared/routes'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
 import { PaneService } from './services/pane-service'
+import { PresetService } from './services/preset-service'
 import { ProjectService } from './services/project-service'
 
 /**
@@ -113,20 +115,121 @@ function expectGeometryReport(raw: unknown): ParamsOk<'panes.reportGeometry'> | 
   return { ok: true, params: { pane: report.pane, expected, measured } }
 }
 
-const EMULATION_FIELDS = ['colorScheme', 'dpr', 'mobile']
-
-function expectEmulationSetting(raw: unknown): ParamsOk<'panes.setEmulation'> | ParamsBad {
-  const shape = 'this route takes { pane } and at least one of colorScheme, dpr, mobile'
-  const setting = asParams(raw)
-  if (!setting) return { ok: false, message: shape }
-  if (typeof setting.pane !== 'string' || setting.pane.length === 0) {
+/** The one shape every route naming a pane takes, so `pane` is refused the same way. */
+function expectPane(raw: unknown, shape: string): { pane: string } | ParamsBad {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, message: shape }
+  }
+  const { pane } = raw as { pane?: unknown }
+  if (typeof pane !== 'string' || pane.length === 0) {
     return { ok: false, message: 'pane must be a non-empty string' }
   }
-  const unknown = unknownFields(setting, ['pane', ...EMULATION_FIELDS])
-  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+  return { pane }
+}
 
-  const { colorScheme, dpr, mobile } = setting
-  if (colorScheme === undefined && dpr === undefined && mobile === undefined) {
+function isRefusal(value: { pane: string } | ParamsBad): value is ParamsBad {
+  return 'ok' in value
+}
+
+/**
+ * A field the route does not take is a refusal, not a field to ignore: a misspelt one
+ * would otherwise be a change that silently changes nothing.
+ */
+function rejectUnknown(
+  raw: unknown,
+  fields: readonly string[],
+  shape: string
+): ParamsBad | undefined {
+  const unknown = Object.keys(raw as object).filter((key) => !fields.includes(key))
+  if (unknown.length === 0) return undefined
+  return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+}
+
+const PANE_SHAPE = 'this route takes { pane }'
+
+function expectPaneOnly<N extends 'panes.remove' | 'panes.rotate'>(
+  raw: unknown
+): ParamsOk<N> | ParamsBad {
+  const named = expectPane(raw, PANE_SHAPE)
+  if (isRefusal(named)) return named
+  const refused = rejectUnknown(raw, ['pane'], PANE_SHAPE)
+  if (refused) return refused
+  return { ok: true, params: named as RouteParams<N> }
+}
+
+const DIMENSIONS = `whole numbers of CSS pixels from ${PANE_DIMENSION_RANGE.min} to ${PANE_DIMENSION_RANGE.max}`
+
+function expectPaneResize(raw: unknown): ParamsOk<'panes.resize'> | ParamsBad {
+  const shape = 'this route takes { pane } and at least one of width, height'
+  const named = expectPane(raw, shape)
+  if (isRefusal(named)) return named
+  const refused = rejectUnknown(raw, ['pane', 'width', 'height'], shape)
+  if (refused) return refused
+
+  const { width, height } = raw as { width?: unknown; height?: unknown }
+  if (width === undefined && height === undefined) return { ok: false, message: shape }
+  for (const value of [width, height]) {
+    if (value !== undefined && !isPaneDimension(value)) {
+      return { ok: false, message: `${shape}, in ${DIMENSIONS}` }
+    }
+  }
+  if (width !== undefined) {
+    return {
+      ok: true,
+      params: {
+        pane: named.pane,
+        width: width as number,
+        ...(height !== undefined && { height: height as number })
+      }
+    }
+  }
+  return { ok: true, params: { pane: named.pane, height: height as number } }
+}
+
+const CREATION_FIELDS = ['preset', 'width', 'height'] as const
+
+function expectPaneCreation(raw: unknown): ParamsOk<'panes.add'> | ParamsBad {
+  const shape = 'this route takes { preset } or { width, height }'
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    return { ok: false, message: shape }
+  }
+  const refused = rejectUnknown(raw, CREATION_FIELDS, shape)
+  if (refused) return refused
+
+  const { preset, width, height } = raw as Record<string, unknown>
+  if (preset !== undefined) {
+    // A preset and a size together would leave it unsaid which one the pane came from.
+    if (width !== undefined || height !== undefined) {
+      return { ok: false, message: `${shape}, not both` }
+    }
+    if (typeof preset !== 'string' || preset.length === 0) {
+      return { ok: false, message: 'preset must be a non-empty string' }
+    }
+    return { ok: true, params: { preset } }
+  }
+  if (!isPaneDimension(width) || !isPaneDimension(height)) {
+    return { ok: false, message: `${shape}, in ${DIMENSIONS}` }
+  }
+  return { ok: true, params: { width, height } }
+}
+
+const EMULATION_FIELDS = ['colorScheme', 'dpr', 'mobile', 'touch'] as const
+
+function expectEmulationSetting(raw: unknown): ParamsOk<'panes.setEmulation'> | ParamsBad {
+  const shape = `this route takes { pane } and at least one of ${EMULATION_FIELDS.join(', ')}`
+  const named = expectPane(raw, shape)
+  if (isRefusal(named)) return named
+  const setting = raw as Record<string, unknown>
+  const refused = rejectUnknown(raw, ['pane', ...EMULATION_FIELDS], shape)
+  if (refused) return refused
+
+  const { colorScheme, dpr, mobile, touch } = setting
+  if (
+    colorScheme === undefined &&
+    dpr === undefined &&
+    mobile === undefined &&
+    touch === undefined
+  ) {
     return { ok: false, message: shape }
   }
   if (colorScheme !== undefined && !isColorScheme(colorScheme)) {
@@ -138,13 +241,17 @@ function expectEmulationSetting(raw: unknown): ParamsOk<'panes.setEmulation'> | 
   if (mobile !== undefined && typeof mobile !== 'boolean') {
     return { ok: false, message: 'mobile must be true or false' }
   }
+  if (touch !== undefined && typeof touch !== 'boolean') {
+    return { ok: false, message: 'touch must be true or false' }
+  }
   return {
     ok: true,
     params: {
-      pane: setting.pane,
+      pane: named.pane,
       ...(colorScheme !== undefined && { colorScheme }),
       ...(dpr !== undefined && { dpr }),
-      ...(mobile !== undefined && { mobile })
+      ...(mobile !== undefined && { mobile }),
+      ...(touch !== undefined && { touch })
     }
   }
 }
@@ -198,6 +305,7 @@ export interface Services {
   app: AppService
   log: EventLog
   panes: PaneService
+  presets: PresetService
   project: ProjectService
 }
 
@@ -211,17 +319,37 @@ export function createRouteTable(services: Services): RouteTable {
       parseParams: expectSince,
       handle: (params) => ({ payload: services.log.read(params) })
     },
+    'panes.add': {
+      parseParams: expectPaneCreation,
+      handle: async (creation) => ({ payload: await services.panes.add(creation) })
+    },
     'panes.list': {
       parseParams: expectNoParams,
       handle: () => ({ payload: services.panes.list() })
+    },
+    'panes.remove': {
+      parseParams: expectPaneOnly,
+      handle: async ({ pane }) => ({ payload: await services.panes.remove(pane) })
     },
     'panes.reportGeometry': {
       parseParams: expectGeometryReport,
       handle: (report) => ({ payload: services.panes.reportGeometry(report) })
     },
+    'panes.resize': {
+      parseParams: expectPaneResize,
+      handle: async (resize) => ({ payload: await services.panes.resize(resize) })
+    },
+    'panes.rotate': {
+      parseParams: expectPaneOnly,
+      handle: async ({ pane }) => ({ payload: await services.panes.rotate(pane) })
+    },
     'panes.setEmulation': {
       parseParams: expectEmulationSetting,
       handle: async (setting) => ({ payload: await services.panes.setEmulation(setting) })
+    },
+    'presets.list': {
+      parseParams: expectNoParams,
+      handle: async () => ({ payload: await services.presets.list() })
     },
     'project.open': {
       parseParams: expectPath,

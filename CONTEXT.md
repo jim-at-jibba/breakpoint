@@ -14,8 +14,9 @@ and the unit almost everything else is keyed by.
 _Avoid_: viewport, frame, window, device
 
 **Preset**:
-A named set of viewport properties — size, DPR, user agent, mobile flag — used to create a
-pane. A template consulted at creation time, not a thing a pane belongs to.
+A named set of viewport properties — size, DPR, user agent, mobile flag, touch — used to
+create a pane. A template consulted at creation time, not a thing a pane belongs to.
+Global and user-editable JSON, shared by every project.
 _Avoid_: device, profile, template
 
 **Attachment**:

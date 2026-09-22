@@ -1,3 +1,4 @@
+import { AddPane } from '@renderer/components/add-pane'
 import { Canvas } from '@renderer/components/canvas'
 import { CanvasControls } from '@renderer/components/canvas-controls'
 import { Button } from '@renderer/components/ui/button'
@@ -124,7 +125,8 @@ export default function App(): React.JSX.Element {
           </span>
         )}
         {project && (
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-[var(--bp-space-3)]">
+            <AddPane />
             <CanvasControls
               project={project}
               zoom={activeZoomPreview ?? zoom}

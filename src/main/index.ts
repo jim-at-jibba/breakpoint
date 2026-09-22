@@ -18,6 +18,8 @@ import { HOST_WINDOW_PREFERENCES, PaneHost } from './pane-host'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
 import { PaneService } from './services/pane-service'
+import { PresetService } from './services/preset-service'
+import { PresetStore } from './services/preset-store'
 import { ProjectService } from './services/project-service'
 import { ProjectStore } from './services/project-store'
 import { StateFeed } from './state-feed'
@@ -154,16 +156,22 @@ if (!hasSingleInstanceLock) {
     const feed = new StateFeed()
     const log = new EventLog()
     const projectStore = new ProjectStore(join(userDataDir, 'projects'))
+    // Global, and beside the projects directory rather than inside it: one developer's
+    // idea of "Mobile" does not change per repo.
+    const presets = new PresetService(new PresetStore(join(userDataDir, 'presets.json')))
     // The two services reach each other: opening a project resets its panes, and changing
     // a pane changes the project. Neither calls the other while being constructed.
     const panes = new PaneService(feed, log, {
-      updatePane: (pane, changes) => projects.updatePane(pane, changes)
+      updatePane: (pane, changes) => projects.updatePane(pane, changes),
+      addPane: (creation) => projects.addPane(creation),
+      removePane: (pane) => projects.removePane(pane),
+      rotatePane: (pane) => projects.rotatePane(pane)
     })
-    const projects = new ProjectService(projectStore, feed, log, panes)
+    const projects = new ProjectService(projectStore, feed, log, panes, presets)
     paneHost = new PaneHost(panes, feed)
     paneHost.install(app)
     dispatch = createDispatch(
-      createRouteTable({ app: new AppService(), log, panes, project: projects })
+      createRouteTable({ app: new AppService(), log, panes, presets, project: projects })
     )
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)

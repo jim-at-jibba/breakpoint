@@ -17,6 +17,27 @@ export interface Size {
 export type GeometryResult = { ok: true } | { ok: false; message: string }
 
 /**
+ * What a pane may be declared as, in CSS pixels. Whole numbers because a viewport is
+ * counted in them, and bounded because a pane is a `<webview>` the window has to draw:
+ * a typo with an extra digit should be refused rather than rasterised.
+ */
+export const PANE_DIMENSION_RANGE = { min: 1, max: 10_000 } as const
+
+export function isPaneDimension(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= PANE_DIMENSION_RANGE.min &&
+    value <= PANE_DIMENSION_RANGE.max
+  )
+}
+
+/** Landscape from portrait and back, without the developer doing the arithmetic. */
+export function rotateSize({ width, height }: Size): Size {
+  return { width: height, height: width }
+}
+
+/**
  * Screen pixels a pane may be off by before it counts as the wrong size. A fractional
  * zoom lands element edges on sub-pixel positions, and that is rounding, not a bug. The
  * Phase 0 collapse was off by hundreds.

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_PRESETS, type Preset } from './presets'
 import {
   createProject,
   PROJECT_FILE_VERSION,
+  PROJECT_MIGRATIONS,
   projectFileName,
   readProjectFile,
   writeProjectFile,
@@ -31,11 +33,38 @@ describe('createProject', () => {
       ['Desktop', 1440, 900, 1]
     ])
     expect(project.panes.map((pane) => pane.mobile)).toEqual([true, true, false])
+    expect(project.panes.map((pane) => pane.touch)).toEqual([true, true, false])
     for (const pane of project.panes) {
       expect(pane.session).toBe('default')
       expect(pane.colorScheme).toBe('system')
+      expect(pane.userAgent).toBeNull()
     }
+    expect(project.panes.map((pane) => pane.preset)).toEqual(['mobile', 'tablet', 'desktop'])
     expect(new Set(project.panes.map((pane) => pane.id)).size).toBe(3)
+  })
+
+  it('resolves its panes from the presets it is given, not from a set of its own', () => {
+    const edited: Preset[] = DEFAULT_PRESETS.map((preset) =>
+      preset.id === 'mobile'
+        ? { ...preset, width: 320, height: 568, name: 'Mobile (small)' }
+        : preset
+    )
+
+    const project = createProject('/Users/dev/code/shop', edited)
+
+    expect(project.panes[0]).toMatchObject({ name: 'Mobile (small)', width: 320, height: 568 })
+    expect(project.panes[1]).toMatchObject({ name: 'Tablet', width: 820 })
+  })
+
+  it('falls back to the built-in preset for a default the user has deleted', () => {
+    const project = createProject(
+      '/Users/dev/code/shop',
+      DEFAULT_PRESETS.filter((preset) => preset.id !== 'tablet')
+    )
+
+    expect(project.panes[1]).toMatchObject(
+      expect.objectContaining({ name: 'Tablet', width: 820, height: 1180 })
+    )
   })
 })
 
@@ -106,11 +135,62 @@ describe('readProjectFile', () => {
         version: PROJECT_FILE_VERSION,
         project: { ...stored, panes: [{ ...stored.panes[0], session: 'ghost' }] }
       }
+    ],
+    [
+      'a pane with no touch setting',
+      {
+        version: PROJECT_FILE_VERSION,
+        project: { ...stored, panes: [{ ...stored.panes[0], touch: undefined }] }
+      }
+    ],
+    [
+      'a pane with a numeric user agent',
+      {
+        version: PROJECT_FILE_VERSION,
+        project: { ...stored, panes: [{ ...stored.panes[0], userAgent: 7 }] }
+      }
+    ],
+    [
+      'a pane wider than a pane may be',
+      {
+        version: PROJECT_FILE_VERSION,
+        project: { ...stored, panes: [{ ...stored.panes[0], width: 1_000_000 }] }
+      }
     ]
   ])('refuses a corrupt file: %s', (_label, raw) => {
     const result = readProjectFile(raw)
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toBe('corrupt')
+  })
+
+  /**
+   * Version 2 had no `touch` and no `userAgent`: touch followed the mobile flag, and the
+   * user agent was always Breakpoint's own. Both carried forward as they were in force.
+   */
+  it('migrates a version 2 file by giving each pane the touch and user agent it had', () => {
+    const before = {
+      version: 2,
+      project: {
+        ...stored,
+        panes: stored.panes.map((pane) => {
+          const older: Record<string, unknown> = { ...pane }
+          delete older.touch
+          delete older.userAgent
+          return older
+        })
+      }
+    }
+
+    const result = readProjectFile(before, {
+      version: PROJECT_FILE_VERSION,
+      migrations: PROJECT_MIGRATIONS
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.ok && result.project.panes.map((pane) => pane.touch)).toEqual(
+      stored.panes.map((pane) => pane.mobile)
+    )
+    expect(result.ok && result.project.panes.every((pane) => pane.userAgent === null)).toBe(true)
   })
 
   it('migrates an older file forward one version at a time', () => {
@@ -129,6 +209,33 @@ describe('readProjectFile', () => {
 
     expect(steps).toEqual([1, 2])
     expect(result).toEqual({ ok: true, project: { ...stored, name: 'old' } })
+  })
+
+  it('brings a version 2 pane whose size the current rules refuse into range', () => {
+    const before = {
+      version: 2,
+      project: {
+        ...stored,
+        panes: stored.panes.map((pane, index) => {
+          const older: Record<string, unknown> = { ...pane }
+          delete older.touch
+          delete older.userAgent
+          return { ...older, width: [390.5, 1_000_000, 0][index] }
+        })
+      }
+    }
+
+    const result = readProjectFile(before, {
+      version: PROJECT_FILE_VERSION,
+      migrations: PROJECT_MIGRATIONS
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.ok && result.project.panes.map((pane) => pane.width)).toEqual([391, 10_000, 1])
+    // Heights the rules already accept are untouched.
+    expect(result.ok && result.project.panes.map((pane) => pane.height)).toEqual(
+      stored.panes.map((pane) => pane.height)
+    )
   })
 
   it('reads a focused pane the project no longer has as focusing none', () => {
