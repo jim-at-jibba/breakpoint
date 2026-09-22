@@ -27,6 +27,10 @@ name in the toolbar. Choosing one swaps the panes, layout, zoom and URL to that 
 stored state without restarting, and the project you came from is waiting exactly as you
 left it when you switch back.
 
+Entries are labelled by the last two segments of the repo path, so two git worktrees of one
+repo — `breakpoint/main` and `breakpoint/feature-19` — read apart rather than alike. The whole
+path is on hover.
+
 The list is the project directory itself rather than an index kept beside it, so it never
 disagrees with what is stored. A project whose file Breakpoint cannot read — one written by
 a newer build, or one that has been damaged — is listed with the rest and says why when you

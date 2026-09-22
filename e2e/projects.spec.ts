@@ -504,6 +504,25 @@ test('the switcher opens on its shortcut and lists every stored project', async 
   await expect(page.getByTestId('project-switcher-message')).toHaveCount(0)
 })
 
+test('two worktrees of one repo are told apart by the segment above them, with the whole path to hover', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  // What a git worktree checkout looks like: one repo, two directories, and a basename
+  // that names the worktree rather than the repo.
+  const main = makeRepo(join('breakpoint', 'main'))
+  const feature = makeRepo(join('breakpoint', 'feature-19'))
+  await openProject(main)
+  await openProject(feature)
+
+  await openSwitcher(page)
+
+  const options = page.getByTestId('project-option')
+  await expect(options.nth(0)).toContainText('breakpoint/feature-19')
+  await expect(options.nth(0)).toHaveAttribute('title', feature)
+  await expect(options.nth(1)).toContainText('breakpoint/main')
+  await expect(options.nth(1)).toHaveAttribute('title', main)
+})
+
 test('choosing a project swaps panes, layout, zoom and URL without a restart, and switching back restores the first as it was left', async () => {
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()

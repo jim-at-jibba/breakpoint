@@ -1,6 +1,5 @@
 import { Button } from '@renderer/components/ui/button'
 import {
-  Command,
   CommandDialog,
   CommandEmpty,
   CommandInput,
@@ -25,6 +24,10 @@ import type { Project } from '../../../shared/project'
  * A project whose file refuses to load is listed with the rest and reports why when it
  * is chosen. It is never offered as openable: the store has already read that file and
  * been refused, and asking again would only be refused the same way.
+ *
+ * This is the one surface drawn over the canvas rather than on the app's own rim. It is
+ * not a pane-state event, which is what AGENTS.md keeps off a page — it is the developer
+ * asking to leave this project, and nothing in the panes behind it is the subject.
  */
 export function ProjectSwitcher({ project }: { project: Project | null }): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -33,6 +36,7 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
   /** Bumped on every open and close, so a slow list cannot answer a later one. */
   const loadVersion = useRef(0)
 
+  /** Opens the switcher and reads the directory again: the list is never held between opens. */
   const show = useCallback((): void => {
     setOpen(true)
     setMessage(null)
@@ -64,10 +68,14 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
 
   // The shortcut is the window's own, so it answers wherever the app's chrome has focus.
   // Opening an open switcher re-reads the list rather than closing it; Escape closes it.
+  //
+  // One modifier per platform, not either: Control-P is emacs' "previous line" in every
+  // text field on macOS, and taking it there would cost the address bar a binding the
+  // developer already has.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.altKey || event.shiftKey) return
-      if (!(event.metaKey || event.ctrlKey)) return
+      if (!(isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) return
       if (event.key.toLowerCase() !== 'p') return
       event.preventDefault()
       show()
@@ -98,7 +106,7 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
       <Button
         size="sm"
         variant="ghost"
-        title="Switch project (⌘P)"
+        title={`Switch project (${SHORTCUT})`}
         data-testid="project-switcher"
         onClick={show}
       >
@@ -111,43 +119,45 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
         onOpenChange={(next: boolean) => (next ? show() : hide())}
         title="Switch project"
         description="Every project Breakpoint has stored"
-        className="w-[var(--bp-palette-w)] sm:max-w-[var(--bp-palette-w)]"
+        className="w-[var(--bp-switcher-w)] sm:max-w-[var(--bp-switcher-w)]"
       >
-        {/* The generated `CommandDialog` opens no `Command` of its own, so the root that
-            every part below needs is supplied here rather than edited into CLI output. */}
-        <Command>
-          <CommandInput placeholder="Switch project…" data-testid="project-search" />
-          <CommandList data-testid="project-list">
-            <CommandEmpty>
-              {projects === null ? 'Reading projects…' : 'No project of that name.'}
-            </CommandEmpty>
-            {(projects ?? []).map((listing) => (
-              <ProjectOption
-                key={listing.file}
-                listing={listing}
-                current={listing.openable && listing.repoPath === project?.repoPath}
-                onChoose={choose}
-              />
-            ))}
-          </CommandList>
-          {message !== null && (
-            <span
-              role="alert"
-              data-testid="project-switcher-message"
-              className="px-[var(--bp-space-3)] pb-[var(--bp-space-2)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
-            >
-              {message}
-            </span>
-          )}
-        </Command>
+        {/* A message is about the entry that was chosen, so typing past it clears it. */}
+        <CommandInput
+          placeholder="Switch project…"
+          data-testid="project-search"
+          onValueChange={() => setMessage(null)}
+        />
+        <CommandList data-testid="project-list">
+          <CommandEmpty>
+            {projects === null ? 'Reading projects…' : 'No project of that name.'}
+          </CommandEmpty>
+          {(projects ?? []).map((listing) => (
+            <ProjectOption
+              key={listing.file}
+              listing={listing}
+              current={listing.openable && listing.repoPath === project?.repoPath}
+              onChoose={choose}
+            />
+          ))}
+        </CommandList>
+        {message !== null && (
+          <span
+            role="alert"
+            data-testid="project-switcher-message"
+            className="px-[var(--bp-space-3)] pb-[var(--bp-space-2)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
+          >
+            {message}
+          </span>
+        )}
       </CommandDialog>
     </>
   )
 }
 
 /**
- * One row. What it is searched by is its label and its repo path together, because a
- * developer with two repos of one name tells them apart by where they are.
+ * One row: the repo path's last two segments, with the whole path to hover. The segment
+ * above the directory is what tells two worktrees of one repo apart (#19), and the rest
+ * of the path is there for the case it does not.
  */
 function ProjectOption({
   listing,
@@ -160,27 +170,38 @@ function ProjectOption({
   onChoose(listing: ProjectListing): Promise<void>
 }): React.JSX.Element {
   const label = projectListingLabel(listing)
+  // The repo path where there is one; the file is all an entry that lost its path has.
+  const identity = listing.repoPath ?? listing.file
   return (
     <CommandItem
-      value={`${label} ${listing.repoPath ?? listing.file}`}
+      value={`${label} ${identity}`}
+      title={identity}
       data-testid="project-option"
-      data-project={listing.repoPath ?? listing.file}
+      data-project={identity}
       data-openable={listing.openable}
       onSelect={() => void onChoose(listing)}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {listing.openable ? (
-        <span className="min-w-0 flex-none truncate font-mono text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-          {current ? 'Open' : listing.repoPath}
-        </span>
-      ) : (
+      {!listing.openable && (
         <span className="flex-none text-[length:var(--bp-text-sm)] text-[color:var(--bp-warn)]">
           Unopenable
+        </span>
+      )}
+      {current && (
+        <span className="flex-none text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
+          Open
         </span>
       )}
     </CommandItem>
   )
 }
+
+/** The platform the window is drawn on, which is the only thing the shortcut needs from it. */
+function isMac(): boolean {
+  return window.electron.process.platform === 'darwin'
+}
+
+const SHORTCUT = isMac() ? '\u2318P' : 'Ctrl+P'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

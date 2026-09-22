@@ -58,7 +58,9 @@ function CommandDialog({
         )}
         showCloseButton={showCloseButton}
       >
-        {children}
+        {/* The root every part below needs. Edited in place rather than wrapped at each
+            use site, per AGENTS.md. */}
+        <Command>{children}</Command>
       </DialogContent>
     </Dialog>
   )
@@ -95,7 +97,7 @@ function CommandList({
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "no-scrollbar max-h-[var(--bp-palette-list-h)] scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
+        "no-scrollbar max-h-[var(--bp-switcher-list-h)] scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
         className
       )}
       {...props}

@@ -45,8 +45,8 @@
 
   /* ---- control widths --------------------------------------------------- */
   --bp-menu-w: 240px;         /* a popover list: presets, and menus like it */
-  --bp-palette-w: 440px;      /* the project switcher, and the palette later */
-  --bp-palette-list-h: 280px; /* how much of its list it shows before scrolling */
+  --bp-switcher-w: 440px;     /* the project switcher                        */
+  --bp-switcher-list-h: 280px;/* how much of its list it shows before scrolling */
   --bp-field-w: 64px;         /* a short numeric input, such as a pane size */
   --bp-field-w-inline: 4ch;   /* the same, typed inline in a pane header    */
   --bp-address-w: 620px;      /* the address bar's widest; it grows to this */

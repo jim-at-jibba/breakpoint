@@ -61,8 +61,30 @@ export function salvageProjectIdentity(raw: unknown): {
   }
 }
 
-/** What an entry is listed as: its name, or its file name where no name was legible. */
+/**
+ * A repo path's last two segments: the directory itself and the one above it.
+ *
+ * A project's `name` is only its basename, which names the *worktree* directory rather
+ * than the repo when a project is opened in a git worktree — two worktrees of one repo
+ * are then indistinguishable. The segment above tells `breakpoint/feature-19-switcher`
+ * from `breakpoint/main` (#19), and the full path is still there to hover.
+ *
+ * Both separators are split on: this runs in the renderer, which cannot reach
+ * `node:path` to ask which one the platform uses.
+ */
+export function shortenRepoPath(repoPath: string): string {
+  const segments = repoPath.split(/[\\/]+/).filter((segment) => segment !== '')
+  if (segments.length === 0) return repoPath
+  return segments.slice(-2).join(repoPath.includes('\\') ? '\\' : '/')
+}
+
+/**
+ * What an entry is listed as: its repo path shortened, because that is the project's
+ * identity and its name is only half of it. An entry whose path was illegible falls back
+ * to the stored name, and then to the file, which is all that is left to call it.
+ */
 export function projectListingLabel(listing: ProjectListing): string {
+  if (listing.repoPath !== null) return shortenRepoPath(listing.repoPath)
   return listing.name ?? listing.file
 }
 
