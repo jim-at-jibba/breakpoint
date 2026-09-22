@@ -7,6 +7,7 @@ import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
 import { useState } from 'react'
 import { MAX_ZOOM } from '../../shared/canvas'
+import { paneColorVar } from '../../shared/pane-palette'
 import type { Project, Zoom } from '../../shared/project'
 import type { LayoutSetting, RouteName, RouteParams } from '../../shared/routes'
 
@@ -161,7 +162,7 @@ export default function App(): React.JSX.Element {
           <div className="flex items-center gap-2">
             <span
               className="size-2 rounded-xs"
-              style={{ background: 'var(--bp-pane-1)' }}
+              style={{ background: paneColorVar(0) }}
               aria-hidden
             />
             <span className="font-mono text-[length:var(--bp-text-lg)]">breakpoint</span>

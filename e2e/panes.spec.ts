@@ -234,7 +234,9 @@ test('a pane whose attachment fails still renders, degraded with the reason, and
         touch: 'pending',
         colorScheme: 'pending'
       },
-      degraded: [{ cause: 'attachment', message: 'Debugger is already attached to the target' }]
+      degraded: [{ cause: 'attachment', message: 'Debugger is already attached to the target' }],
+      // The page itself loaded; it is the instrumentation that did not.
+      errors: 0
     })
     expect(await webviewBox(page, pane.id)).toEqual({ width: pane.width, height: pane.height })
   }

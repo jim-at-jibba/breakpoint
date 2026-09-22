@@ -593,3 +593,32 @@ describe('reporting what emulation applied', () => {
     expect(patches.map(({ patch }) => patch.type)).toEqual(['pane.status', 'pane.status'])
   })
 })
+
+describe('counting a pane’s errors', () => {
+  it('counts a load that failed, announces it, and keeps the pane out of degraded', async () => {
+    const [mobile] = await openShop()
+
+    panes.loadFailed({
+      pane: mobile.id,
+      url: 'http://localhost:3000/',
+      code: -102,
+      message: 'ERR_CONNECTION_REFUSED'
+    })
+
+    expect(panes.statuses()[mobile.id].errors).toBe(1)
+    // A dev server that is down is not an instrument that failed.
+    expect(panes.statuses()[mobile.id].degraded).toEqual([])
+    expect(patches.map(({ patch }) => patch.type)).toEqual(['pane.status'])
+  })
+
+  it('starts the count again for a new guest, because the errors were the old one’s', async () => {
+    const [mobile] = await openShop()
+
+    panes.loadFailed({ pane: mobile.id, url: 'http://x/', code: -102, message: 'refused' })
+    panes.loadFailed({ pane: mobile.id, url: 'http://x/', code: -102, message: 'refused' })
+    expect(panes.statuses()[mobile.id].errors).toBe(2)
+
+    panes.guestCreated(mobile.id, 'http://x/')
+    expect(panes.statuses()[mobile.id].errors).toBe(0)
+  })
+})

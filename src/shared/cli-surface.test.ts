@@ -441,6 +441,17 @@ describe('the state as a terminal reads it', () => {
       '  Tablet    820×1180 @2x  degraded: attachment: Debugger is already attached to the target'
     )
   })
+
+  it('counts a pane’s errors, the way its header does', () => {
+    const panes = paneStatusesFor(shop, {})
+    panes[mobile.id] = foldPaneStatus(panes[mobile.id], { type: 'loadFailed' })
+    const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
+
+    const lines = (state?.render(snapshot) ?? '').split('\n')
+    expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x  errors: 1`)
+    // A pane with nothing wrong says nothing, rather than saying zero.
+    expect(lines).toContain(`  ${tablet.name.padEnd(10)}820×1180 @2x`)
+  })
 })
 
 describe('breakpoint open', () => {
