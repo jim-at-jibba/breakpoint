@@ -1,5 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { expandUrl, isOriginAllowed, isWebUrl, normaliseOrigins, originOf } from './urls'
+import {
+  expandUrl,
+  isLoopbackHost,
+  isOriginAllowed,
+  isWebUrl,
+  normaliseOrigins,
+  originOf
+} from './urls'
+
+describe('loopback hosts', () => {
+  it.each([
+    'localhost',
+    'LOCALHOST',
+    'shop.localhost',
+    '127.0.0.1',
+    // The whole of 127.0.0.0/8 is this machine, not just the address people type.
+    '127.0.0.2',
+    '127.1.2.3',
+    '::1',
+    '[::1]',
+    '0:0:0:0:0:0:0:1'
+  ])('%s is this machine', (host: string) => {
+    expect(isLoopbackHost(host)).toBe(true)
+  })
+
+  it.each(['example.com', 'localhost.example.com', 'notlocalhost', '128.0.0.1', '10.0.0.1', ''])(
+    '%j is not',
+    (host: string) => {
+      expect(isLoopbackHost(host)).toBe(false)
+    }
+  )
+})
 
 describe('pane URLs', () => {
   it.each(['http://localhost:3000', 'https://example.com/path?q=1#section', 'HTTPS://EXAMPLE.COM'])(
@@ -73,6 +104,7 @@ describe('expandUrl', () => {
     ['localhost:3000', 'http://localhost:3000/'],
     ['localhost:3000/checkout', 'http://localhost:3000/checkout'],
     ['127.0.0.1:5173', 'http://127.0.0.1:5173/'],
+    ['127.0.0.2:5173', 'http://127.0.0.2:5173/'],
     ['[::1]:8080', 'http://[::1]:8080/'],
     ['shop.localhost:3000', 'http://shop.localhost:3000/']
   ])('sends the scheme-less local host %s over http', (typed: string, url: string) => {

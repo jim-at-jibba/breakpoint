@@ -15,7 +15,13 @@ function opened(revision: number, project = shop): RevisionedPatch {
  * has to carry it through untouched, because the log is a channel of its own.
  */
 function snap(revision: number, project: StateSnapshot['project'], cursor = 12): StateSnapshot {
-  return { revision, cursor, project, panes: project ? paneStatusesFor(project, {}) : {} }
+  return {
+    revision,
+    cursor,
+    project,
+    panes: project ? paneStatusesFor(project, {}) : {},
+    certificates: { trusted: [], waiting: [] }
+  }
 }
 
 function live(snapshot: StateSnapshot): Projection {

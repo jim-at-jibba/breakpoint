@@ -17,6 +17,8 @@ import { repoPathFromArguments } from './launch-arguments'
 import { HOST_WINDOW_PREFERENCES, PaneHost } from './pane-host'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
 import { AppService } from './services/app-service'
+import { CertificateService } from './services/certificate-service'
+import { CertificateStore } from './services/certificate-store'
 import { PaneService } from './services/pane-service'
 import { PresetService } from './services/preset-service'
 import { PresetStore } from './services/preset-store'
@@ -160,6 +162,14 @@ if (!hasSingleInstanceLock) {
     // Global, and beside the projects directory rather than inside it: one developer's
     // idea of "Mobile" does not change per repo.
     const presets = new PresetService(new PresetStore(join(userDataDir, 'presets.json')))
+    // Global for the same reason presets are: a certificate belongs to a host and this
+    // machine, so two projects on one staging server are one decision ([ADR-0012]).
+    const certificates = new CertificateService(
+      new CertificateStore(join(userDataDir, 'certificates.json')),
+      feed,
+      log
+    )
+    await certificates.load()
     // The two services reach each other: opening a project resets its panes, and changing
     // a pane changes the project. Neither calls the other while being constructed.
     const panes = new PaneService(feed, log, {
@@ -168,12 +178,38 @@ if (!hasSingleInstanceLock) {
       removePane: (pane) => projects.removePane(pane),
       rotatePane: (pane) => projects.rotatePane(pane)
     })
-    const projects = new ProjectService(projectStore, feed, log, panes, presets)
+    const projects = new ProjectService(projectStore, feed, log, panes, presets, certificates)
     paneHost = new PaneHost(panes, feed)
     paneHost.install(app)
     dispatch = createDispatch(
-      createRouteTable({ app: new AppService(), log, panes, presets, project: projects })
+      createRouteTable({
+        app: new AppService(),
+        certificates,
+        log,
+        panes,
+        presets,
+        project: projects
+      })
     )
+
+    // Chromium refused a certificate. `preventDefault` takes the answer away from it and
+    // suspends the load until we give one, which is what lets a prompt be a prompt rather
+    // than an error page with a retry behind it. Every web contents reaches here, and a
+    // pane's guest is the only one that ever loads a page we did not write.
+    app.on('certificate-error', (event, _contents, url, error, certificate, callback) => {
+      event.preventDefault()
+      certificates.verify(
+        {
+          url,
+          error,
+          data: certificate.data,
+          fingerprint: certificate.fingerprint,
+          subjectName: certificate.subject.commonName,
+          issuerName: certificate.issuer.commonName
+        },
+        callback
+      )
+    })
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)
 

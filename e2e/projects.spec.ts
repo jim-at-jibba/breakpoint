@@ -355,7 +355,14 @@ test('state with nothing open says so on both outputs', async () => {
   const text = await runCli(sandbox, ['state'])
 
   expect(json.code).toBe(0)
-  expect(JSON.parse(json.stdout)).toEqual({ revision: 0, cursor: 0, project: null, panes: {} })
+  expect(JSON.parse(json.stdout)).toEqual({
+    revision: 0,
+    cursor: 0,
+    project: null,
+    panes: {},
+    // Certificate trust is the app's, not a project's, so it is there with nothing open.
+    certificates: { trusted: [], waiting: [] }
+  })
   // The cursor is printed with nothing open: that is when the log matters most.
   expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
 })

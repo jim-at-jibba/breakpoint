@@ -1,5 +1,6 @@
 import { isCursorPosition, type EventLog } from '../shared/event-log'
 import { isPaneDimension, PANE_DIMENSION_RANGE } from '../shared/panes'
+import type { CertificateKey } from '../shared/certificates'
 import { isColorScheme, isLayout } from '../shared/project'
 import { failure, success, type RouteRequest, type RouteResponse } from '../shared/protocol'
 import {
@@ -12,6 +13,7 @@ import {
 import { expandUrl } from '../shared/urls'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
+import { CertificateService } from './services/certificate-service'
 import { PaneService } from './services/pane-service'
 import { PresetService } from './services/preset-service'
 import { ProjectService } from './services/project-service'
@@ -143,7 +145,8 @@ function expectPane(raw: unknown, shape: string): { pane: string } | ParamsBad {
   return { pane }
 }
 
-function isRefusal(value: { pane: string } | ParamsBad): value is ParamsBad {
+/** A parser helper returned the refusal rather than the value it was asked for. */
+function isRefusal<T extends object>(value: T | ParamsBad): value is ParamsBad {
   return 'ok' in value
 }
 
@@ -324,6 +327,45 @@ function expectAllowedOrigins(raw: unknown): ParamsOk<'project.setAllowedOrigins
   return { ok: true, params: { origins: origins as string[] } }
 }
 
+const CERTIFICATE_KEY_FIELDS = ['host', 'fingerprint'] as const
+
+/** The host and fingerprint both certificate routes name one decision by ([ADR-0012]). */
+function expectCertificateKey(raw: unknown, shape: string): CertificateKey | ParamsBad {
+  const params = asParams(raw)
+  if (!params) return { ok: false, message: shape }
+  const { host, fingerprint } = params
+  if (typeof host !== 'string' || host.length === 0) {
+    return { ok: false, message: 'host must be a non-empty string' }
+  }
+  if (typeof fingerprint !== 'string' || fingerprint.length === 0) {
+    return { ok: false, message: 'fingerprint must be a non-empty string' }
+  }
+  return { host, fingerprint }
+}
+
+const FORGET_SHAPE = 'this route takes { host, fingerprint }'
+
+function expectCertificateKeyOnly(raw: unknown): ParamsOk<'certificates.forget'> | ParamsBad {
+  const key = expectCertificateKey(raw, FORGET_SHAPE)
+  if (isRefusal(key)) return key
+  const refused = rejectUnknown(raw, CERTIFICATE_KEY_FIELDS, FORGET_SHAPE)
+  if (refused) return refused
+  return { ok: true, params: key }
+}
+
+const DECIDE_SHAPE = 'this route takes { host, fingerprint, trusted }'
+
+function expectCertificateDecision(raw: unknown): ParamsOk<'certificates.decide'> | ParamsBad {
+  const key = expectCertificateKey(raw, DECIDE_SHAPE)
+  if (isRefusal(key)) return key
+  const refused = rejectUnknown(raw, [...CERTIFICATE_KEY_FIELDS, 'trusted'], DECIDE_SHAPE)
+  if (refused) return refused
+
+  const { trusted } = raw as { trusted?: unknown }
+  if (typeof trusted !== 'boolean') return { ok: false, message: 'trusted must be true or false' }
+  return { ok: true, params: { ...key, trusted } }
+}
+
 function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
   const shape = 'this route takes { zoom }: a number of percent, or "fit"'
   const setting = asParams(raw)
@@ -354,6 +396,7 @@ export type Dispatch = (request: RouteRequest, context: RouteContext) => Promise
  */
 export interface Services {
   app: AppService
+  certificates: CertificateService
   log: EventLog
   panes: PaneService
   presets: PresetService
@@ -365,6 +408,18 @@ export function createRouteTable(services: Services): RouteTable {
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })
+    },
+    'certificates.decide': {
+      parseParams: expectCertificateDecision,
+      handle: async (decision) => ({ payload: await services.certificates.decide(decision) })
+    },
+    'certificates.forget': {
+      parseParams: expectCertificateKeyOnly,
+      handle: async (key) => ({ payload: await services.certificates.forget(key) })
+    },
+    'certificates.list': {
+      parseParams: expectNoParams,
+      handle: () => ({ payload: services.certificates.list() })
     },
     'log.read': {
       parseParams: expectSince,
