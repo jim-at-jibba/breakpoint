@@ -71,9 +71,12 @@ export class PaneHost {
     feed: StateFeed
   ) {
     feed.subscribe(({ patch }) => {
-      if (patch.type !== 'pane.changed') return
-      const guest = this.guests.get(patch.pane.id)
-      if (guest) void this.emulate(patch.pane.id, guest)
+      if (patch.type === 'pane.changed') {
+        const guest = this.guests.get(patch.pane.id)
+        if (guest) void this.emulate(patch.pane.id, guest)
+        return
+      }
+      if (patch.type === 'project.url') this.navigate(patch.url)
     })
   }
 
@@ -149,6 +152,22 @@ export class PaneHost {
   /** The pane's guest, for whatever needs to act on the page over its attachment. */
   webContentsFor(pane: string): WebContents | undefined {
     return this.guests.get(pane)
+  }
+
+  /**
+   * Sends every pane of the open project to one URL. Driven from the announcement rather
+   * than from the window's `src`, so a pane that has followed a link inside itself comes
+   * back: the developer navigating is an act, not a value the window happens to differ on.
+   *
+   * Emulation is not reapplied here — `did-navigate` does that for every navigation,
+   * whatever caused it — and a load that fails is already reported by `did-fail-load`,
+   * so the rejection this returns is the same failure told twice.
+   */
+  private navigate(url: string): void {
+    for (const [pane, guest] of this.guests) {
+      if (!this.panes.has(pane) || guest.isDestroyed()) continue
+      void guest.loadURL(url).catch(() => undefined)
+    }
   }
 
   /**

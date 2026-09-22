@@ -97,7 +97,7 @@ async function quietSnapshot(): Promise<StateSnapshot> {
 async function shownProject(page: Page): Promise<{ name: string; url: string }> {
   return {
     name: (await page.getByTestId('project-name').textContent()) ?? '',
-    url: (await page.getByTestId('project-url').textContent()) ?? ''
+    url: await page.getByTestId('project-url').inputValue()
   }
 }
 
@@ -132,7 +132,7 @@ test('breakpoint . in a repo with no project creates one and the window shows it
   expect(projectFiles()).toEqual([projectFileName(shop)])
 
   await expect(page.getByTestId('project-name')).toHaveText('shop')
-  await expect(page.getByTestId('project-url')).toHaveText('http://localhost:3000')
+  await expect(page.getByTestId('project-url')).toHaveValue('http://localhost:3000')
 })
 
 test('breakpoint . with nothing running starts the app and opens the project', async () => {

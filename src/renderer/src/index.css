@@ -107,6 +107,8 @@
   --bp-menu-w: 240px;         /* a popover list: presets, and menus like it */
   --bp-field-w: 64px;         /* a short numeric input, such as a pane size */
   --bp-field-w-inline: 4ch;   /* the same, typed inline in a pane header    */
+  --bp-address-w: 620px;      /* the address bar's widest; it grows to this */
+  --bp-address-min-w: 120px;  /* and no narrower, whatever else is in the toolbar */
 
   /* ---- radii: tighter than Nocturne's 8px; this is a tool -------------- */
   --bp-radius-xs: 2px;      /* badges, chips, inline marks                */

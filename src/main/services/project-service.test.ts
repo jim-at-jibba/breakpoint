@@ -266,3 +266,159 @@ describe('layout and zoom', () => {
     expect(patches).toEqual([])
   })
 })
+
+describe('navigation', () => {
+  it('points the project at a URL, keeps it, logs it and announces it', async () => {
+    const opened = await service.open(shop)
+    const panes = opened.project!.panes.map((pane) => pane.id)
+
+    expect(await service.navigate('http://localhost:3000/checkout', 'window')).toEqual({
+      url: 'http://localhost:3000/checkout',
+      panes
+    })
+    expect(await store.load(shop)).toMatchObject({
+      status: 'loaded',
+      project: { startUrl: 'http://localhost:3000/checkout' }
+    })
+    expect(patches.at(-1)).toEqual({
+      revision: 2,
+      patch: { type: 'project.url', url: 'http://localhost:3000/checkout' }
+    })
+    expect(log.read().entries).toEqual([
+      expect.objectContaining({
+        pane: null,
+        type: 'project.navigated',
+        url: 'http://localhost:3000/checkout'
+      })
+    ])
+  })
+
+  it('announces a navigation to the URL it already holds, because a pane may have wandered', async () => {
+    const opened = await service.open(shop)
+    const saves = vi.spyOn(store, 'save')
+
+    await service.navigate(opened.project!.startUrl, 'window')
+
+    // Nothing to save — the project already said this — but the panes still have to be told.
+    expect(saves).not.toHaveBeenCalled()
+    expect(patches.at(-1)?.patch).toEqual({
+      type: 'project.url',
+      url: opened.project!.startUrl
+    })
+    expect(log.read().entries).toHaveLength(1)
+  })
+
+  it('refuses navigation from the CLI outside the allowed origins, and moves nothing', async () => {
+    const opened = await service.open(shop)
+
+    await expect(service.navigate('https://evil.example.com/', 'cli')).rejects.toMatchObject({
+      code: 'ORIGIN_NOT_ALLOWED',
+      details: { url: 'https://evil.example.com/', allowedOrigins: ['http://localhost:3000'] }
+    })
+    // Only the log moved: the refusal is an observation, and nothing was announced.
+    expect(service.snapshot()).toEqual({ ...opened, cursor: 1 })
+    expect(patches).toHaveLength(1)
+    expect(log.read().entries).toEqual([
+      expect.objectContaining({
+        pane: null,
+        type: 'project.navigationRefused',
+        url: 'https://evil.example.com/'
+      })
+    ])
+  })
+
+  it('never holds the window to the allowed origins, however far outside they are', async () => {
+    await service.open(shop)
+
+    expect(await service.navigate('https://evil.example.com/', 'window')).toMatchObject({
+      url: 'https://evil.example.com/'
+    })
+    expect(service.snapshot().project?.startUrl).toBe('https://evil.example.com/')
+  })
+
+  it('lets the CLI navigate anywhere inside the allowed origins', async () => {
+    await service.open(shop)
+
+    expect(await service.navigate('http://localhost:3000/cart?step=1', 'cli')).toMatchObject({
+      url: 'http://localhost:3000/cart?step=1'
+    })
+  })
+
+  it('refuses navigation with no project open', async () => {
+    await expect(service.navigate('http://localhost:3000/', 'cli')).rejects.toMatchObject({
+      code: 'PROJECT_NOT_OPEN'
+    })
+    expect(patches).toEqual([])
+  })
+})
+
+describe('allowed origins', () => {
+  it('replaces them as origins, keeps them, logs them and announces them', async () => {
+    await service.open(shop)
+
+    expect(
+      await service.setAllowedOrigins(['http://localhost:3000', 'https://staging.example.com/app'])
+    ).toEqual({ origins: ['http://localhost:3000', 'https://staging.example.com'] })
+    expect(await store.load(shop)).toMatchObject({
+      status: 'loaded',
+      project: { allowedOrigins: ['http://localhost:3000', 'https://staging.example.com'] }
+    })
+    expect(patches.at(-1)).toEqual({
+      revision: 2,
+      patch: {
+        type: 'project.allowedOrigins',
+        origins: ['http://localhost:3000', 'https://staging.example.com']
+      }
+    })
+    expect(log.read().entries).toEqual([
+      expect.objectContaining({ pane: null, type: 'project.originsChanged' })
+    ])
+  })
+
+  it('binds the next navigation from the CLI', async () => {
+    await service.open(shop)
+    await service.setAllowedOrigins(['https://staging.example.com'])
+
+    await expect(service.navigate('http://localhost:3000/', 'cli')).rejects.toMatchObject({
+      code: 'ORIGIN_NOT_ALLOWED'
+    })
+    expect(await service.navigate('https://staging.example.com/cart', 'cli')).toMatchObject({
+      url: 'https://staging.example.com/cart'
+    })
+  })
+
+  it('accepts an empty list, which allows automation nothing', async () => {
+    await service.open(shop)
+
+    expect(await service.setAllowedOrigins([])).toEqual({ origins: [] })
+    await expect(service.navigate('http://localhost:3000/', 'cli')).rejects.toMatchObject({
+      code: 'ORIGIN_NOT_ALLOWED'
+    })
+  })
+
+  it('refuses a list with an entry that is not a web URL, and keeps the list it had', async () => {
+    const opened = await service.open(shop)
+
+    await expect(service.setAllowedOrigins(['localhost:3000'])).rejects.toMatchObject({
+      code: 'INVALID_PARAMS'
+    })
+    expect(service.snapshot()).toEqual(opened)
+  })
+
+  it('treats the list it already holds as no change at all', async () => {
+    const opened = await service.open(shop)
+    const saves = vi.spyOn(store, 'save')
+
+    expect(await service.setAllowedOrigins(['http://localhost:3000/'])).toEqual({
+      origins: ['http://localhost:3000']
+    })
+    expect(saves).not.toHaveBeenCalled()
+    expect(service.snapshot()).toEqual(opened)
+  })
+
+  it('refuses an edit with no project open', async () => {
+    await expect(service.setAllowedOrigins([])).rejects.toMatchObject({
+      code: 'PROJECT_NOT_OPEN'
+    })
+  })
+})

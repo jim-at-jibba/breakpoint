@@ -55,7 +55,8 @@ function openProject(path: string): void {
     pendingRepoPaths.push(path)
     return
   }
-  void dispatch({ id: 'launch', route: 'project.open', params: { path } })
+  // A launch is the command line, whichever way the argv reached us.
+  void dispatch({ id: 'launch', route: 'project.open', params: { path } }, { surface: 'cli' })
     .then(({ response }) => {
       if (!response.ok) {
         console.error(`[breakpoint] could not open ${path}: ${response.error.message}`)

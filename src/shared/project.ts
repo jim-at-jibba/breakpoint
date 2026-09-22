@@ -56,7 +56,13 @@ export interface Project {
   name: string
   /** Absolute and canonical. The project's identity ([CONTEXT.md]). */
   repoPath: string
+  /**
+   * Where the project's panes are pointed: the URL it opens at, and the URL a navigation
+   * leaves it on, so it reopens where it was left. Named for where a project starts
+   * because that is what it is until something navigates.
+   */
   startUrl: string
+  /** The origins automation may navigate to. Never constrains the developer ([ADR-0013]). */
   allowedOrigins: string[]
   panes: Pane[]
   layout: Layout

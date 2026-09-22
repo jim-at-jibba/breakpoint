@@ -11,7 +11,8 @@ import {
   type Project,
   type Zoom
 } from '../../shared/project'
-import type { LayoutSetting, LayoutState } from '../../shared/routes'
+import type { LayoutSetting, LayoutState, Navigation, Surface } from '../../shared/routes'
+import { isOriginAllowed, normaliseOrigins, sameOrigins } from '../../shared/urls'
 import type { StateSnapshot } from '../../shared/state'
 import type { PaneCreation } from '../../shared/routes'
 import { RouteError } from '../route-error'
@@ -160,6 +161,21 @@ export class ProjectService {
     return this.enqueue(() => this.replaceZoom(zoom))
   }
 
+  /**
+   * Points every pane at one URL, already expanded by the route. `surface` is who asked:
+   * navigation from the CLI is automation acting on the developer's behalf and is held
+   * to the project's allowed origins; navigation from the window is the developer, and
+   * is never held to anything ([ADR-0013]).
+   */
+  navigate(url: string, surface: Surface): Promise<Navigation> {
+    return this.enqueue(() => this.pointPanes(url, surface))
+  }
+
+  /** Replaces the origins automation may navigate to, and keeps them with the project. */
+  setAllowedOrigins(origins: readonly string[]): Promise<{ origins: string[] }> {
+    return this.enqueue(() => this.replaceAllowedOrigins(origins))
+  }
+
   private async appendPane(creation: PaneCreation): Promise<PaneAddition> {
     const project = this.current
     if (!project) throw new RouteError('PANE_NOT_FOUND', 'no project is open')
@@ -248,6 +264,41 @@ export class ProjectService {
     this.log.append(null, { type: 'project.zoomChanged', zoom })
     this.feed.publish({ type: 'project.zoom', zoom })
     return { zoom }
+  }
+
+  private async pointPanes(url: string, surface: Surface): Promise<Navigation> {
+    const project = this.requireOpen()
+    if (surface === 'cli' && !isOriginAllowed(url, project.allowedOrigins)) {
+      this.log.append(null, { type: 'project.navigationRefused', url })
+      throw new RouteError(
+        'ORIGIN_NOT_ALLOWED',
+        `${url} is outside this project's allowed origins`,
+        { url, allowedOrigins: [...project.allowedOrigins] }
+      )
+    }
+
+    // Saved only when it is different, announced always. The patch is what sends the
+    // panes, and a pane that followed a link is somewhere else even when the project's
+    // URL has not moved.
+    if (project.startUrl !== url) await this.save({ ...project, startUrl: url })
+    this.log.append(null, { type: 'project.navigated', url })
+    this.feed.publish({ type: 'project.url', url })
+    // The pane set is what it was: navigating moves the pages, not the panes.
+    return { url, panes: project.panes.map((pane) => pane.id) }
+  }
+
+  private async replaceAllowedOrigins(given: readonly string[]): Promise<{ origins: string[] }> {
+    const project = this.requireOpen()
+    const origins = normaliseOrigins(given)
+    if (!origins) {
+      throw new RouteError('INVALID_PARAMS', 'every allowed origin must be an http or https URL')
+    }
+    if (sameOrigins(project.allowedOrigins, origins)) return { origins }
+
+    await this.save({ ...project, allowedOrigins: origins })
+    this.log.append(null, { type: 'project.originsChanged', origins })
+    this.feed.publish({ type: 'project.allowedOrigins', origins })
+    return { origins }
   }
 
   private requireOpen(): Project {

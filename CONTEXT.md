@@ -71,6 +71,11 @@ An isolated store of cookies, cache and local storage that panes can share or be
 individually, so one pane can be an admin and another a customer.
 _Avoid_: partition, profile, login, context
 
+**Navigation**:
+Pointing every pane of a project at one URL, from the one address bar or from a terminal.
+Always every pane: a page that moves itself is that pane following a link, not navigation.
+_Avoid_: go, load, visit, redirect
+
 **Allowed origins**:
 The origins a project's panes may be sent to programmatically. Constrains automation; never
 constrains the developer.

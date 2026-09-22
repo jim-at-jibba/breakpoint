@@ -30,13 +30,23 @@ export const ROUTE_NAMES = [
   'panes.rotate',
   'panes.setEmulation',
   'presets.list',
+  'project.navigate',
   'project.open',
+  'project.setAllowedOrigins',
   'project.setLayout',
   'project.setZoom',
   'project.state'
 ] as const
 
 export type RouteName = (typeof ROUTE_NAMES)[number]
+
+/**
+ * Which surface a call arrived from ([CONTEXT.md]). Every route is reachable from every
+ * one of them; the only thing this decides is whether a call is the developer acting or
+ * automation acting on their behalf, which is what the origin allow-list binds
+ * ([ADR-0013]).
+ */
+export type Surface = 'window' | 'cli'
 
 /**
  * Params and payload per route. Both must be JSON-serialisable: no Electron object
@@ -88,10 +98,29 @@ export interface RouteSignatures {
    */
   'presets.list': { params: undefined; payload: { presets: Preset[] } }
   /**
+   * Points every pane of the open project at one URL. `url` is what was typed: a bare
+   * port expands to this machine's dev server, so `3000` is a navigation. Navigating to
+   * the URL the project already holds still moves the panes, because a pane may have
+   * been clicked somewhere else since.
+   *
+   * Refused with `ORIGIN_NOT_ALLOWED` when it arrives from the CLI for an origin the
+   * project does not allow, and from nowhere else ([ADR-0013]).
+   */
+  'project.navigate': { params: { url: string }; payload: Navigation }
+  /**
    * Opens the project for a repo, creating it the first time. `path` is absolute: the
    * caller resolves it against its own working directory, which the app cannot know.
    */
   'project.open': { params: { path: string }; payload: StateSnapshot }
+  /**
+   * Replaces the origins automation may navigate the project to. Each is stored as its
+   * origin, so a value with a path on it is kept as the origin it names. Kept with the
+   * project, so an edit survives a restart.
+   */
+  'project.setAllowedOrigins': {
+    params: { origins: string[] }
+    payload: { origins: string[] }
+  }
   /**
    * Arranges the open project's panes, and names the pane Focus draws at 100%. Naming a
    * pane without changing the layout is how the focused pane is changed. Kept with the
@@ -109,6 +138,14 @@ export interface RouteSignatures {
 }
 
 export type PaneListing = Pane & { status: PaneStatus }
+
+/** Where the project now points, and the panes that were sent there. */
+export interface Navigation {
+  /** The URL as expanded, which is what the panes were given and what is stored. */
+  url: string
+  /** The ids of the panes pointed at it, in the order the project holds them. */
+  panes: string[]
+}
 
 export interface LayoutSetting {
   layout: Layout

@@ -1,4 +1,6 @@
 import { AddPane } from '@renderer/components/add-pane'
+import { AddressBar } from '@renderer/components/address-bar'
+import { AllowedOrigins } from '@renderer/components/allowed-origins'
 import { Canvas } from '@renderer/components/canvas'
 import { CanvasControls } from '@renderer/components/canvas-controls'
 import { Button } from '@renderer/components/ui/button'
@@ -14,8 +16,9 @@ interface ZoomPreview {
 }
 
 // The shell, ahead of the real toolbar. The toolbar strip is the window's drag region
-// and clears the traffic lights; it names the open project and its start URL. The body
-// is the canvas once a project is open, and says what to do when nothing is.
+// and clears the traffic lights; it names the open project and holds the one address bar
+// every pane follows. The body is the canvas once a project is open, and says what to do
+// when nothing is.
 //
 // Quit stays in the toolbar as the renderer's end of the route table: the button causes
 // `app.quit` over typed IPC and a terminal causes the same route over the socket — one
@@ -83,12 +86,10 @@ export default function App(): React.JSX.Element {
             >
               {project.name}
             </span>
-            <span
-              className="font-mono text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]"
-              data-testid="project-url"
-            >
-              {project.startUrl}
-            </span>
+            <AddressBar
+              project={project}
+              onNavigate={(url) => invokeAction('project.navigate', { url })}
+            />
           </>
         ) : (
           <span className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
@@ -126,6 +127,7 @@ export default function App(): React.JSX.Element {
         )}
         {project && (
           <div className="ml-auto flex items-center gap-[var(--bp-space-3)]">
+            <AllowedOrigins project={project} />
             <AddPane />
             <CanvasControls
               project={project}

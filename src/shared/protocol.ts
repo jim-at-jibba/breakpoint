@@ -25,7 +25,12 @@ export const WIRE_ERROR_CODES = [
   /** No preset with that id, which is what an edited presets file makes possible. */
   'PRESET_NOT_FOUND',
   /** The route changes the open project and there is no project open. */
-  'PROJECT_NOT_OPEN'
+  'PROJECT_NOT_OPEN',
+  /**
+   * Navigation asked for by automation, to an origin the project does not allow. Never
+   * raised for the address bar or for a link inside a pane ([ADR-0013]).
+   */
+  'ORIGIN_NOT_ALLOWED'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

@@ -2,7 +2,14 @@ import { isCursorPosition, type EventLog } from '../shared/event-log'
 import { isPaneDimension, PANE_DIMENSION_RANGE } from '../shared/panes'
 import { isColorScheme, isLayout } from '../shared/project'
 import { failure, success, type RouteRequest, type RouteResponse } from '../shared/protocol'
-import { isRouteName, type RouteName, type RouteParams, type RoutePayload } from '../shared/routes'
+import {
+  isRouteName,
+  type RouteName,
+  type RouteParams,
+  type RoutePayload,
+  type Surface
+} from '../shared/routes'
+import { expandUrl } from '../shared/urls'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
 import { PaneService } from './services/pane-service'
@@ -36,9 +43,18 @@ export interface RouteResult<N extends RouteName> {
   afterRespond?: () => void
 }
 
+/**
+ * What the table knows about the call beyond its params: which surface made it. Every
+ * route is reachable from every surface ([ADR-0005]); this is how the one route that
+ * treats automation differently from the developer can tell them apart ([ADR-0013]).
+ */
+export interface RouteContext {
+  surface: Surface
+}
+
 interface RouteEntry<N extends RouteName> {
   parseParams(raw: unknown): ParamsOk<N> | ParamsBad
-  handle(params: RouteParams<N>): RouteResult<N> | Promise<RouteResult<N>>
+  handle(params: RouteParams<N>, context: RouteContext): RouteResult<N> | Promise<RouteResult<N>>
 }
 
 type RouteTable = { [N in RouteName]: RouteEntry<N> }
@@ -273,6 +289,41 @@ function expectLayoutSetting(raw: unknown): ParamsOk<'project.setLayout'> | Para
   return { ok: true, params: { layout, ...(focusedPane !== undefined && { focusedPane }) } }
 }
 
+/**
+ * What was typed, expanded here rather than in each surface, so `3000` reaches every
+ * caller as the same URL — the address bar, `breakpoint open` and a socket call all get
+ * the one rule.
+ */
+function expectNavigation(raw: unknown): ParamsOk<'project.navigate'> | ParamsBad {
+  const shape = 'this route takes { url }'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, ['url'])
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { url } = setting
+  if (typeof url !== 'string') return { ok: false, message: 'url must be a string' }
+  const expanded = expandUrl(url)
+  if (expanded === undefined) {
+    return { ok: false, message: `${url} is not an http or https URL, or a port on this machine` }
+  }
+  return { ok: true, params: { url: expanded } }
+}
+
+function expectAllowedOrigins(raw: unknown): ParamsOk<'project.setAllowedOrigins'> | ParamsBad {
+  const shape = 'this route takes { origins }: an array of http or https origins'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, ['origins'])
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { origins } = setting
+  if (!Array.isArray(origins) || origins.some((origin) => typeof origin !== 'string')) {
+    return { ok: false, message: shape }
+  }
+  return { ok: true, params: { origins: origins as string[] } }
+}
+
 function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
   const shape = 'this route takes { zoom }: a number of percent, or "fit"'
   const setting = asParams(raw)
@@ -294,7 +345,7 @@ export interface DispatchResult {
   afterRespond?: () => void
 }
 
-export type Dispatch = (request: RouteRequest) => Promise<DispatchResult>
+export type Dispatch = (request: RouteRequest, context: RouteContext) => Promise<DispatchResult>
 
 /**
  * Keyed by the route noun. The log is a store rather than one of PRD 8.1's services and
@@ -351,9 +402,21 @@ export function createRouteTable(services: Services): RouteTable {
       parseParams: expectNoParams,
       handle: async () => ({ payload: await services.presets.list() })
     },
+    'project.navigate': {
+      parseParams: expectNavigation,
+      handle: async ({ url }, { surface }) => ({
+        payload: await services.project.navigate(url, surface)
+      })
+    },
     'project.open': {
       parseParams: expectPath,
       handle: async ({ path }) => ({ payload: await services.project.open(path) })
+    },
+    'project.setAllowedOrigins': {
+      parseParams: expectAllowedOrigins,
+      handle: async ({ origins }) => ({
+        payload: await services.project.setAllowedOrigins(origins)
+      })
     },
     'project.setLayout': {
       parseParams: expectLayoutSetting,
@@ -371,7 +434,10 @@ export function createRouteTable(services: Services): RouteTable {
 }
 
 export function createDispatch(table: RouteTable): Dispatch {
-  return async function dispatch(request: RouteRequest): Promise<DispatchResult> {
+  return async function dispatch(
+    request: RouteRequest,
+    context: RouteContext
+  ): Promise<DispatchResult> {
     const { id, route } = request
 
     if (!isRouteName(route)) {
@@ -388,7 +454,7 @@ export function createDispatch(table: RouteTable): Dispatch {
     }
 
     try {
-      const result = await entry.handle(params.params)
+      const result = await entry.handle(params.params, context)
       return { response: success(id, result.payload), afterRespond: result.afterRespond }
     } catch (error) {
       if (error instanceof RouteError) {

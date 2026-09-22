@@ -42,6 +42,14 @@ export type StatePatch =
   | { type: 'project.layout'; layout: Layout; focusedPane: string | null }
   /** The zoom control's value, which may be Fit ([ADR-0009]). */
   | { type: 'project.zoom'; zoom: Zoom }
+  /**
+   * Where the project's panes are pointed. Published on every navigation, including one
+   * to the URL the project already held: it is what tells a pane that wandered off on a
+   * link to come back, so it is an announcement of an act and not of a difference.
+   */
+  | { type: 'project.url'; url: string }
+  /** The origins automation may navigate to ([ADR-0013]). */
+  | { type: 'project.allowedOrigins'; origins: string[] }
 
 export interface RevisionedPatch {
   revision: number
@@ -103,6 +111,16 @@ export function applyPatch(
       const { project } = before
       if (!project) return { ...before, revision }
       return { ...before, revision, project: { ...project, zoom: patch.zoom } }
+    }
+    case 'project.url': {
+      const { project } = before
+      if (!project) return { ...before, revision }
+      return { ...before, revision, project: { ...project, startUrl: patch.url } }
+    }
+    case 'project.allowedOrigins': {
+      const { project } = before
+      if (!project) return { ...before, revision }
+      return { ...before, revision, project: { ...project, allowedOrigins: patch.origins } }
     }
   }
 }
