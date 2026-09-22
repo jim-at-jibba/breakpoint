@@ -14,7 +14,13 @@ export interface LaunchMode {
   defaultApp: boolean
 }
 
-/** What the CLI passes the app it starts for `--background`. */
+/**
+ * What the CLI passes the app it starts for `--background`. Spelled the same as the flag
+ * the developer types, so a `ps` line reads as what was asked for, but declared here
+ * rather than shared with it: this is the app's own launch protocol, and a collision with
+ * a Chromium switch is a reason to rename one of them without renaming the other. The two
+ * spellings are pinned together by a test.
+ */
 export const BACKGROUND_SWITCH = '--background'
 
 const PATH_SWITCHES: ReadonlySet<string> = new Set([

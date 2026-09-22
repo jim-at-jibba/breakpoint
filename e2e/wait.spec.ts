@@ -10,7 +10,7 @@ import {
   writeProjectFile,
   type Project
 } from '../src/shared/project'
-import { snapshotReadiness, type StateSnapshot } from '../src/shared/state'
+import { snapshotReadiness as readiness, type StateSnapshot } from '../src/shared/state'
 import { startFixture, type Fixture } from './fixture'
 import {
   closeApp,
@@ -48,6 +48,16 @@ function makeRepo(name: string, startUrl: string): Project {
     JSON.stringify(writeProjectFile(project))
   )
   return project
+}
+
+async function state(): Promise<StateSnapshot> {
+  const run = await runCli(sandbox, ['state', '--json'])
+  expect(run.code).toBe(0)
+  return JSON.parse(run.stdout) as StateSnapshot
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /** A port that was just free and is now closed: nothing will answer on it. */
@@ -88,7 +98,7 @@ test('--wait blocks until every pane has loaded and passed its geometry check', 
   // before any pane has a page — the race `--wait` exists to remove.
   const eager = await runCli(sandbox, ['.', '--json'], shop.repoPath)
   expect(eager.code).toBe(0)
-  expect(snapshotReadiness(JSON.parse(eager.stdout) as StateSnapshot).ready).toBe(false)
+  expect(readiness(JSON.parse(eager.stdout) as StateSnapshot).ready).toBe(false)
 
   const run = await runCli(sandbox, ['.', '--wait', '--json'], shop.repoPath)
 
@@ -97,7 +107,7 @@ test('--wait blocks until every pane has loaded and passed its geometry check', 
   const snapshot = JSON.parse(run.stdout) as StateSnapshot
   expect(run.stdout.trimEnd().split('\n')).toHaveLength(1)
   expect(run.stderr).toBe('')
-  expect(snapshotReadiness(snapshot)).toEqual({ ready: true })
+  expect(readiness(snapshot)).toEqual({ ready: true })
   for (const pane of shop.panes) {
     expect(snapshot.panes[pane.id]).toMatchObject({ load: 'loaded', geometry: 'ok' })
   }
@@ -192,17 +202,65 @@ test('--wait is a usage error on a command with no panes to wait for', async () 
   expect(isRunning(sandbox)).toBe(false)
 })
 
+test('--wait does not resolve for a pane that loaded but is the wrong size', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop', `${fixture.a}/`)
+  const [mobile] = shop.panes
+  await runCli(sandbox, ['.', '--wait'], shop.repoPath)
+
+  // The Phase 0 bug, reproduced on purpose: full width, 150px tall. The page is loaded
+  // and stays loaded; only the size the pane is drawn at is wrong.
+  const setHeight = (height: string): Promise<void> =>
+    page
+      .locator(`webview[data-pane="${mobile.id}"]`)
+      .evaluate((element: HTMLElement, value) => void (element.style.height = value), height)
+  await setHeight('150px')
+  await expect.poll(async () => (await state()).panes[mobile.id].geometry).toBe('mismatch')
+
+  const waiting = runCli(sandbox, ['state', '--wait', '--json'])
+  // Long enough that a command resolving on `load` alone would have printed by now.
+  const pending = Symbol('still waiting')
+  expect(await Promise.race([waiting, delay(3_000).then(() => pending)])).toBe(pending)
+
+  await setHeight(`${mobile.height}px`)
+  const run = await waiting
+
+  expect(run.code).toBe(0)
+  expect(readiness(JSON.parse(run.stdout) as StateSnapshot)).toEqual({ ready: true })
+})
+
 test('handing a repo to a running app brings the window forward, and --background does not', async () => {
   launched = await launchApp(sandbox)
   const shop = makeRepo('shop', `${fixture.a}/`)
 
-  const forward = await runCli(sandbox, ['.', '--verbose'], shop.repoPath)
-  expect(forward.code).toBe(0)
-  expect(forward.stderr).toContain('calling app.focus')
+  // Read off the window itself rather than from anything the command reports. A
+  // minimized window is the state that makes "brings it forward" visible from outside:
+  // whether it is the key window depends on what else is on the desktop, and whether it
+  // is still minimized does not.
+  const window = (method: 'minimize' | 'isMinimized'): Promise<boolean> =>
+    launched!.app.evaluate(
+      ({ BrowserWindow }, call) => BrowserWindow.getAllWindows()[0]?.[call]() ?? false,
+      method
+    )
 
-  const quiet = await runCli(sandbox, ['.', '--background', '--verbose'], shop.repoPath)
+  // Opened and minimized before either hand-off, so what is measured is the hand-off
+  // alone. Creating a project's guests for the first time raises the window by itself,
+  // which is Electron's doing and not something this flag reaches — the `--background`
+  // this phase promises is best effort, and that is one of the places it leaks.
+  await runCli(sandbox, ['.', '--wait'], shop.repoPath)
+  await window('minimize')
+  await expect.poll(() => window('isMinimized')).toBe(true)
+
+  const quiet = await runCli(sandbox, ['.', '--background'], shop.repoPath)
   expect(quiet.code).toBe(0)
-  expect(quiet.stderr).not.toContain('app.focus')
+  // Given time to come forward if it were going to: an absence needs a wait, not a poll.
+  await delay(1_000)
+  expect(await window('isMinimized')).toBe(true)
+
+  const forward = await runCli(sandbox, ['.'], shop.repoPath)
+  expect(forward.code).toBe(0)
+  await expect.poll(() => window('isMinimized')).toBe(false)
 })
 
 test('--background starts the app when nothing is running, and the project opens', async () => {
@@ -214,7 +272,7 @@ test('--background starts the app when nothing is running, and the project opens
   expect(isRunning(sandbox)).toBe(true)
   const snapshot = JSON.parse(run.stdout) as StateSnapshot
   expect(snapshot.project?.repoPath).toBe(shop.repoPath)
-  expect(snapshotReadiness(snapshot)).toEqual({ ready: true })
+  expect(readiness(snapshot)).toEqual({ ready: true })
 
   await runCli(sandbox, ['quit'])
   await waitFor(() => !isRunning(sandbox), 'the app the CLI started to exit')

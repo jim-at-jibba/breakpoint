@@ -190,6 +190,20 @@ it('shows the window without taking focus when the CLI launched it in the backgr
   expect(mocks.window.show).not.toHaveBeenCalled()
 })
 
+it('spends the background launch on its own window, so the next one still takes focus', async () => {
+  launchedAs('--background', '/repos/shop')
+
+  await import('./index')
+  await vi.waitFor(() => expect(mocks.createWindow).toHaveBeenCalledOnce())
+  mocks.windowListeners.get('ready-to-show')?.()
+  // A window opened later — from the Dock, or by a hand-off that found none — is a
+  // person asking for Breakpoint, whatever the terminal asked for once.
+  mocks.windowListeners.get('ready-to-show')?.()
+
+  expect(mocks.window.showInactive).toHaveBeenCalledOnce()
+  expect(mocks.window.show).toHaveBeenCalledOnce()
+})
+
 it('shows the window the ordinary way for a launch that did not ask for the background', async () => {
   launchedAs('/repos/shop')
 

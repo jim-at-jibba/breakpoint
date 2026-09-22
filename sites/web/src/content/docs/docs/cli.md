@@ -119,8 +119,9 @@ The payload names where the panes were sent and which ones were sent there:
 ```
 
 The command returns as soon as the panes have been pointed; it does not wait for them to
-finish loading unless you pass [`--wait`](#waiting-for-the-panes). Navigating to the URL the project already holds still moves the panes, because a pane may
-have followed a link inside itself since.
+finish loading unless you pass [`--wait`](#waiting-for-the-panes). Navigating to the URL
+the project already holds still moves the panes, because a pane may have followed a link
+inside itself since.
 
 Where the project points is kept with the project, so it reopens where you left it.
 
@@ -275,14 +276,14 @@ every pane has finished loading where it was sent **and** passed its host-side g
 check, and only then prints the payload — so the next command is not racing the app.
 
 ```sh
-breakpoint . --wait --json              # open, wait, then print the settled snapshot
+breakpoint . --wait --json              # open, wait, then print the ready snapshot
 breakpoint open 3000 --wait             # navigate, and return once the panes are there
 breakpoint state --wait --json | jq .   # wait for panes something else set loading
 ```
 
 Nothing weaker counts. A pane that has loaded but is not drawn at the size it claims is
-not ready: a pane that fails its geometry check is one our model of is wrong, and
-reporting it as ready is the thing the check exists to prevent.
+not ready: a pane that fails its geometry check is one our model of it is wrong about,
+and reporting it as ready is the thing the check exists to prevent.
 
 Degradation is **not** part of it. A pane whose attachment or an emulation override was
 refused still renders the page, so it is ready — and the payload still says it is
@@ -321,9 +322,14 @@ app or handed the repo to a running one. `--background` skips that:
 breakpoint . --background --wait --json
 ```
 
-It is best effort on macOS in this phase. When the command starts the app, the window is
-drawn without being made key; when it hands off to a running app, the window is simply
-left where it is. Nothing else takes focus — `state`, `logs` and `open` never did — so
+It is best effort on macOS in this phase, and there is one place it leaks: opening a
+project whose panes do not exist yet creates them, and creating them raises the window.
+That is Chromium's doing rather than the command's, so the first `--background` open of
+a session may still come forward. Every open after it does not.
+
+Otherwise: when the command starts the app, the window is drawn without being made key;
+when it hands off to a running app, the window is left exactly where it was, minimized
+included. Nothing else takes focus — `state`, `logs` and `open` never did — so
 `--background` changes nothing for them, though every command accepts it because every
 command may be the one that starts the app.
 
@@ -396,7 +402,7 @@ first eight come back from the app; the rest are raised by the command itself.
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
-| `TIMEOUT` | `1` | The app accepted the connection but did not answer in time, or `--wait` gave up before the panes settled. The message names what it was still waiting on |
+| `TIMEOUT` | `1` | The app accepted the connection but did not answer in time, or `--wait` gave up before the panes were ready. The message names what it was still waiting on |
 | `TRANSPORT_ERROR` | `1` | The connection failed, or the reply could not be read |
 
 ## Routes

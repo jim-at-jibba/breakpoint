@@ -132,7 +132,25 @@ export interface PaneStatus {
  * for a capability that will never arrive would be waiting forever.
  */
 export function isPaneReady(status: PaneStatus): boolean {
-  return status.load === 'loaded' && status.geometry === 'ok'
+  return whyPaneIsNotReady(status) === null
+}
+
+/**
+ * Why a pane is not ready yet, as a phrase to put a pane's name in front of, or null if
+ * it is. The predicate is this function, so a condition added here is a condition
+ * `--wait` waits for and a reason its timeout gives — they cannot fall out of step, and
+ * a wrong reason in the one message the timeout exists to make trustworthy is the bug
+ * two copies of this would eventually produce.
+ *
+ * Load first: a pane that has not loaded has usually not been drawn at its final size
+ * either, and "still loading" is the more useful of the two things to be told.
+ */
+export function whyPaneIsNotReady(status: PaneStatus): string | null {
+  if (status.load === 'pending') return 'is still loading'
+  if (status.load === 'failed') return 'could not load its page'
+  if (status.geometry === 'unchecked') return 'has not been measured'
+  if (status.geometry === 'mismatch') return 'is not drawn at its declared size'
+  return null
 }
 
 /** One reason as a person reads it, the same in the window and on a terminal. */
@@ -179,6 +197,9 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
     case 'attached':
       return { ...status, attachment: 'attached', degraded: without(status, 'attachment') }
     case 'loading':
+      // Geometry deliberately survives: a load does not change the size the pane is
+      // drawn at, and nothing would re-measure it if this threw the last check away —
+      // the window reports on resize and on attach, so `--wait` would hang for ever.
       return { ...status, load: 'pending' }
     case 'loaded':
       return { ...status, load: 'loaded' }

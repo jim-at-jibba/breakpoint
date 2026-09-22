@@ -16,7 +16,7 @@ import { EventLog } from '../shared/event-log'
 import { backgroundFromArguments, repoPathFromArguments } from './launch-arguments'
 import { HOST_WINDOW_PREFERENCES, PaneHost } from './pane-host'
 import { createDispatch, createRouteTable, type Dispatch } from './routes'
-import { AppService, focusWindow } from './services/app-service'
+import { AppService } from './services/app-service'
 import { PaneService } from './services/pane-service'
 import { PresetService } from './services/preset-service'
 import { PresetStore } from './services/preset-store'
@@ -43,17 +43,23 @@ let dispatch: Dispatch | undefined
 let paneHost: PaneHost | undefined
 let launchReady = false
 const pendingRepoPaths: string[] = []
+/**
+ * Constructed before readiness because the hand-off listeners registered below reach it:
+ * it holds no state and depends on nothing, so there is nothing to wait for.
+ */
+const appService = new AppService()
 
 function launchMode(): { packaged: boolean; defaultApp: boolean } {
   return { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
 }
 
 /**
- * Whether this launch was asked not to take focus, which only the CLI's `--background`
- * asks for. Read once, from the argv that started this process: a later hand-off is a
- * command of its own and says for itself whether it activates the window.
+ * Whether the window this launch is about to open should be drawn without taking focus,
+ * which only the CLI's `--background` asks for. Spent on the first window: a window
+ * opened later — from the Dock, or by a hand-off that found none — is a person asking
+ * for Breakpoint, and a switch the terminal threw once is not an answer to that.
  */
-const launchedInBackground = backgroundFromArguments(process.argv, launchMode())
+let backgroundLaunchPending = backgroundFromArguments(process.argv, launchMode())
 
 function openFromArguments(argv: readonly string[], workingDirectory: string): void {
   const path = repoPathFromArguments(argv, launchMode(), workingDirectory)
@@ -104,8 +110,12 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     // Best effort on macOS in this phase: the window is drawn without being made key, so
     // an agent starting the app does not take the developer's typing. Hardening is Phase 6.
-    if (launchedInBackground) mainWindow.showInactive()
-    else mainWindow.show()
+    if (backgroundLaunchPending) {
+      backgroundLaunchPending = false
+      mainWindow.showInactive()
+    } else {
+      mainWindow.show()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -123,7 +133,7 @@ function createWindow(): void {
 }
 
 function focusExistingWindow(): void {
-  if (!focusWindow()) createWindow()
+  if (!appService.focus().focused) createWindow()
 }
 
 if (!hasSingleInstanceLock) {
@@ -178,7 +188,7 @@ if (!hasSingleInstanceLock) {
     paneHost = new PaneHost(panes, feed)
     paneHost.install(app)
     dispatch = createDispatch(
-      createRouteTable({ app: new AppService(), log, panes, presets, project: projects })
+      createRouteTable({ app: appService, log, panes, presets, project: projects })
     )
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)

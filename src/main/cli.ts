@@ -87,7 +87,7 @@ function createDiagnose(options: CliOptions): (message: string) => void {
   }
 }
 
-/** One route call, with the app started first if nothing is listening yet. */
+/** One route call over the app's socket. Starting the app if none answers is `run`'s. */
 type Call = (route: string, params?: unknown) => Promise<RouteResponse>
 
 async function run(

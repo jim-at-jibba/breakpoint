@@ -246,8 +246,9 @@ export class PaneHost {
     let failed = false
     guest.on('did-start-loading', () => {
       failed = false
-      // What the pane finished loading before is not where it is being sent now, which
-      // is what stops `--wait` resolving on the page a navigation has already left.
+      // Every load, not only a navigation: a pane following a link inside itself is
+      // loading too, and what it finished loading before is not what it is on now. This
+      // is what stops `--wait` resolving on a page the pane has already left.
       if (current()) this.panes.loading(pane)
     })
     guest.on('did-finish-load', () => {

@@ -41,7 +41,7 @@ interface CommandSpec<N extends RouteName> {
    */
   flags?: readonly CliValueFlagSpec[]
   /**
-   * Whether `--wait` is a flag of this command, and what it prints once the panes have
+   * Whether `--wait` is a flag of this command, and what it prints once the panes are
    * ready. `snapshot` replaces the route's payload with the snapshot the wait ended
    * on, because that payload *is* a snapshot and the one taken before the panes loaded
    * would be a lie. `payload` keeps what the route answered. Absent, `--wait` is a usage
@@ -189,7 +189,7 @@ function renderSnapshot(data: unknown, verb: string): string {
     let line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} ${formatDpr(pane.dpr)}`
     // Where the pane's page got to, which is half of what `--wait` waits for. A pane
     // that has arrived says nothing, so the ones that have not are what stands out.
-    line += describeLoad(status?.load ?? 'pending')
+    line += LOAD_DESCRIPTIONS[status?.load ?? 'pending']
     // The same two things the pane's header says, for the surface that has no header.
     if (status?.errors) line += `  errors: ${status.errors}`
     const degraded = status?.degraded ?? []
@@ -207,14 +207,11 @@ function renderSnapshot(data: unknown, verb: string): string {
   ].join('\n')
 }
 
+/** What a pane's line says about its page. A pane that has arrived says nothing. */
 const LOAD_DESCRIPTIONS: Readonly<Record<LoadState, string>> = {
   pending: '  loading',
   loaded: '',
   failed: '  load failed'
-}
-
-function describeLoad(load: LoadState): string {
-  return LOAD_DESCRIPTIONS[load]
 }
 
 /** `Fit` where the project says Fit: what Fit draws to is the window's, and not stored. */

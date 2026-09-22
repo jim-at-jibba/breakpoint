@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { backgroundFromArguments, repoPathFromArguments } from './launch-arguments'
+import { CLI_FLAGS } from '../shared/cli-surface'
+import {
+  backgroundFromArguments,
+  BACKGROUND_SWITCH,
+  repoPathFromArguments
+} from './launch-arguments'
 
 const electron = '/app/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron'
 const entry = '/app/out/main/index.js'
@@ -96,6 +101,11 @@ describe('repoPathFromArguments', () => {
 describe('backgroundFromArguments', () => {
   const development = { packaged: false, defaultApp: true }
   const packaged = { packaged: true, defaultApp: false }
+
+  it('is spelled as the flag the developer types, so a process list reads as what was asked for', () => {
+    const flag = CLI_FLAGS.find((candidate) => candidate.sets === 'background')
+    expect(BACKGROUND_SWITCH).toBe(flag?.name)
+  })
 
   it('is off for an ordinary launch', () => {
     expect(backgroundFromArguments([electron, entry, '/repos/shop'], development)).toBe(false)

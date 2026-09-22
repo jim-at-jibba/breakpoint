@@ -1,4 +1,4 @@
-import { isPaneReady, reconcilePaneStatuses, type PaneStatus } from './panes'
+import { reconcilePaneStatuses, whyPaneIsNotReady, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
 
 /**
@@ -174,12 +174,10 @@ export function snapshotReadiness(snapshot: StateSnapshot): Readiness {
   return { ready: false, reason: outstanding.join('; ') }
 }
 
-/** Why one pane is not ready yet, or null if it is. Load first: geometry follows it. */
+/** One pane's reason with its name on the front, or null if that pane is ready. */
 function describeOutstanding(name: string, status: PaneStatus | undefined): string | null {
+  // A pane the snapshot has no status for is a desync, not a pane in some state.
   if (!status) return `${name} has not reported yet`
-  if (isPaneReady(status)) return null
-  if (status.load === 'pending') return `${name} is still loading`
-  if (status.load === 'failed') return `${name} could not load its page`
-  if (status.geometry === 'unchecked') return `${name} has not been measured`
-  return `${name} is not drawn at its declared size`
+  const why = whyPaneIsNotReady(status)
+  return why === null ? null : `${name} ${why}`
 }

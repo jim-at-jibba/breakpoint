@@ -6,10 +6,11 @@ import {
   EXIT_CODES,
   helpText,
   parseArgv,
+  PATH_COMMAND,
   type CliCommandSpec,
+  type CliOptions,
   type ParsedValue
 } from './cli-surface'
-import type { CliOptions } from './cli-surface'
 import type { LogRead, ReadParams } from './event-log'
 import { foldPaneStatus } from './panes'
 import { createProject } from './project'
@@ -579,7 +580,9 @@ describe('waiting for the panes to be ready', () => {
 describe('starting or handing off in the background', () => {
   it('takes --background on any command: every one of them may start the app', () => {
     for (const command of CLI_COMMANDS) {
-      const argv = command.argument ? [command.name, '3000'] : [command.name]
+      // A path stands in for the one command that has no name of its own.
+      const name = command === PATH_COMMAND ? '.' : command.name
+      const argv = command.argument ? [name, '3000'] : [name]
       const result = parseArgv([...argv, '--background'], '/repos/shop')
       expect(result.kind, command.name).toBe('command')
       expect(result.kind === 'command' && result.options.background).toBe(true)
