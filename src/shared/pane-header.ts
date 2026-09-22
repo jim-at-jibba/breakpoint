@@ -1,4 +1,5 @@
-import type { CapabilityState, EmulationState } from './panes'
+import type { AppTheme } from './pane-palette'
+import type { CapabilityState, PaneStatus } from './panes'
 import type { ColorScheme } from './project'
 
 /**
@@ -17,9 +18,8 @@ import type { ColorScheme } from './project'
  * prototype rather than from arithmetic here.
  */
 
-export interface PaneHeaderTier {
-  /** The narrowest pane width in screen pixels this tier draws at. */
-  readonly minWidth: number
+/** What a header still says. Every field is the pane's, and every one can be dropped. */
+export interface PaneHeaderContent {
   readonly name: boolean
   /** The declared width. The last thing to go, because it is what names a pane. */
   readonly width: boolean
@@ -28,17 +28,23 @@ export interface PaneHeaderTier {
   readonly scheme: boolean
 }
 
+export interface PaneHeaderTier {
+  /** The narrowest pane width in screen pixels this tier draws at. */
+  readonly minWidth: number
+  readonly shows: PaneHeaderContent
+}
+
 export const PANE_HEADER_TIERS: readonly PaneHeaderTier[] = [
-  { minWidth: 220, name: true, width: true, height: true, dpr: true, scheme: true },
-  { minWidth: 148, name: true, width: true, height: true, dpr: false, scheme: true },
-  { minWidth: 104, name: false, width: true, height: true, dpr: false, scheme: true },
-  { minWidth: 72, name: false, width: true, height: false, dpr: false, scheme: true },
-  { minWidth: 56, name: false, width: true, height: false, dpr: false, scheme: false },
-  { minWidth: 0, name: false, width: false, height: false, dpr: false, scheme: false }
+  { minWidth: 220, shows: { name: true, width: true, height: true, dpr: true, scheme: true } },
+  { minWidth: 148, shows: { name: true, width: true, height: true, dpr: false, scheme: true } },
+  { minWidth: 104, shows: { name: false, width: true, height: true, dpr: false, scheme: true } },
+  { minWidth: 72, shows: { name: false, width: true, height: false, dpr: false, scheme: true } },
+  { minWidth: 56, shows: { name: false, width: true, height: false, dpr: false, scheme: false } },
+  { minWidth: 0, shows: { name: false, width: false, height: false, dpr: false, scheme: false } }
 ]
 
-/** The tier that claims nothing: the colour tab and the error count alone. */
-const NARROWEST = PANE_HEADER_TIERS[PANE_HEADER_TIERS.length - 1]
+/** The tier that says nothing: the colour tab and the error count alone. */
+const SILENT = PANE_HEADER_TIERS[PANE_HEADER_TIERS.length - 1]
 
 /**
  * What the header says at this drawn width. A width that cannot be read as one — not a
@@ -46,20 +52,28 @@ const NARROWEST = PANE_HEADER_TIERS[PANE_HEADER_TIERS.length - 1]
  * tier: a header that cannot be measured claims nothing.
  */
 export function paneHeaderTier(width: number): PaneHeaderTier {
-  if (!Number.isFinite(width)) return NARROWEST
-  return PANE_HEADER_TIERS.find((tier) => width >= tier.minWidth) ?? NARROWEST
+  if (!Number.isFinite(width)) return SILENT
+  return PANE_HEADER_TIERS.find((tier) => width >= tier.minWidth) ?? SILENT
 }
 
 /**
- * Rotate and remove are not on the ladder — the ladder is what a header *says*, and
- * these are things it does. They occupy `--bp-pane-tab-h` each plus the gaps between
- * them, so they are shown only above the widest tier's threshold plus that much again:
- * below it they would take the width the tier's own content was measured to need.
+ * Whether the tier has room for anything at all. What is left at that point — the colour
+ * tab and the error count — is not text and does not need room made for it, so anything
+ * else the header would draw is gated on this rather than on one of the fields.
  */
-export const PANE_ACTIONS_MIN_WIDTH = PANE_HEADER_TIERS[0].minWidth + 32
+export function paneHeaderIsSilent(tier: PaneHeaderTier): boolean {
+  return tier === SILENT
+}
 
-export function paneHeaderHasActions(width: number): boolean {
-  return Number.isFinite(width) && width >= PANE_ACTIONS_MIN_WIDTH
+/**
+ * Rotate and remove are not on the ladder — the ladder is what a header *says*, and these
+ * are things it does. They come off above the widest tier's threshold, because below that
+ * they would take the width that tier's own content was measured to need. How much width
+ * they take is measured off the tokens they are drawn from, not written down here.
+ */
+export function paneHeaderHasActions(width: number, actionsWidth: number): boolean {
+  if (!Number.isFinite(width) || !Number.isFinite(actionsWidth)) return false
+  return width >= PANE_HEADER_TIERS[0].minWidth + actionsWidth
 }
 
 /**
@@ -77,22 +91,23 @@ export function schemeGlyph(scheme: ColorScheme): string {
   }
 }
 
+/**
+ * Whether a pane is rendering the page in something other than the app's own appearance.
+ * The colour tab carries this once the tier has taken the glyph away, and `system` is the
+ * pane following what the app already follows, so it never differs ([CONTEXT.md]).
+ */
+export function schemeDiffersFromApp(scheme: ColorScheme, theme: AppTheme): boolean {
+  return scheme !== 'system' && scheme !== theme
+}
+
 /** The pane's device pixel ratio as the header writes it. */
 export function formatDpr(dpr: number): string {
   return `@${dpr}x`
 }
 
-/**
- * A header reports what is emulated, not what was asked for, so every field it draws is
- * drawn against the state of the capability that would make it true. A field whose
- * capability is not applied is marked rather than hidden: a pane claiming 390px while
- * the override was refused is the failure mode the whole degraded concept exists for.
- */
-export function fieldState(
-  emulation: EmulationState | undefined,
-  field: HeaderField
-): CapabilityState {
-  return emulation?.[FIELD_CAPABILITY[field]] ?? 'pending'
+/** What a pane's error count reads as, in a header or on a terminal. */
+export function describeErrors(errors: number): string {
+  return `${errors} ${errors === 1 ? 'error' : 'errors'}`
 }
 
 export type HeaderField = 'viewport' | 'dpr' | 'scheme'
@@ -103,6 +118,26 @@ const FIELD_CAPABILITY = {
   dpr: 'viewport',
   scheme: 'colorScheme'
 } as const
+
+/**
+ * A header reports what is emulated, not what was asked for, so every field it draws is
+ * drawn against the state of the thing that would make it true. A field whose capability
+ * is not applied is marked rather than hidden: a pane claiming 390px while the override
+ * was refused is the failure mode the whole degraded concept exists for.
+ *
+ * The viewport answers to the host-side geometry check as well as to CDP. A pane drawn at
+ * a size other than it declares is not emulating the viewport it claims however happily
+ * the override was accepted — that is the whole point of checking it host-side
+ * ([ADR-0004]).
+ */
+export function paneFieldState(
+  status: PaneStatus | undefined,
+  field: HeaderField
+): CapabilityState {
+  const capability = FIELD_CAPABILITY[field]
+  if (capability === 'viewport' && status?.geometry === 'mismatch') return 'failed'
+  return status?.emulation[capability] ?? 'pending'
+}
 
 /** What a field's state means to a person, for the title a marked field carries. */
 export function describeFieldState(field: HeaderField, state: CapabilityState): string {

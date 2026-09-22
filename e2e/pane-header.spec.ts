@@ -270,6 +270,70 @@ test('a degraded pane is marked and says why, and its header reads the emulation
   await expect(header.getByTestId('pane-degraded')).toHaveAttribute('title', /colorScheme/)
 })
 
+test('a pane drawn at a size other than it declares reads its viewport as not emulated', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await settled(shop)
+
+  const [mobile] = shop.panes
+  const header = headerOf(page, mobile.id)
+  await expect(header.locator('[data-emulation]').first()).toHaveAttribute(
+    'data-emulation',
+    'applied'
+  )
+
+  // Shortened from outside, exactly as the Phase 0 collapse did it: CDP still reports the
+  // declared viewport, and only the host-side check knows better ([ADR-0004]).
+  await page.locator(`webview[data-pane="${mobile.id}"]`).evaluate((element) => {
+    ;(element as HTMLElement).style.height = '150px'
+  })
+
+  await expect.poll(async () => (await state()).panes[mobile.id]?.geometry).toBe('mismatch')
+  // The override is still applied, and the header still says the viewport is not in force.
+  expect((await state()).panes[mobile.id]?.emulation.viewport).toBe('applied')
+  await expect(header.locator('[data-emulation]').first()).toHaveAttribute(
+    'data-emulation',
+    'failed'
+  )
+})
+
+test('a pane too narrow for the scheme glyph carries the scheme in its colour tab', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await settled(shop)
+
+  const [mobile, tablet] = shop.panes
+  // The app's own chrome is dark, so a light pane is the one rendering the page in
+  // something other than the app's appearance.
+  await sendRaw(
+    sandbox.socketPath,
+    requestLine('panes.setEmulation', { pane: mobile.id, colorScheme: 'light' })
+  )
+  await expect
+    .poll(
+      async () => (await state()).project?.panes.find(({ id }) => id === mobile.id)?.colorScheme
+    )
+    .toBe('light')
+
+  // Wide enough for the glyph: the tab is the pane's colour and nothing else.
+  await expect(headerOf(page, mobile.id).getByTestId('pane-tab')).not.toHaveAttribute('data-split')
+
+  await resize(mobile.id, 40)
+  await resize(tablet.id, 40)
+  await expect.poll(() => tierOf(page, mobile.id)).toBe(PANE_HEADER_TIERS.length - 1)
+
+  // The glyph has gone, so the tab splits — but only for the pane that differs.
+  await expect(headerOf(page, mobile.id).getByTestId('pane-tab')).toHaveAttribute(
+    'data-split',
+    'true'
+  )
+  await expect(headerOf(page, tablet.id).getByTestId('pane-tab')).not.toHaveAttribute('data-split')
+})
+
 test('a pane whose page will not load counts the error, and keeps counting it at every tier', async () => {
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()

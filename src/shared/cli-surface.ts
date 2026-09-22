@@ -1,6 +1,7 @@
 import { resolve } from 'node:path'
 import { focusedPaneOf } from './canvas'
 import { isCursorPosition, type Entry, type LogRead } from './event-log'
+import { formatDpr } from './pane-header'
 import { describeDegradation } from './panes'
 import { looksLikePath } from './paths'
 import type { Project, Zoom } from './project'
@@ -118,7 +119,7 @@ function renderSnapshot(data: unknown, verb: string): string {
   }
   const panes = project.panes.map((pane) => {
     const status = snapshot?.panes?.[pane.id]
-    let line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} @${pane.dpr}x`
+    let line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} ${formatDpr(pane.dpr)}`
     // The same two things the pane's header says, for the surface that has no header.
     if (status?.errors) line += `  errors: ${status.errors}`
     const degraded = status?.degraded ?? []

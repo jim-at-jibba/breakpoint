@@ -1,4 +1,10 @@
-import { readCanvasChrome, readStripGap, readStripHeight } from '@renderer/lib/canvas-chrome'
+import {
+  readAppTheme,
+  readCanvasChrome,
+  readPaneActionsWidth,
+  readStripGap,
+  readStripHeight
+} from '@renderer/lib/canvas-chrome'
 import { useEffect, useRef, useState } from 'react'
 import {
   fitZoom,
@@ -9,16 +15,19 @@ import {
   type CanvasChrome
 } from '../../../shared/canvas'
 import {
+  describeErrors,
   describeFieldState,
-  fieldState,
   formatDpr,
   PANE_HEADER_TIERS,
+  paneFieldState,
   paneHeaderHasActions,
+  paneHeaderIsSilent,
   paneHeaderTier,
+  schemeDiffersFromApp,
   schemeGlyph,
   type PaneHeaderTier
 } from '../../../shared/pane-header'
-import { paneColorVar } from '../../../shared/pane-palette'
+import { paneColorVar, type AppTheme } from '../../../shared/pane-palette'
 import type { CapabilityState, PaneStatus, Size } from '../../../shared/panes'
 import { describeDegradation, isPaneDimension, paneWebPreferences } from '../../../shared/panes'
 import type { Pane, Project } from '../../../shared/project'
@@ -52,12 +61,16 @@ export function Canvas({
 }): React.JSX.Element {
   const canvas = useRef<HTMLDivElement>(null)
   const fit = useFit(canvas, project)
-  const [focusChrome] = useState(() => {
+  const [chrome] = useState(() => {
     const root = document.documentElement
     return {
       canvas: readCanvasChrome(root),
       stripGap: readStripGap(root),
-      stripHeight: readStripHeight(root)
+      stripHeight: readStripHeight(root),
+      // What the header's own controls occupy, and the appearance its scheme glyph is
+      // read against. Both hold their screen size, so both are read once.
+      paneActions: readPaneActionsWidth(root),
+      theme: readAppTheme(root)
     }
   })
   // Focus draws its pane at 100%, so Fit has nothing to say about that layout.
@@ -66,7 +79,7 @@ export function Canvas({
   const focused = focusedPaneOf(project.panes, project.focusedPane)
   const focus =
     project.layout === 'focus'
-      ? arrangeFocus(project.panes, focused, focusChrome.canvas, focusChrome)
+      ? arrangeFocus(project.panes, focused, chrome.canvas, chrome)
       : undefined
 
   useEffect(() => {
@@ -104,7 +117,7 @@ export function Canvas({
               ? zoom
               : focusedPane
                 ? MAX_ZOOM
-                : stripZoom(pane, focusChrome.stripHeight)
+                : stripZoom(pane, chrome.stripHeight)
           return (
             <PaneView
               key={pane.id}
@@ -113,6 +126,8 @@ export function Canvas({
               zoom={paneZoom}
               url={project.startUrl}
               status={statuses[pane.id]}
+              actionsWidth={chrome.paneActions}
+              theme={chrome.theme}
               focused={focusedPane}
               strip={project.layout === 'focus' && !focusedPane}
               placement={focus?.panes.get(pane.id)}
@@ -214,6 +229,8 @@ function PaneView({
   zoom,
   url,
   status,
+  actionsWidth,
+  theme,
   focused,
   strip,
   placement,
@@ -225,6 +242,9 @@ function PaneView({
   zoom: number
   url: string
   status: PaneStatus | undefined
+  /** Screen pixels the header's own controls occupy, measured off their tokens. */
+  actionsWidth: number
+  theme: AppTheme
   focused?: boolean
   strip?: boolean
   placement?: React.CSSProperties
@@ -260,7 +280,14 @@ function PaneView({
         } as React.CSSProperties
       }
     >
-      <PaneHeader pane={pane} index={index} width={drawn.width} status={status} />
+      <PaneHeader
+        pane={pane}
+        index={index}
+        width={drawn.width}
+        status={status}
+        actionsWidth={actionsWidth}
+        theme={theme}
+      />
       <div className="relative overflow-hidden" style={drawn}>
         {/* Never override the element's display: Electron lays the guest out with flex,
             and anything else collapses it to 150px tall while emulation reports the
@@ -361,15 +388,20 @@ function PaneHeader({
   pane,
   index,
   width,
-  status
+  status,
+  actionsWidth,
+  theme
 }: {
   pane: Pane
   index: number
   /** Screen pixels: what this pane is drawn at, which is what the ladder is keyed on. */
   width: number
   status: PaneStatus | undefined
+  actionsWidth: number
+  theme: AppTheme
 }): React.JSX.Element {
   const tier = paneHeaderTier(width)
+  const silent = paneHeaderIsSilent(tier)
   const degraded = status?.degraded ?? []
   const errors = status?.errors ?? 0
   const reasons = degraded.map(describeDegradation).join('\n')
@@ -406,13 +438,8 @@ function PaneHeader({
       // Everything the ladder took away is still here, which is what makes shedding it safe.
       title={describePane(pane, errors, reasons)}
     >
-      <span
-        className="h-[var(--bp-pane-tab-h)] w-[var(--bp-pane-tab-w)] flex-none rounded-r-[var(--bp-radius-xs)]"
-        style={{ background: paneColorVar(index) }}
-        data-testid="pane-tab"
-        aria-hidden
-      />
-      {tier.name && (
+      <PaneTab pane={pane} index={index} carriesScheme={!tier.shows.scheme} theme={theme} />
+      {tier.shows.name && (
         <span
           className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] whitespace-nowrap text-[color:var(--bp-ink)]"
           data-testid="pane-name"
@@ -421,8 +448,8 @@ function PaneHeader({
         </span>
       )}
       <PaneSize pane={pane} tier={tier} status={status} onResize={resize} />
-      {tier.scheme && <PaneScheme pane={pane} status={status} />}
-      {message !== null && tier.width && (
+      {tier.shows.scheme && <PaneScheme pane={pane} status={status} />}
+      {message !== null && !silent && (
         <span
           role="alert"
           data-testid="pane-action-error"
@@ -432,7 +459,7 @@ function PaneHeader({
           {message}
         </span>
       )}
-      {degraded.length > 0 && tier.width && (
+      {degraded.length > 0 && !silent && (
         <span
           className="flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-warn)]"
           data-testid="pane-degraded"
@@ -442,7 +469,7 @@ function PaneHeader({
         </span>
       )}
       <div className="ml-auto flex flex-none items-center gap-[var(--bp-space-1)]">
-        {paneHeaderHasActions(width) && (
+        {paneHeaderHasActions(width, actionsWidth) && (
           <>
             <PaneAction
               label="Rotate"
@@ -472,7 +499,7 @@ function PaneHeader({
           <span
             className="flex-none rounded-[var(--bp-radius-xs)] bg-[var(--bp-error)] px-[var(--bp-space-2)] py-[var(--bp-space-1)] font-mono text-[length:var(--bp-text-micro)] leading-none font-medium tabular-nums text-[color:var(--bp-pane-ink)]"
             data-testid="pane-errors"
-            title={`${errors} ${errors === 1 ? 'error' : 'errors'} in this pane`}
+            title={`${describeErrors(errors)} in this pane`}
           >
             {errors}
           </span>
@@ -482,12 +509,46 @@ function PaneHeader({
   )
 }
 
+/**
+ * The pane's identity, in its palette colour and nothing else. Once the ladder has taken
+ * the scheme glyph away the tab carries the scheme too, splitting to half-tone when the
+ * pane is rendering the page in something other than the app's own appearance — which is
+ * the one thing about a pane too narrow to say anything that is still worth saying.
+ */
+function PaneTab({
+  pane,
+  index,
+  carriesScheme,
+  theme
+}: {
+  pane: Pane
+  index: number
+  carriesScheme: boolean
+  theme: AppTheme
+}): React.JSX.Element {
+  const colour = paneColorVar(index)
+  const split = carriesScheme && schemeDiffersFromApp(pane.colorScheme, theme)
+  return (
+    <span
+      className="h-[var(--bp-pane-tab-h)] w-[var(--bp-pane-tab-w)] flex-none rounded-r-[var(--bp-radius-xs)]"
+      style={{
+        background: split
+          ? `linear-gradient(to bottom, ${colour} 50%, var(--bp-chrome-sunken) 50%)`
+          : colour
+      }}
+      data-testid="pane-tab"
+      data-split={split ? 'true' : undefined}
+      title={split ? `${pane.name}: ${pane.colorScheme}, where the app is ${theme}` : pane.name}
+    />
+  )
+}
+
 /** Everything the header could say, for the tiers where it cannot say it. */
 function describePane(pane: Pane, errors: number, reasons: string): string {
   const lines = [
     `${pane.name} ${pane.width}×${pane.height} ${formatDpr(pane.dpr)} ${pane.colorScheme}`
   ]
-  if (errors > 0) lines.push(`${errors} ${errors === 1 ? 'error' : 'errors'}`)
+  if (errors > 0) lines.push(describeErrors(errors))
   if (reasons) lines.push(reasons)
   return lines.join('\n')
 }
@@ -511,8 +572,8 @@ function PaneSize({
   status: PaneStatus | undefined
   onResize(size: { width: number } | { height: number }): Promise<void>
 }): React.JSX.Element | null {
-  if (!tier.width) return null
-  const state = fieldState(status?.emulation, 'viewport')
+  if (!tier.shows.width) return null
+  const state = paneFieldState(status, 'viewport')
 
   return (
     <span
@@ -527,7 +588,7 @@ function PaneSize({
         declared={pane.width}
         onCommit={(width) => void onResize({ width })}
       />
-      {tier.height && (
+      {tier.shows.height && (
         <>
           ×
           <SizeInput
@@ -538,7 +599,7 @@ function PaneSize({
           />
         </>
       )}
-      {tier.dpr && <span data-testid="pane-dpr">{formatDpr(pane.dpr)}</span>}
+      {tier.shows.dpr && <span data-testid="pane-dpr">{formatDpr(pane.dpr)}</span>}
     </span>
   )
 }
@@ -555,7 +616,7 @@ function PaneScheme({
   pane: Pane
   status: PaneStatus | undefined
 }): React.JSX.Element {
-  const state = fieldState(status?.emulation, 'scheme')
+  const state = paneFieldState(status, 'scheme')
   return (
     <span
       className="flex-none font-mono text-[length:var(--bp-text-micro)]"
@@ -571,13 +632,17 @@ function PaneScheme({
 }
 
 /**
- * What a field's colour says about the capability behind it. Applied is the quiet case;
- * a refused override is a rim-and-header event and reads as one.
+ * What a field's colour says about the thing behind it. Applied is the quiet case; a
+ * refused override is a rim-and-header event and reads as one.
  */
+const FIELD_TONE: Readonly<Record<CapabilityState, string>> = {
+  applied: 'var(--bp-ink-muted)',
+  pending: 'var(--bp-ink-faint)',
+  failed: 'var(--bp-warn)'
+}
+
 function fieldTone(state: CapabilityState): string {
-  if (state === 'failed') return 'var(--bp-warn)'
-  if (state === 'pending') return 'var(--bp-ink-faint)'
-  return 'var(--bp-ink-muted)'
+  return FIELD_TONE[state]
 }
 
 /**

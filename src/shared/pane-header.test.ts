@@ -1,20 +1,24 @@
 import { describe, expect, test } from 'vitest'
 import {
-  PANE_ACTIONS_MIN_WIDTH,
-  PANE_HEADER_TIERS,
+  describeErrors,
   describeFieldState,
-  fieldState,
   formatDpr,
+  PANE_HEADER_TIERS,
+  paneFieldState,
   paneHeaderHasActions,
+  paneHeaderIsSilent,
   paneHeaderTier,
+  schemeDiffersFromApp,
   schemeGlyph,
   type PaneHeaderTier
 } from './pane-header'
-import { initialPaneStatus } from './panes'
+import { foldPaneStatus, initialPaneStatus, type PaneStatus } from './panes'
 
 /** What a tier still says, as the ladder in the design prototype writes it. */
 function contentOf(tier: PaneHeaderTier): string[] {
-  return (['name', 'width', 'height', 'dpr', 'scheme'] as const).filter((field) => tier[field])
+  return (['name', 'width', 'height', 'dpr', 'scheme'] as const).filter(
+    (field) => tier.shows[field]
+  )
 }
 
 describe('the header degradation ladder', () => {
@@ -31,9 +35,11 @@ describe('the header degradation ladder', () => {
   })
 
   test('is the colour tab and the error count alone below 56px', () => {
-    expect(contentOf(paneHeaderTier(55))).toEqual([])
-    expect(contentOf(paneHeaderTier(32))).toEqual([])
-    expect(contentOf(paneHeaderTier(0))).toEqual([])
+    for (const width of [55, 32, 0]) {
+      expect(contentOf(paneHeaderTier(width))).toEqual([])
+      expect(paneHeaderIsSilent(paneHeaderTier(width))).toBe(true)
+    }
+    expect(paneHeaderIsSilent(paneHeaderTier(56))).toBe(false)
   })
 
   test('takes each threshold as the narrowest width that tier draws at', () => {
@@ -59,11 +65,21 @@ describe('the header degradation ladder', () => {
 })
 
 describe('the header actions', () => {
+  // What two tab-height buttons, the gap between them and the gap before them occupy,
+  // as the renderer measures it off the tokens they are drawn with.
+  const actions = 12 * 2 + 2 + 4
+
   test('come off before the ladder starts shedding what the header says', () => {
-    expect(PANE_ACTIONS_MIN_WIDTH).toBeGreaterThan(PANE_HEADER_TIERS[0].minWidth)
-    expect(paneHeaderHasActions(PANE_ACTIONS_MIN_WIDTH)).toBe(true)
-    expect(paneHeaderHasActions(PANE_ACTIONS_MIN_WIDTH - 1)).toBe(false)
-    expect(paneHeaderHasActions(Number.NaN)).toBe(false)
+    const widest = PANE_HEADER_TIERS[0].minWidth
+    expect(paneHeaderHasActions(widest + actions, actions)).toBe(true)
+    expect(paneHeaderHasActions(widest + actions - 1, actions)).toBe(false)
+    // Never at a width the widest tier's own content already fills.
+    expect(paneHeaderHasActions(widest, actions)).toBe(false)
+  })
+
+  test('are not drawn against a width or a measurement it cannot read', () => {
+    expect(paneHeaderHasActions(Number.NaN, actions)).toBe(false)
+    expect(paneHeaderHasActions(1000, Number.NaN)).toBe(false)
   })
 })
 
@@ -73,24 +89,64 @@ describe('what a header field says', () => {
     expect(formatDpr(1)).toBe('@1x')
   })
 
+  test('counts errors the same way for every surface', () => {
+    expect(describeErrors(1)).toBe('1 error')
+    expect(describeErrors(3)).toBe('3 errors')
+    expect(describeErrors(0)).toBe('0 errors')
+  })
+
   test('gives every colour scheme a glyph, including system', () => {
     const glyphs = (['light', 'dark', 'system'] as const).map(schemeGlyph)
     expect(new Set(glyphs).size).toBe(3)
     expect(glyphs.every((glyph) => glyph.length > 0)).toBe(true)
   })
+
+  test('calls a pane different from the app only when it renders the page differently', () => {
+    expect(schemeDiffersFromApp('light', 'dark')).toBe(true)
+    expect(schemeDiffersFromApp('dark', 'dark')).toBe(false)
+    // System follows what the app already follows, so it is never the odd one out.
+    expect(schemeDiffersFromApp('system', 'dark')).toBe(false)
+    expect(schemeDiffersFromApp('system', 'light')).toBe(false)
+  })
 })
 
 describe('a field against the emulation actually applied', () => {
+  function statusWith(changes: Partial<PaneStatus>): PaneStatus {
+    return { ...initialPaneStatus(), ...changes }
+  }
+
   test('reads the capability that would make the field true', () => {
-    const emulation = { ...initialPaneStatus().emulation, viewport: 'failed' as const }
-    expect(fieldState(emulation, 'viewport')).toBe('failed')
+    const status = statusWith({
+      emulation: { ...initialPaneStatus().emulation, viewport: 'failed' }
+    })
+    expect(paneFieldState(status, 'viewport')).toBe('failed')
     // DPR rides on the device metrics override, so it fails with the viewport.
-    expect(fieldState(emulation, 'dpr')).toBe('failed')
-    expect(fieldState(emulation, 'scheme')).toBe('pending')
+    expect(paneFieldState(status, 'dpr')).toBe('failed')
+    expect(paneFieldState(status, 'scheme')).toBe('pending')
   })
 
   test('reads as pending for a pane nothing is known about yet', () => {
-    expect(fieldState(undefined, 'viewport')).toBe('pending')
+    expect(paneFieldState(undefined, 'viewport')).toBe('pending')
+  })
+
+  test('fails the viewport when the pane is drawn at a size other than it declares', () => {
+    const mismatched = foldPaneStatus(
+      foldPaneStatus(initialPaneStatus(), {
+        type: 'emulated',
+        results: [{ capability: 'viewport', ok: true }]
+      }),
+      {
+        type: 'geometryChecked',
+        result: { ok: false, message: 'drawn 390×150, declared 390×844 at this zoom' }
+      }
+    )
+
+    // CDP accepted the override; the host-side check says the pane is not that size, and
+    // that is the one the header believes ([ADR-0004]).
+    expect(mismatched.emulation.viewport).toBe('applied')
+    expect(paneFieldState(mismatched, 'viewport')).toBe('failed')
+    expect(paneFieldState(mismatched, 'dpr')).toBe('failed')
+    expect(paneFieldState(mismatched, 'scheme')).toBe('pending')
   })
 
   test('says why a marked field is marked', () => {

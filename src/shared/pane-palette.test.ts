@@ -55,23 +55,39 @@ describe('the pane palette', () => {
 /**
  * The formula and the tokens are two statements of one palette, and a screenshot whose
  * borders disagreed with the headers beside them would be worse than no border at all.
- * This is the only thing holding them together, so it reads the stylesheet rather than
- * trusting that someone updated both.
+ * This is the only thing holding them together, so it reads the stylesheets rather than
+ * trusting that someone updated all three.
+ *
+ * Both are read: the design prototype's `globals.css` is the source of truth (AGENTS.md)
+ * and the renderer's `index.css` is mirrored from it, so a mirror that has drifted is a
+ * failure here rather than a colour nobody notices is wrong.
  */
 describe('the generated palette and the design tokens', () => {
-  const css = readFileSync(
-    fileURLToPath(new URL('../renderer/src/index.css', import.meta.url)),
-    'utf8'
-  )
+  const stylesheets = {
+    'the design prototype': '../../docs/design/breakpoint-prototype/globals.css',
+    'the renderer': '../renderer/src/index.css'
+  } as const
 
-  test.each([
-    ['dark', ':root,\n.dark {'],
-    ['light', '.light {']
-  ] as const)('agree for the %s theme', (theme: AppTheme, opener) => {
-    const block = css.slice(css.indexOf(opener))
+  /** Where each theme's block starts, as either stylesheet opens it. */
+  const OPENERS: Readonly<Record<AppTheme, readonly string[]>> = {
+    dark: [':root,\n.dark {', '.dark {', ':root {'],
+    light: ['.light {']
+  }
+
+  test.each(
+    Object.entries(stylesheets).flatMap(([where, path]) =>
+      (['dark', 'light'] as const).map((theme) => [where, path, theme] as const)
+    )
+  )('agree with %s for the %s theme', (_where, path, theme) => {
+    const css = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8')
+    const opener = OPENERS[theme].find((candidate) => css.includes(candidate))
+    expect(opener, `a ${theme} block`).toBeDefined()
+    const block = css.slice(css.indexOf(opener!))
+
     for (let index = 0; index < PANE_PALETTE_SIZE; index += 1) {
-      const declared = new RegExp(`${paneColorToken(index)}:\\s*([^;]+);`).exec(block)
-      expect(declared, `${paneColorToken(index)} is declared in the ${theme} block`).not.toBeNull()
+      const token = paneColorToken(index)
+      const declared = new RegExp(`${token}:\\s*([^;]+);`).exec(block)
+      expect(declared, `${token} is declared in the ${theme} block`).not.toBeNull()
       expect(declared![1].trim()).toBe(paneColor(index, theme))
     }
   })
