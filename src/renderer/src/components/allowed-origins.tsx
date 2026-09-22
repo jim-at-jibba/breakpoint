@@ -1,9 +1,9 @@
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Project } from '../../../shared/project'
-import { expandUrl, originOf } from '../../../shared/urls'
+import { expandUrl, originOf, sameOrigins } from '../../../shared/urls'
 
 /**
  * The project's allowed origins, edited in place. They bind automation and nothing else:
@@ -21,19 +21,63 @@ export function AllowedOrigins({ project }: { project: Project }): React.JSX.Ele
   const [draft, setDraft] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   const { allowedOrigins } = project
+  const [optimisticOrigins, setOptimisticOrigins] = useState<string[] | null>(null)
+  const desiredOrigins = useRef(allowedOrigins)
+  const projectOrigins = useRef(allowedOrigins)
+  const sending = useRef(false)
+  const origins = optimisticOrigins ?? allowedOrigins
+
+  useEffect(() => {
+    projectOrigins.current = allowedOrigins
+    if (optimisticOrigins === null) {
+      desiredOrigins.current = allowedOrigins
+    } else if (!sending.current && sameOrigins(allowedOrigins, optimisticOrigins)) {
+      desiredOrigins.current = allowedOrigins
+      setOptimisticOrigins(null)
+    }
+  }, [allowedOrigins, optimisticOrigins])
+
   // Expanded exactly as the address bar expands it, so `localhost:3000` is an origin
   // here too: a list that refuses what the rest of the app accepts is a dead end.
   const expanded = expandUrl(draft)
   const addition = expanded === undefined ? undefined : originOf(expanded)
-  const addable = addition !== undefined && !allowedOrigins.includes(addition)
+  const addable = addition !== undefined && !origins.includes(addition)
 
-  async function replace(origins: string[]): Promise<void> {
+  function edit(change: (current: string[]) => string[]): void {
+    const next = change(desiredOrigins.current)
+    if (sameOrigins(next, desiredOrigins.current)) return
+    desiredOrigins.current = next
+    setOptimisticOrigins(next)
+    void flushEdits()
+  }
+
+  async function flushEdits(): Promise<void> {
+    if (sending.current) return
+    sending.current = true
     setMessage(null)
     try {
-      const response = await window.breakpoint.invoke('project.setAllowedOrigins', { origins })
-      if (!response.ok) setMessage(response.error.message)
+      while (true) {
+        const target = desiredOrigins.current
+        const response = await window.breakpoint.invoke('project.setAllowedOrigins', {
+          origins: target
+        })
+        if (!response.ok) {
+          desiredOrigins.current = projectOrigins.current
+          setOptimisticOrigins(null)
+          setMessage(response.error.message)
+          return
+        }
+        if (sameOrigins(target, desiredOrigins.current)) return
+      }
     } catch (error) {
+      desiredOrigins.current = projectOrigins.current
+      setOptimisticOrigins(null)
       setMessage(error instanceof Error ? error.message : String(error))
+    } finally {
+      sending.current = false
+      if (sameOrigins(projectOrigins.current, desiredOrigins.current)) {
+        setOptimisticOrigins(null)
+      }
     }
   }
 
@@ -55,7 +99,7 @@ export function AllowedOrigins({ project }: { project: Project }): React.JSX.Ele
             aria-label="Allowed origins"
             data-testid="allowed-origins"
           >
-            Origins {allowedOrigins.length}
+            Origins {origins.length}
           </Button>
         }
       />
@@ -65,7 +109,7 @@ export function AllowedOrigins({ project }: { project: Project }): React.JSX.Ele
             Where <code className="font-mono">breakpoint open</code> may send the panes. Typing a
             URL here in the address bar is never held to it.
           </p>
-          {allowedOrigins.length === 0 && (
+          {origins.length === 0 && (
             <span
               className="px-[var(--bp-space-2)] py-[var(--bp-space-2)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]"
               data-testid="allowed-origins-empty"
@@ -73,7 +117,7 @@ export function AllowedOrigins({ project }: { project: Project }): React.JSX.Ele
               No origins. Automation cannot navigate this project.
             </span>
           )}
-          {allowedOrigins.map((origin) => (
+          {origins.map((origin) => (
             <div
               key={origin}
               data-testid="allowed-origin"
@@ -91,7 +135,7 @@ export function AllowedOrigins({ project }: { project: Project }): React.JSX.Ele
                 data-origin={origin}
                 className="flex-none text-[color:var(--bp-ink-faint)]"
                 onClick={() =>
-                  void replace(allowedOrigins.filter((candidate) => candidate !== origin))
+                  edit((current) => current.filter((candidate) => candidate !== origin))
                 }
               >
                 ×
@@ -105,7 +149,7 @@ export function AllowedOrigins({ project }: { project: Project }): React.JSX.Ele
             event.preventDefault()
             if (!addable) return
             setDraft('')
-            void replace([...allowedOrigins, addition])
+            edit((current) => [...current, addition])
           }}
         >
           <Input

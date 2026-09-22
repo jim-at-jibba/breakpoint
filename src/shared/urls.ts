@@ -19,8 +19,11 @@ export function isWebUrl(value: unknown): value is string {
  */
 const BARE_PORT = /^:?(\d+)$/
 
-/** A scheme only counts as one when it is followed by `//`; `localhost:3000` is a host. */
-const SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i
+/** A URI scheme, distinguished from a host followed by a numeric port. */
+const SCHEME = /^[a-z][a-z0-9+.-]*:/i
+// These must never be reinterpreted as a single-label host with a numeric port.
+const NON_WEB_SCHEME = /^(?:about|blob|breakpoint|data|file|ftp|javascript|mailto):/i
+const HOST_WITH_PORT = /^[^/?#]+:\d+(?:[/?#]|$)/
 
 /** Hosts that are this machine, and are therefore served over http while developing. */
 const LOOPBACK: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]'])
@@ -50,7 +53,10 @@ export function expandUrl(typed: string): string | undefined {
     return new URL(`http://localhost:${number}`).href
   }
 
-  if (SCHEME.test(value)) return isWebUrl(value) ? new URL(value).href : undefined
+  if (NON_WEB_SCHEME.test(value)) return undefined
+  if (SCHEME.test(value) && !HOST_WITH_PORT.test(value)) {
+    return isWebUrl(value) ? new URL(value).href : undefined
+  }
 
   // A leading slash is a path with no host. `URL` tolerates the extra slashes and reads
   // the first segment as the host, which would turn `/checkout` into a site.

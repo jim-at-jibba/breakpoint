@@ -175,6 +175,29 @@ test('the address bar points every pane at a URL, allowed or not', async () => {
   }
 })
 
+test('an older navigation result does not erase a newer address-bar draft', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await settled(shop)
+  const submitted = `${fixture.b}/submitted`
+  const newer = `${fixture.b}/newer-draft`
+  const address = page.getByTestId('project-url')
+
+  await address.fill(submitted)
+  await address.evaluate((element, next) => {
+    const input = element as HTMLInputElement
+    input.form?.requestSubmit()
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setValue?.call(input, next)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  }, newer)
+
+  await expectPanesAt(page, shop, submitted)
+  await expect(address).toHaveValue(newer)
+})
+
 test('breakpoint open expands a bare port and reports where the panes went', async () => {
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()
@@ -297,6 +320,24 @@ test('allowed origins are edited in the window and survive a restart', async () 
   ])
   // Where the panes were left is where the project reopens.
   expect(reopened.project?.startUrl).toBe(`${fixture.b}/`)
+})
+
+test('overlapping allowed-origin edits are applied in order', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop', {
+    allowedOrigins: [new URL(fixture.a).origin, new URL(fixture.b).origin]
+  })
+  await open(shop)
+  await page.getByTestId('allowed-origins').click()
+  await expect(page.getByTestId('remove-origin')).toHaveCount(2)
+
+  await page.getByTestId('remove-origin').evaluateAll((buttons) => {
+    for (const button of buttons) (button as HTMLButtonElement).click()
+  })
+
+  await expect(page.getByTestId('allowed-origin')).toHaveCount(0)
+  await expect.poll(async () => (await state()).project?.allowedOrigins).toEqual([])
 })
 
 test('emulation still holds after a navigation', async () => {

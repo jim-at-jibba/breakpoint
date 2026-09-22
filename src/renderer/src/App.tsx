@@ -88,6 +88,7 @@ export default function App(): React.JSX.Element {
               {project.name}
             </span>
             <AddressBar
+              key={project.repoPath}
               project={project}
               onNavigate={(url) => invokeAction('project.navigate', { url })}
             />
@@ -128,7 +129,7 @@ export default function App(): React.JSX.Element {
         )}
         {project && (
           <div className="ml-auto flex items-center gap-[var(--bp-space-3)]">
-            <AllowedOrigins project={project} />
+            <AllowedOrigins key={project.repoPath} project={project} />
             <AddPane />
             <CanvasControls
               project={project}

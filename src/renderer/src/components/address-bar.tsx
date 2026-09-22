@@ -43,8 +43,9 @@ export function AddressBar({
         if (!navigable) return
         // Held until it lands. A refused navigation that silently restored the old URL
         // would lose what was typed and say nothing about why.
-        void onNavigate(value).then((ok) => {
-          if (ok) setDraft(null)
+        const submitted = value
+        void onNavigate(submitted).then((ok) => {
+          if (ok) setDraft((current) => (current === submitted ? null : current))
         })
       }}
     >

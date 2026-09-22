@@ -52,9 +52,17 @@ describe('expandUrl', () => {
 
   it.each([
     'file:///tmp/page.html',
+    'file:/tmp/page.html',
+    'file:page.html',
+    'file:123',
     'ftp://example.com/',
+    'ftp:21',
+    'mailto:user@example.com',
+    'mailto:80',
     'data:text/html,test',
+    'data:1',
     'javascript:alert(1)',
+    'javascript:123',
     'about:blank',
     'blob:https://example.com/id'
   ])('refuses %s, which is not a page a pane renders', (typed: string) => {
@@ -73,6 +81,8 @@ describe('expandUrl', () => {
 
   it.each([
     ['example.com', 'https://example.com/'],
+    ['example.com:8443', 'https://example.com:8443/'],
+    ['dev:3000', 'https://dev:3000/'],
     ['example.com/docs', 'https://example.com/docs'],
     ['staging.example.com/a?b=c', 'https://staging.example.com/a?b=c']
   ])('sends the scheme-less remote host %s over https', (typed: string, url: string) => {
