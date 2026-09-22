@@ -430,7 +430,13 @@ describe('the state as a terminal reads it', () => {
       type: 'attachFailed',
       message: 'Debugger is already attached to the target'
     })
-    const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
+    const snapshot: StateSnapshot = {
+      revision: 3,
+      cursor: 9,
+      project: shop,
+      panes,
+      certificates: { trusted: [], waiting: [] }
+    }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
     expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x  loading`)
@@ -442,7 +448,13 @@ describe('the state as a terminal reads it', () => {
   it('counts a pane’s errors, the way its header does', () => {
     const panes = paneStatusesFor(shop, {})
     panes[mobile.id] = foldPaneStatus(panes[mobile.id], { type: 'loadFailed' })
-    const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
+    const snapshot: StateSnapshot = {
+      revision: 3,
+      cursor: 9,
+      project: shop,
+      panes,
+      certificates: { trusted: [], waiting: [] }
+    }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
     expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x  load failed  errors: 1`)
@@ -455,7 +467,13 @@ describe('the state as a terminal reads it', () => {
     for (const id of Object.keys(panes)) {
       panes[id] = foldPaneStatus(panes[id], { type: 'loaded' })
     }
-    const snapshot: StateSnapshot = { revision: 3, cursor: 9, project: shop, panes }
+    const snapshot: StateSnapshot = {
+      revision: 3,
+      cursor: 9,
+      project: shop,
+      panes,
+      certificates: { trusted: [], waiting: [] }
+    }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
     expect(lines).toContain(`  ${mobile.name.padEnd(10)}390×844 @3x`)
@@ -595,5 +613,47 @@ describe('starting or handing off in the background', () => {
     expect(CLI_COMMANDS.filter((command) => command.activates).map((c) => c.name)).toEqual([
       '<path>'
     ])
+  })
+})
+
+describe('certificate trust on the terminal', () => {
+  const trusted = {
+    host: 'staging.example.com',
+    fingerprint: 'sha256/AAAA',
+    subject: 'staging.example.com',
+    issuer: 'Acme Dev CA',
+    error: 'net::ERR_CERT_AUTHORITY_INVALID',
+    trustedAt: 1
+  }
+  const waiting = { ...trusted, url: 'https://staging.example.com/', askedAt: 2 }
+  const state = CLI_COMMANDS.find((command) => command.name === 'state')
+  const shop = createProject('/repos/shop')
+
+  it('says what is trusted and what is held, with a project open and without one', () => {
+    for (const project of [shop, null]) {
+      const snapshot: StateSnapshot = {
+        revision: 3,
+        cursor: 9,
+        project,
+        panes: project ? paneStatusesFor(project, {}) : {},
+        certificates: { trusted: [trusted], waiting: [waiting] }
+      }
+      expect((state?.render(snapshot) ?? '').split('\n')).toContain(
+        'Certificates: 1 trusted, 1 waiting'
+      )
+    }
+  })
+
+  it('says nothing at all when no certificate has ever been met', () => {
+    const snapshot: StateSnapshot = {
+      revision: 3,
+      cursor: 9,
+      project: null,
+      panes: {},
+      certificates: { trusted: [], waiting: [] }
+    }
+    expect(state?.render(snapshot)).toBe(
+      'No project is open. Run `breakpoint .` in a repo.\nCursor 9'
+    )
   })
 })

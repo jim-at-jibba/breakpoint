@@ -9,7 +9,8 @@ const snapshot: StateSnapshot = {
   revision: 1,
   cursor: 0,
   project: shop,
-  panes: paneStatusesFor(shop, {})
+  panes: paneStatusesFor(shop, {}),
+  certificates: { trusted: [], waiting: [] }
 }
 
 interface SnapshotHarness {
@@ -80,7 +81,8 @@ describe('snapshot recovery', () => {
           revision: 2,
           cursor: 0,
           project: { ...shop, name: 'updated' },
-          panes: paneStatusesFor(shop, {})
+          panes: paneStatusesFor(shop, {}),
+          certificates: snapshot.certificates
         }
       })
       reader.close()
@@ -189,7 +191,8 @@ describe('snapshot recovery', () => {
       revision: 3,
       cursor: 0,
       project: store,
-      panes: paneStatusesFor(store, {})
+      panes: paneStatusesFor(store, {}),
+      certificates: { trusted: [], waiting: [] }
     }
     h.fetchSnapshot.mockResolvedValueOnce(success('test', switched))
     reader.retry()

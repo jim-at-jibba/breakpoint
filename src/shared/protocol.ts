@@ -30,7 +30,11 @@ export const WIRE_ERROR_CODES = [
    * Navigation asked for by automation, to an origin the project does not allow. Never
    * raised for the address bar or for a link inside a pane ([ADR-0013]).
    */
-  'ORIGIN_NOT_ALLOWED'
+  'ORIGIN_NOT_ALLOWED',
+  /** The stored certificate decisions are on disk but this build will not read them. */
+  'CERTIFICATES_UNREADABLE',
+  /** No certificate is waiting on that host and fingerprint, and none is stored for it. */
+  'CERTIFICATE_NOT_FOUND'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

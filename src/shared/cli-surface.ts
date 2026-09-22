@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { focusedPaneOf } from './canvas'
+import { describeCertificateTrustReason, type CertificateState } from './certificates'
 import { isCursorPosition, type Entry, type LogRead } from './event-log'
 import { formatDpr } from './pane-header'
 import { describeDegradation, type LoadState } from './panes'
@@ -181,8 +182,12 @@ function renderSnapshot(data: unknown, verb: string): string {
   // The cursor is printed either way: a failed open leaves nothing open, and that is
   // precisely when the log is the only thing with something to say.
   const cursor = `Cursor ${snapshot?.cursor ?? 0}`
+  // Certificate trust is the app's and not a project's, so it is said with nothing open
+  // too — and said at all only when there is something to say, because a line reading
+  // "0 trusted, 0 waiting" is noise on every run that never met one.
+  const certificates = describeCertificates(snapshot?.certificates)
   if (!project) {
-    return ['No project is open. Run `breakpoint .` in a repo.', cursor].join('\n')
+    return ['No project is open. Run `breakpoint .` in a repo.', ...certificates, cursor].join('\n')
   }
   const panes = project.panes.map((pane) => {
     const status = snapshot?.panes?.[pane.id]
@@ -202,6 +207,7 @@ function renderSnapshot(data: unknown, verb: string): string {
     `  ${describeLayout(project)}, zoom ${describeZoom(project.zoom)}`,
     'Panes:',
     ...panes,
+    ...certificates,
     // The position to hand to `logs --since`, which is the point of printing it.
     cursor
   ].join('\n')
@@ -212,6 +218,18 @@ const LOAD_DESCRIPTIONS: Readonly<Record<LoadState, string>> = {
   pending: '  loading',
   loaded: '',
   failed: '  load failed'
+}
+
+/**
+ * What certificate trust holds, as one line, or nothing at all. A pane held by a waiting
+ * certificate is not loading and is not failing either, and a terminal that says nothing
+ * about it leaves the only surface an agent has with no way to find out.
+ */
+function describeCertificates(certificates: CertificateState | undefined): string[] {
+  const trusted = certificates?.trusted.length ?? 0
+  const waiting = certificates?.waiting.length ?? 0
+  if (trusted === 0 && waiting === 0) return []
+  return [`Certificates: ${trusted} trusted, ${waiting} waiting`]
 }
 
 /** `Fit` where the project says Fit: what Fit draws to is the window's, and not stored. */
@@ -262,6 +280,14 @@ function describeEntry(entry: Entry): string {
       return `refused: ${entry.url} is outside the project's allowed origins`
     case 'project.originsChanged':
       return `allowed origins ${entry.origins.length === 0 ? 'none' : entry.origins.join(', ')}`
+    case 'certificate.trusted':
+      return `trusted ${entry.host} ${entry.fingerprint} (${describeCertificateTrustReason(entry.reason)}, ${entry.error})`
+    case 'certificate.prompted':
+      return `waiting on ${entry.host} ${entry.fingerprint}: ${entry.error} loading ${entry.url}`
+    case 'certificate.refused':
+      return `refused ${entry.host} ${entry.fingerprint}: ${entry.error}`
+    case 'certificate.forgotten':
+      return `forgot the decision for ${entry.host} ${entry.fingerprint}`
     case 'pane.created':
       return `created, loading ${entry.url}`
     case 'pane.attached':

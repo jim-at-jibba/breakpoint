@@ -51,7 +51,9 @@ beforeEach(async () => {
     removePane: (pane) => projects.removePane(pane),
     rotatePane: (pane) => projects.rotatePane(pane)
   })
-  projects = new ProjectService(store, feed, log, panes, presetService)
+  projects = new ProjectService(store, feed, log, panes, presetService, {
+    list: () => ({ trusted: [], waiting: [] })
+  })
 })
 
 afterEach(async () => {

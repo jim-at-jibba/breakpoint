@@ -84,6 +84,20 @@ The origins a project's panes may be sent to programmatically. Constrains automa
 constrains the developer.
 _Avoid_: allowlist, whitelist, scope
 
+**Certificate trust**:
+The decisions about certificates Chromium will not verify. Each is one host and one
+certificate fingerprint ([ADR-0012](docs/adr/0012-certificate-trust-is-keyed-on-fingerprint.md)),
+never a host on its own. The app's and not a project's: a certificate belongs to a host and
+this machine, so two projects on one staging server are one decision.
+_Avoid_: certificate exception, SSL override, allowed certificate
+
+**Held**:
+A pane whose load is waiting on a certificate decision. Not a failure and not a
+degradation — nothing has gone wrong yet and the pane's attachment is untouched; the
+answer simply has not been given. The certificates themselves are **waiting**, and that is
+what the snapshot's list of them is called; the panes behind them are held.
+_Avoid_: blocked, pending, stalled
+
 ### Observation
 
 **Event log**:

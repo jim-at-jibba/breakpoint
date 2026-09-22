@@ -108,9 +108,11 @@ What you type is expanded by one rule, the same rule the address bar in the wind
   `http://localhost:3000/`.
 - Anything carrying a scheme keeps it, and has to be `http` or `https`. `file:`, `data:`
   and `javascript:` are `INVALID_PARAMS`, not pages a pane renders.
-- Anything else is a host: `http://` when that host is this machine (`localhost`,
-  `127.0.0.1`, `[::1]`, or a `.localhost` name) and `https://` when it is not. A LAN
-  address on a plain port is the one case to type the scheme for.
+- Anything else is a host: `http://` when that host is this machine (`localhost`, a
+  `.localhost` name, anything in `127.0.0.0/8`, or `::1`) and `https://` when it is not.
+  A LAN address on a plain port is the one case to type the scheme for. This is the same
+  rule [Certificates](#certificates) uses for what loopback answers for itself, written
+  once so the two cannot disagree about what `127.0.0.2` is.
 
 The payload names where the panes were sent and which ones were sent there:
 
@@ -153,6 +155,86 @@ The list is editable over the socket too, which is a real limit on what the refu
 worth: it bounds an agent following its instructions, not one working around them. The
 alternative would be a route the CLI cannot reach, and there are none. Deciding which
 surface may do what is the Phase 6 permission tiers' job.
+
+#### Certificates
+
+A pane sent to an `https` origin whose certificate Chromium will not verify is **held**,
+not failed: the load waits, and Breakpoint either answers for you or asks.
+
+A dev server on this machine is answered for you. If the host is loopback —
+`localhost`, a `.localhost` name, anything in `127.0.0.0/8`, or `::1` — and the only
+thing wrong is that no chain of trust reaches the certificate, the pane loads with no
+prompt and nothing is stored. That is a rule about loopback, not a decision you made, so
+it never appears in settings.
+
+Two things on loopback still ask, because neither of them is what a dev server's
+certificate looks like:
+
+- the certificate is **outside its validity dates**
+- the certificate **names a different host**
+
+Chromium reports the unreachable authority ahead of both, so Breakpoint reads the
+certificate itself rather than trusting the error string it was handed. The question
+shows those detected faults alongside Chromium's error, and a stored decision keeps
+them so settings can explain what was waived.
+
+Every other host asks once. The window shows the question in a strip under the toolbar —
+never over a pane, because the page in that pane is the thing being asked about — with
+the host, what is wrong with the certificate, and its SHA-256 fingerprint. Trusting it
+releases every pane waiting on it and keeps the decision; refusing it lets the loads
+fail and keeps nothing, so going there again asks again.
+
+Navigating away or destroying a pane cancels its unanswered load. The question disappears
+when no pane is still waiting on that certificate; canceling one pane leaves the question
+in place for any others still waiting.
+
+**Decisions are keyed on the host *and* the fingerprint**, never the host alone. Keyed on
+the host alone, trusting a dev certificate today would silently extend that trust to every
+future certificate served on that host — which on `localhost` is every project on the
+machine, forever. A changed certificate on a host you have already trusted asks again,
+which is mildly annoying exactly when it should be.
+
+Decisions are global rather than a project's, kept in `certificates.json` beside
+`presets.json` in Breakpoint's data directory, and they survive a restart. They are
+listed under **Certificates** in the toolbar, where each one can be forgotten — which
+puts that certificate back to asking. Forgetting also closes accepted connections in the
+affected sessions before it completes, so the next navigation cannot silently reuse one.
+Electron closes connections session-wide: other in-flight requests in those same sessions
+may be interrupted too. From a terminal they are in `breakpoint state`:
+
+```sh
+breakpoint state --json | jq .certificates
+```
+
+```json
+{
+  "trusted": [
+    {
+      "host": "staging.example.com",
+      "fingerprint": "sha256/Jeg6cLAzUt73wWMjWfZAhmfF9umqjUX7C6cXaiJyxRE=",
+      "subject": "staging.example.com",
+      "issuer": "Acme Dev CA",
+      "error": "net::ERR_CERT_AUTHORITY_INVALID",
+      "errors": ["net::ERR_CERT_AUTHORITY_INVALID"],
+      "trustedAt": 1763731200000
+    }
+  ],
+  "waiting": []
+}
+```
+
+`errors` records all known faults; decisions from older builds may have only `error`.
+`waiting` carries the same certificate fields, with the `url` whose load is waiting and
+the `askedAt` it was raised at instead of `trustedAt`, and the panes behind each one are
+**held** — not failed. `breakpoint
+state` says so on its last line whenever there is anything to say:
+
+```
+Certificates: 1 trusted, 1 waiting
+```
+
+Answering one is the `certificates.decide` route over the socket; there is no command for
+it yet, because the question is one a human is being asked.
 
 ### `breakpoint logs`
 
@@ -235,6 +317,10 @@ The app's own entries carry `"pane": null`:
 | `project.originsChanged` | `origins` | The allowed origins were replaced, as now stored |
 | `project.layoutChanged` | `layout`, `focusedPane` | The panes were rearranged |
 | `project.zoomChanged` | `zoom` | The canvas zoom changed; may be `"fit"` |
+| `certificate.trusted` | `host`, `fingerprint`, `error`, `reason` | A certificate Chromium would not verify was accepted. `reason` is `loopback`, `stored` or `developer`. Written once per host and fingerprint per run |
+| `certificate.prompted` | `host`, `fingerprint`, `error`, `url` | A certificate is waiting on you, and every pane that met it is held |
+| `certificate.refused` | `host`, `fingerprint`, `error` | You refused a certificate. Nothing was stored |
+| `certificate.forgotten` | `host`, `fingerprint` | A stored decision was dropped, so that certificate asks again |
 
 Pane entries are tagged with the pane's `id`:
 
@@ -387,7 +473,7 @@ breakpoint quit --json --verbose | jq .quitting
 ## Error codes
 
 Stable strings, so a script can branch on the failure rather than on its wording. The
-first eight come back from the app; the rest are raised by the command itself.
+first ten come back from the app; the rest are raised by the command itself.
 
 | Code | Exit | Meaning |
 | --- | --- | --- |
@@ -399,6 +485,8 @@ first eight come back from the app; the rest are raised by the command itself.
 | `PANE_NOT_FOUND` | `1` | The open project has no pane with that id, or nothing is open |
 | `PROJECT_NOT_OPEN` | `1` | The route changes the open project and nothing is open |
 | `ORIGIN_NOT_ALLOWED` | `1` | `breakpoint open` named an origin the project does not allow. `details.url` is the expanded URL and `details.allowedOrigins` is the list it was checked against. Nothing moved |
+| `CERTIFICATES_UNREADABLE` | `1` | The stored certificate decisions are on disk but this build will not read them. `details.file` is the path. The file is left exactly as it was, so nothing is trusted and nothing new can be stored until it is fixed or deleted |
+| `CERTIFICATE_NOT_FOUND` | `1` | No certificate is waiting on that host and fingerprint, and none is stored for it. `details.host` and `details.fingerprint` are what was named |
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
@@ -414,6 +502,9 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | --- | --- | --- | --- |
 | `app.focus` | none | `{ "focused": true }`, or `false` if there was no window to raise | `breakpoint .`, unless `--background` |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
+| `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
+| `certificates.forget` | `{ "host": "staging.example.com", "fingerprint": "sha256/…" }` | the same | the window, the socket |
+| `certificates.list` | none | the same | the socket |
 | `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
 | `panes.reportGeometry` | `{ "pane": id, "expected": { "width", "height" }, "measured": { "width", "height" } }` | `{ "status": … }` | the window |
@@ -422,7 +513,8 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `project.setAllowedOrigins` | `{ "origins": ["http://localhost:3000"] }` | `{ "origins": [ … ] }`, as stored | the window, the socket |
 | `project.state` | none | the state snapshot | `breakpoint state` |
 
-The state snapshot is `{ "revision": n, "cursor": n, "project": …, "panes": { … } }`,
+The state snapshot is
+`{ "revision": n, "cursor": n, "project": …, "panes": { … }, "certificates": { … } }`,
 where `project` is `null` until one is opened, and otherwise carries `name`, `repoPath`,
 `startUrl` — where the panes are pointed now, which a navigation moves — `allowedOrigins`,
 `panes`, `layout`, `zoom` and `sessions`. Each pane has an
@@ -472,6 +564,14 @@ other, so it is reachable over the socket, but it exists for the window.
 
 `since` must be an integer of 0 or more; anything else is `INVALID_PARAMS` from the
 route and a usage error from the command, which never sends it.
+
+`certificates` is the certificate decisions this machine holds and the certificates
+waiting on you, as [Certificates](#certificates) describes. It is not a project's: a
+certificate belongs to a host, so the lists are there whether or not anything is open, and
+two projects on one staging server are one decision. `certificates.decide` answers a
+waiting certificate and `certificates.forget` drops a stored one; both answer
+`CERTIFICATE_NOT_FOUND` for a host and fingerprint they do not hold, and both return both
+lists as they now stand.
 
 `project.navigate` expands `url` itself, so every surface means the same thing by `3000`,
 and answers `INVALID_PARAMS` for anything that does not expand to an `http` or `https`

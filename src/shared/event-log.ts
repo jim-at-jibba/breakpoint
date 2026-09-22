@@ -1,3 +1,4 @@
+import type { CertificateTrustReason } from './certificates'
 import type { EmulationCapability, EmulationChanges } from './emulation'
 import type { Size } from './panes'
 import type { Layout, Zoom } from './project'
@@ -67,6 +68,45 @@ export type ProjectEntryBody =
   | { readonly type: 'project.navigationRefused'; readonly url: string }
   /** The origins automation may navigate to were replaced, as now stored. */
   | { readonly type: 'project.originsChanged'; readonly origins: readonly string[] }
+  /**
+   * A certificate Chromium would not verify was accepted, and `reason` says what
+   * accepted it ([ADR-0012]). Written once per host and fingerprint per run: the same
+   * page reloaded meets the same certificate again, and saying so every time would bury
+   * the decision that mattered.
+   */
+  | {
+      readonly type: 'certificate.trusted'
+      readonly host: string
+      readonly fingerprint: string
+      readonly error: string
+      readonly reason: CertificateTrustReason
+    }
+  /**
+   * A certificate is waiting on the developer, and every pane that met it is held until
+   * they answer. Untagged: the question is about a host, not about a pane, however many
+   * panes are waiting on it.
+   */
+  | {
+      readonly type: 'certificate.prompted'
+      readonly host: string
+      readonly fingerprint: string
+      readonly error: string
+      /** The URL whose load is waiting. */
+      readonly url: string
+    }
+  /** The developer refused a certificate. Nothing is stored, so the next one asks again. */
+  | {
+      readonly type: 'certificate.refused'
+      readonly host: string
+      readonly fingerprint: string
+      readonly error: string
+    }
+  /** A stored decision was dropped from settings, so that certificate prompts again. */
+  | {
+      readonly type: 'certificate.forgotten'
+      readonly host: string
+      readonly fingerprint: string
+    }
 
 /**
  * A pane's lifecycle, tagged with the pane. The log's first pane-tagged producer: a
@@ -294,6 +334,31 @@ function copyBody(body: EntryBody): EntryBody {
       return { type: body.type, url: body.url }
     case 'project.originsChanged':
       return { type: body.type, origins: Object.freeze([...body.origins]) }
+    case 'certificate.trusted':
+      return {
+        type: body.type,
+        host: body.host,
+        fingerprint: body.fingerprint,
+        error: body.error,
+        reason: body.reason
+      }
+    case 'certificate.prompted':
+      return {
+        type: body.type,
+        host: body.host,
+        fingerprint: body.fingerprint,
+        error: body.error,
+        url: body.url
+      }
+    case 'certificate.refused':
+      return {
+        type: body.type,
+        host: body.host,
+        fingerprint: body.fingerprint,
+        error: body.error
+      }
+    case 'certificate.forgotten':
+      return { type: body.type, host: body.host, fingerprint: body.fingerprint }
     case 'pane.created':
     case 'pane.loaded':
       return { type: body.type, url: body.url }

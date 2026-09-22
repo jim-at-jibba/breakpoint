@@ -1,4 +1,5 @@
-import { createServer, type Server } from 'node:http'
+import { createServer, type RequestListener, type Server } from 'node:http'
+import { createServer as createSecureServer } from 'node:https'
 import type { AddressInfo } from 'node:net'
 
 /**
@@ -25,6 +26,11 @@ import type { AddressInfo } from 'node:net'
  *
  * Every request either origin answers is recorded with its headers, which is what a
  * server doing device detection would see.
+ *
+ * `startSecureFixture` serves the same page over TLS, with a certificate generated when
+ * the test runs rather than committed. It is the origin the certificate cases need: a
+ * self-signed certificate on loopback, one from an authority nobody knows, an expired
+ * one, one naming another host, and one on a host that is not this machine.
  */
 
 export const HIT_TARGET = 44
@@ -46,6 +52,24 @@ export interface Fixture {
   b: string
   requests(): RecordedRequest[]
   close(): Promise<void>
+}
+
+export interface SecureFixture {
+  /** `https://<host>:<port>` */
+  origin: string
+  requests(): RecordedRequest[]
+  close(): Promise<void>
+}
+
+export interface SecureFixtureOptions {
+  /**
+   * The host the origin is spelled with. A host that is not this machine is reached by
+   * launching the app with Chromium's `--host-resolver-rules`; the server itself always
+   * listens on loopback.
+   */
+  host: string
+  /** PEM. `cert` may carry a chain, for a certificate signed by a private authority. */
+  certificate: { cert: string; key: string }
 }
 
 function page(origin: string, other: string): string {
@@ -119,42 +143,85 @@ function asset(scale: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><text y="12">${scale}</text></svg>`
 }
 
-function serve(
+/** The one request handler both the plain and the TLS origins answer with. */
+function respond(
+  origin: () => string,
+  other: () => string,
+  recorded: RecordedRequest[]
+): RequestListener {
+  return (request, response) => {
+    recorded.push({ origin: origin(), url: request.url ?? '/', headers: { ...request.headers } })
+    if (request.url === '/favicon.ico') {
+      response.writeHead(204).end()
+      return
+    }
+    const target = new URL(request.url ?? '/', 'http://fixture')
+    if (target.pathname === '/asset') {
+      response.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' })
+      response.end(asset(target.searchParams.get('x') ?? '?'))
+      return
+    }
+    if (target.pathname === '/redirect') {
+      response.writeHead(302, { location: target.searchParams.get('to') ?? '/' }).end()
+      return
+    }
+    response.writeHead(200, {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store'
+    })
+    response.end(page(origin(), other()))
+  }
+}
+
+/** Dual-stack, so `localhost` answers whichever loopback address it resolves to. */
+function listen(server: Server): Promise<number> {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen({ port: 0, host: '::', ipv6Only: false }, () => {
+      resolve((server.address() as AddressInfo).port)
+    })
+  })
+}
+
+function close(server: Server): Promise<void> {
+  server.closeAllConnections()
+  return new Promise<void>((resolve) => server.close(() => resolve()))
+}
+
+async function serve(
   host: string,
   other: () => string,
   recorded: RecordedRequest[]
 ): Promise<{ server: Server; origin: string }> {
-  return new Promise((resolve, reject) => {
-    let origin = ''
-    const server = createServer((request, response) => {
-      recorded.push({ origin, url: request.url ?? '/', headers: { ...request.headers } })
-      if (request.url === '/favicon.ico') {
-        response.writeHead(204).end()
-        return
-      }
-      const target = new URL(request.url ?? '/', 'http://fixture')
-      if (target.pathname === '/asset') {
-        response.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' })
-        response.end(asset(target.searchParams.get('x') ?? '?'))
-        return
-      }
-      if (target.pathname === '/redirect') {
-        response.writeHead(302, { location: target.searchParams.get('to') ?? '/' }).end()
-        return
-      }
-      response.writeHead(200, {
-        'content-type': 'text/html; charset=utf-8',
-        'cache-control': 'no-store'
-      })
-      response.end(page(origin, other()))
-    })
-    server.once('error', reject)
-    // Dual-stack, so `localhost` answers whichever loopback address it resolves to.
-    server.listen({ port: 0, host: '::', ipv6Only: false }, () => {
-      origin = `http://${host}:${(server.address() as AddressInfo).port}`
-      resolve({ server, origin })
-    })
-  })
+  let origin = ''
+  const server = createServer(respond(() => origin, other, recorded))
+  const port = await listen(server)
+  origin = `http://${host}:${port}`
+  return { server, origin }
+}
+
+export async function startSecureFixture({
+  host,
+  certificate
+}: SecureFixtureOptions): Promise<SecureFixture> {
+  const recorded: RecordedRequest[] = []
+  let origin = ''
+  const server = createSecureServer(
+    certificate,
+    respond(
+      () => origin,
+      () => origin,
+      recorded
+    )
+  )
+  const port = await listen(server)
+  origin = `https://${host}:${port}`
+
+  return {
+    origin,
+    requests: () => [...recorded],
+    close: () => close(server)
+  }
 }
 
 export async function startFixture(): Promise<Fixture> {
@@ -170,10 +237,7 @@ export async function startFixture(): Promise<Fixture> {
     b: b.origin,
     requests: () => [...recorded],
     close: async () => {
-      for (const { server } of [a, b]) {
-        server.closeAllConnections()
-        await new Promise<void>((resolve) => server.close(() => resolve()))
-      }
+      for (const { server } of [a, b]) await close(server)
     }
   }
 }

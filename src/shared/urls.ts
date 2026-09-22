@@ -25,8 +25,23 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i
 const NON_WEB_SCHEME = /^(?:about|blob|breakpoint|data|file|ftp|javascript|mailto):/i
 const HOST_WITH_PORT = /^[^/?#]+:\d+(?:[/?#]|$)/
 
-/** Hosts that are this machine, and are therefore served over http while developing. */
-const LOOPBACK: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]'])
+/** Every IPv4 address in `127.0.0.0/8`, which is the whole of it, not just `127.0.0.1`. */
+const LOOPBACK_IPV4 = /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/
+const LOOPBACK_IPV6: ReadonlySet<string> = new Set(['::1', '0:0:0:0:0:0:0:1'])
+
+/**
+ * Whether a host is this machine. Asked by two features that are asking the same thing:
+ * which scheme an address typed without one gets, and whether a certificate is a dev
+ * server's and so never worth asking about ([ADR-0012]). Written once so the two can
+ * never drift into disagreeing about what `127.0.0.2` is.
+ *
+ * `host` is a URL's `hostname`, so an IPv6 address may arrive inside its brackets.
+ */
+export function isLoopbackHost(host: string): boolean {
+  const name = host.toLowerCase().replace(/^\[|\]$/g, '')
+  if (name === 'localhost' || name.endsWith('.localhost')) return true
+  return LOOPBACK_IPV4.test(name) || LOOPBACK_IPV6.has(name)
+}
 
 /**
  * What the developer typed, as a URL a pane can be sent to, or nothing if it is not one.
@@ -64,7 +79,7 @@ export function expandUrl(typed: string): string | undefined {
 
   const local = URL.parse(`http://${value}`)
   if (local === null || local.hostname === '') return undefined
-  if (LOOPBACK.has(local.hostname) || local.hostname.endsWith('.localhost')) return local.href
+  if (isLoopbackHost(local.hostname)) return local.href
   const secure = URL.parse(`https://${value}`)
   return secure?.hostname === local.hostname ? secure.href : undefined
 }

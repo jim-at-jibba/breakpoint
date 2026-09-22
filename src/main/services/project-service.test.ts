@@ -43,7 +43,10 @@ beforeEach(async () => {
     removePane: (pane) => service.removePane(pane),
     rotatePane: (pane) => service.rotatePane(pane)
   })
-  service = new ProjectService(store, feed, log, panes, presets)
+  // Certificate trust is not this service's; the snapshot simply carries it.
+  service = new ProjectService(store, feed, log, panes, presets, {
+    list: () => ({ trusted: [], waiting: [] })
+  })
 })
 
 afterEach(async () => {
@@ -124,7 +127,13 @@ describe('async project opens', () => {
     const second = service.open(other)
     await started
     await new Promise<void>((resolve) => setImmediate(resolve))
-    expect(service.snapshot()).toEqual({ revision: 0, cursor: 0, project: null, panes: {} })
+    expect(service.snapshot()).toEqual({
+      revision: 0,
+      cursor: 0,
+      project: null,
+      panes: {},
+      certificates: { trusted: [], waiting: [] }
+    })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
 
@@ -151,7 +160,8 @@ describe('async project opens', () => {
       revision: 2,
       cursor: 1,
       project: before.project,
-      panes: before.panes
+      panes: before.panes,
+      certificates: before.certificates
     })
     expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, shop])
   })

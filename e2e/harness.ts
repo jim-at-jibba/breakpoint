@@ -53,8 +53,17 @@ export interface LaunchedApp {
   output(): string
 }
 
-export async function launchApp(sandbox: Sandbox): Promise<LaunchedApp> {
-  const app = await electron.launch({ args: [MAIN_ENTRY], env: sandbox.env })
+/**
+ * `switches` are Chromium's own, passed as the app's command line. The certificate tests
+ * need `--host-resolver-rules` to point a host that is not this machine at the fixture;
+ * the launch argument parser skips anything starting with a dash, so they never read as
+ * a repo path.
+ */
+export async function launchApp(
+  sandbox: Sandbox,
+  switches: readonly string[] = []
+): Promise<LaunchedApp> {
+  const app = await electron.launch({ args: [MAIN_ENTRY, ...switches], env: sandbox.env })
 
   let output = ''
   app.process().stdout?.on('data', (chunk: Buffer) => {
