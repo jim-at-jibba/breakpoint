@@ -176,8 +176,15 @@ export class PaneService {
     this.record(pane, { type: 'pane.loaded', url })
   }
 
+  /**
+   * A page that did not load is an error against the pane, counted by its header. It is
+   * not a degradation: the attachment and the overrides may be perfectly in force, and
+   * saying a pane is degraded because the dev server was down would make the marker mean
+   * nothing.
+   */
   loadFailed({ pane, url, code, message }: LoadFailure): void {
     this.record(pane, { type: 'pane.loadFailed', url, code, message })
+    this.observe(pane, { type: 'loadFailed' })
   }
 
   /**

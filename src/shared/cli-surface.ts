@@ -117,11 +117,13 @@ function renderSnapshot(data: unknown, verb: string): string {
     return ['No project is open. Run `breakpoint .` in a repo.', cursor].join('\n')
   }
   const panes = project.panes.map((pane) => {
-    const line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} @${pane.dpr}x`
-    const degraded = snapshot?.panes?.[pane.id]?.degraded ?? []
+    const status = snapshot?.panes?.[pane.id]
+    let line = `  ${pane.name.padEnd(10)}${pane.width}×${pane.height} @${pane.dpr}x`
+    // The same two things the pane's header says, for the surface that has no header.
+    if (status?.errors) line += `  errors: ${status.errors}`
+    const degraded = status?.degraded ?? []
     if (degraded.length === 0) return line
-    const reasons = degraded.map(describeDegradation).join('; ')
-    return `${line}  degraded: ${reasons}`
+    return `${line}  degraded: ${degraded.map(describeDegradation).join('; ')}`
   })
   return [
     `${verb} ${project.name} (${project.repoPath})`,

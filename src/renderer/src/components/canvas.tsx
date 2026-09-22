@@ -8,7 +8,18 @@ import {
   stripZoom,
   type CanvasChrome
 } from '../../../shared/canvas'
-import type { PaneStatus, Size } from '../../../shared/panes'
+import {
+  describeFieldState,
+  fieldState,
+  formatDpr,
+  PANE_HEADER_TIERS,
+  paneHeaderHasActions,
+  paneHeaderTier,
+  schemeGlyph,
+  type PaneHeaderTier
+} from '../../../shared/pane-header'
+import { paneColorVar } from '../../../shared/pane-palette'
+import type { CapabilityState, PaneStatus, Size } from '../../../shared/panes'
 import { describeDegradation, isPaneDimension, paneWebPreferences } from '../../../shared/panes'
 import type { Pane, Project } from '../../../shared/project'
 
@@ -249,7 +260,7 @@ function PaneView({
         } as React.CSSProperties
       }
     >
-      <PaneHeader pane={pane} index={index} width={drawn.width} degraded={degraded} />
+      <PaneHeader pane={pane} index={index} width={drawn.width} status={status} />
       <div className="relative overflow-hidden" style={drawn}>
         {/* Never override the element's display: Electron lays the guest out with flex,
             and anything else collapses it to 150px tall while emulation reports the
@@ -334,24 +345,33 @@ function frameSize(pane: Pane, zoom: number, chrome: CanvasChrome): Size {
 
 /**
  * Holds its screen size whatever the zoom and is clipped by its own pane, so it can never
- * claim width the pane does not have.
+ * claim width the pane does not have. What it still says at that width is the degradation
+ * ladder's answer ([ADR-0010]), and the ladder is a pure function of the drawn width —
+ * not of the zoom, because Focus draws its panes at several at once.
+ *
+ * Everything it says is said against what is actually emulated rather than what the pane
+ * declares: a field whose capability is not in force is marked and keeps its number, so a
+ * pane cannot quietly claim a viewport the override was refused for.
  *
  * The size fields, rotate and remove are the developer's end of `panes.resize`,
  * `panes.rotate` and `panes.remove` — no route here the terminal cannot reach
- * ([ADR-0005]). They are drawn at every width for now; tiering them away as the pane
- * narrows is the degradation ladder's business (#14, [ADR-0010]).
+ * ([ADR-0005]).
  */
 function PaneHeader({
   pane,
   index,
   width,
-  degraded
+  status
 }: {
   pane: Pane
   index: number
+  /** Screen pixels: what this pane is drawn at, which is what the ladder is keyed on. */
   width: number
-  degraded: PaneStatus['degraded']
+  status: PaneStatus | undefined
 }): React.JSX.Element {
+  const tier = paneHeaderTier(width)
+  const degraded = status?.degraded ?? []
+  const errors = status?.errors ?? 0
   const reasons = degraded.map(describeDegradation).join('\n')
   const [message, setMessage] = useState<string | null>(null)
   const actionVersion = useRef(0)
@@ -378,18 +398,31 @@ function PaneHeader({
   return (
     <div
       className="flex h-[var(--bp-row)] items-center gap-[var(--bp-space-2)] overflow-hidden pr-[var(--bp-space-2)]"
+      // Exactly the pane's drawn width and no more: the clipping is what binds the header
+      // to the pane, and a header wider than its pane would claim ground we do not own.
       style={{ width }}
+      data-testid="pane-header"
+      data-tier={PANE_HEADER_TIERS.indexOf(tier)}
+      // Everything the ladder took away is still here, which is what makes shedding it safe.
+      title={describePane(pane, errors, reasons)}
     >
       <span
         className="h-[var(--bp-pane-tab-h)] w-[var(--bp-pane-tab-w)] flex-none rounded-r-[var(--bp-radius-xs)]"
-        style={{ background: `var(--bp-pane-${(index % 10) + 1})` }}
+        style={{ background: paneColorVar(index) }}
+        data-testid="pane-tab"
         aria-hidden
       />
-      <span className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] whitespace-nowrap text-[color:var(--bp-ink)]">
-        {pane.name}
-      </span>
-      <PaneSize pane={pane} onResize={resize} />
-      {message !== null && (
+      {tier.name && (
+        <span
+          className="min-w-0 truncate font-mono text-[length:var(--bp-text-micro)] whitespace-nowrap text-[color:var(--bp-ink)]"
+          data-testid="pane-name"
+        >
+          {pane.name}
+        </span>
+      )}
+      <PaneSize pane={pane} tier={tier} status={status} onResize={resize} />
+      {tier.scheme && <PaneScheme pane={pane} status={status} />}
+      {message !== null && tier.width && (
         <span
           role="alert"
           data-testid="pane-action-error"
@@ -399,70 +432,152 @@ function PaneHeader({
           {message}
         </span>
       )}
-      {degraded.length > 0 && (
+      {degraded.length > 0 && tier.width && (
         <span
           className="flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-warn)]"
           data-testid="pane-degraded"
           title={reasons}
         >
-          degraded
+          ⚠
         </span>
       )}
       <div className="ml-auto flex flex-none items-center gap-[var(--bp-space-1)]">
-        <PaneAction
-          label="Rotate"
-          testId="pane-rotate"
-          pane={pane.id}
-          onClick={() =>
-            void runAction(() => window.breakpoint.invoke('panes.rotate', { pane: pane.id }))
-          }
-        >
-          ⤢
-        </PaneAction>
-        <PaneAction
-          label="Remove"
-          testId="pane-remove"
-          pane={pane.id}
-          onClick={() =>
-            void runAction(() => window.breakpoint.invoke('panes.remove', { pane: pane.id }))
-          }
-        >
-          ×
-        </PaneAction>
+        {paneHeaderHasActions(width) && (
+          <>
+            <PaneAction
+              label="Rotate"
+              testId="pane-rotate"
+              pane={pane.id}
+              onClick={() =>
+                void runAction(() => window.breakpoint.invoke('panes.rotate', { pane: pane.id }))
+              }
+            >
+              ⤢
+            </PaneAction>
+            <PaneAction
+              label="Remove"
+              testId="pane-remove"
+              pane={pane.id}
+              onClick={() =>
+                void runAction(() => window.breakpoint.invoke('panes.remove', { pane: pane.id }))
+              }
+            >
+              ×
+            </PaneAction>
+          </>
+        )}
+        {/* The last thing standing beside the colour tab: at every tier, a pane with
+            errors says so, because that is what makes a narrow pane worth looking at. */}
+        {errors > 0 && (
+          <span
+            className="flex-none rounded-[var(--bp-radius-xs)] bg-[var(--bp-error)] px-[var(--bp-space-2)] py-[var(--bp-space-1)] font-mono text-[length:var(--bp-text-micro)] leading-none font-medium tabular-nums text-[color:var(--bp-pane-ink)]"
+            data-testid="pane-errors"
+            title={`${errors} ${errors === 1 ? 'error' : 'errors'} in this pane`}
+          >
+            {errors}
+          </span>
+        )}
       </div>
     </div>
   )
 }
 
+/** Everything the header could say, for the tiers where it cannot say it. */
+function describePane(pane: Pane, errors: number, reasons: string): string {
+  const lines = [
+    `${pane.name} ${pane.width}×${pane.height} ${formatDpr(pane.dpr)} ${pane.colorScheme}`
+  ]
+  if (errors > 0) lines.push(`${errors} ${errors === 1 ? 'error' : 'errors'}`)
+  if (reasons) lines.push(reasons)
+  return lines.join('\n')
+}
+
 /**
- * The pane's declared size, typed. Each field shows what the pane declares until it is
- * edited, and commits only itself, so committing a width can never carry a height the
- * pane no longer has.
+ * The pane's declared size, typed, and the DPR beside it. Each field shows what the pane
+ * declares until it is edited, and commits only itself, so committing a width can never
+ * carry a height the pane no longer has.
+ *
+ * Both are the device metrics override's to make true, so both are marked with its state:
+ * a number the guest never accepted is shown as a number the guest never accepted.
  */
 function PaneSize({
   pane,
+  tier,
+  status,
   onResize
 }: {
   pane: Pane
+  tier: PaneHeaderTier
+  status: PaneStatus | undefined
   onResize(size: { width: number } | { height: number }): Promise<void>
-}): React.JSX.Element {
+}): React.JSX.Element | null {
+  if (!tier.width) return null
+  const state = fieldState(status?.emulation, 'viewport')
+
   return (
-    <span className="flex flex-none items-center font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-muted)]">
+    <span
+      className="flex flex-none items-center font-mono text-[length:var(--bp-text-micro)]"
+      style={{ color: fieldTone(state) }}
+      title={describeFieldState('viewport', state)}
+      data-emulation={state}
+    >
       <SizeInput
         label="Width"
         pane={pane.id}
         declared={pane.width}
         onCommit={(width) => void onResize({ width })}
       />
-      ×
-      <SizeInput
-        label="Height"
-        pane={pane.id}
-        declared={pane.height}
-        onCommit={(height) => void onResize({ height })}
-      />
+      {tier.height && (
+        <>
+          ×
+          <SizeInput
+            label="Height"
+            pane={pane.id}
+            declared={pane.height}
+            onCommit={(height) => void onResize({ height })}
+          />
+        </>
+      )}
+      {tier.dpr && <span data-testid="pane-dpr">{formatDpr(pane.dpr)}</span>}
     </span>
   )
+}
+
+/**
+ * The scheme the pane is rendering the page in, as a glyph. Marked when the override is
+ * not in force, which is the case the glyph exists for: a pane showing ☾ while the page
+ * is still in light is the lie the header is meant to prevent.
+ */
+function PaneScheme({
+  pane,
+  status
+}: {
+  pane: Pane
+  status: PaneStatus | undefined
+}): React.JSX.Element {
+  const state = fieldState(status?.emulation, 'scheme')
+  return (
+    <span
+      className="flex-none font-mono text-[length:var(--bp-text-micro)]"
+      style={{ color: fieldTone(state) }}
+      data-testid="pane-scheme"
+      data-scheme={pane.colorScheme}
+      data-emulation={state}
+      title={`${pane.colorScheme} — ${describeFieldState('scheme', state)}`}
+    >
+      {schemeGlyph(pane.colorScheme)}
+    </span>
+  )
+}
+
+/**
+ * What a field's colour says about the capability behind it. Applied is the quiet case;
+ * a refused override is a rim-and-header event and reads as one.
+ */
+function fieldTone(state: CapabilityState): string {
+  if (state === 'failed') return 'var(--bp-warn)'
+  if (state === 'pending') return 'var(--bp-ink-faint)'
+  return 'var(--bp-ink-muted)'
 }
 
 /**
