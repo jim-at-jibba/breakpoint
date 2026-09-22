@@ -1,6 +1,16 @@
 import { Canvas } from '@renderer/components/canvas'
+import { CanvasControls } from '@renderer/components/canvas-controls'
 import { Button } from '@renderer/components/ui/button'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
+import { useState } from 'react'
+import { MAX_ZOOM } from '../../shared/canvas'
+import type { Project, Zoom } from '../../shared/project'
+import type { LayoutSetting, RouteName, RouteParams } from '../../shared/routes'
+
+interface ZoomPreview {
+  project: Project
+  zoom: number
+}
 
 // The shell, ahead of the real toolbar. The toolbar strip is the window's drag region
 // and clears the traffic lights; it names the open project and its start URL. The body
@@ -13,6 +23,50 @@ export default function App(): React.JSX.Element {
   const state = useSnapshot()
   const snapshot = state.snapshot
   const project = snapshot?.project ?? null
+  // What the canvas draws at is the canvas's to settle and the toolbar's to show, so it
+  // is held here between them. It is never stored: only the value `Fit` is (ADR-0009).
+  const [zoom, setZoom] = useState(MAX_ZOOM)
+  const [zoomPreview, setZoomPreview] = useState<ZoomPreview | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const activeZoomPreview = zoomPreview?.project === project ? zoomPreview.zoom : null
+
+  const invokeAction = async <N extends RouteName>(
+    route: N,
+    params: RouteParams<N>
+  ): Promise<boolean> => {
+    try {
+      const response = await window.breakpoint.invoke(route, params)
+      if (!response.ok) {
+        setActionError(`${response.error.code}: ${response.error.message}`)
+        return false
+      }
+      setActionError(null)
+      return true
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : String(error))
+      return false
+    }
+  }
+
+  const setLayout = (setting: LayoutSetting): void => {
+    setZoomPreview(null)
+    void invokeAction('project.setLayout', setting)
+  }
+
+  const previewZoom = (value: number): void => {
+    if (project) setZoomPreview({ project, zoom: value })
+  }
+
+  const commitZoom = (value: Zoom): void => {
+    if (value === 'fit') {
+      setZoomPreview(null)
+    } else if (project) {
+      setZoomPreview({ project, zoom: value })
+    }
+    void invokeAction('project.setZoom', { zoom: value }).then((ok) => {
+      if (!ok || project?.zoom === value) setZoomPreview(null)
+    })
+  }
 
   return (
     <div className="flex h-screen flex-col">
@@ -61,17 +115,43 @@ export default function App(): React.JSX.Element {
             Refreshing project…
           </span>
         )}
+        {actionError && (
+          <span
+            role="alert"
+            className="truncate text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
+          >
+            Could not update canvas: {actionError}
+          </span>
+        )}
+        {project && (
+          <div className="ml-auto">
+            <CanvasControls
+              project={project}
+              zoom={activeZoomPreview ?? zoom}
+              previewing={activeZoomPreview !== null}
+              onLayout={setLayout}
+              onZoomPreview={previewZoom}
+              onZoomCommit={commitZoom}
+            />
+          </div>
+        )}
         <Button
           size="sm"
           variant="outline"
-          className="ml-auto mr-[var(--bp-space-4)]"
+          className={project ? 'mr-[var(--bp-space-4)]' : 'ml-auto mr-[var(--bp-space-4)]'}
           onClick={() => void window.breakpoint.invoke('app.quit')}
         >
           Quit
         </Button>
       </header>
       {project && snapshot ? (
-        <Canvas project={project} statuses={snapshot.panes} />
+        <Canvas
+          project={project}
+          statuses={snapshot.panes}
+          zoomPreview={activeZoomPreview}
+          onZoom={setZoom}
+          onFocusPane={(pane) => setLayout({ layout: 'focus', focusedPane: pane })}
+        />
       ) : (
         <main className="bg-background text-foreground flex flex-1 flex-col items-center justify-center gap-4">
           <div className="flex items-center gap-2">

@@ -36,8 +36,9 @@ Standing rules that came out of it:
   scheme mismatch are all rim-and-header events. The single exception permitted to draw
   over a page is the transient inspect highlight, because it has to register to an element
   box to mean anything.
-- **Overlay strokes counter-scale.** Set `--bp-zoom` on the canvas; anything drawn over a
-  pane uses `--bp-stroke-overlay`, so it stays 1.5 screen px at any canvas zoom.
+- **Overlay strokes counter-scale.** Set `--bp-zoom` on the pane — Focus draws its panes
+  at different zooms, so the canvas is not where the answer lives — and anything drawn
+  over that pane uses `--bp-stroke-overlay`, so it stays 1.5 screen px at any zoom.
 - **Pane identity comes from `--bp-pane-1` … `--bp-pane-10`.** Fixed lightness and chroma,
   separated by hue alone, so the set survives rasterising into a composite screenshot.
   Never colour a pane any other way.

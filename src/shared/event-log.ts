@@ -1,5 +1,6 @@
 import type { EmulationCapability, EmulationChanges } from './emulation'
 import type { Size } from './panes'
+import type { Layout, Zoom } from './project'
 import {
   jsonByteLength,
   MAX_FRAME_BYTES,
@@ -36,15 +37,24 @@ export const MAX_ENTRY_TEXT_BYTES = 16 * 1024
  */
 export type EntryBody = ProjectEntryBody | PaneEntryBody
 
-/** The app's own: untagged. */
-export type ProjectEntryBody = {
-  readonly type: 'project.openFailed'
-  /** As the caller asked for it: canonicalising the path is one of the things that fails. */
-  readonly path: string
-  /** The same stable code the route call failed with, so both surfaces branch alike. */
-  readonly code: WireErrorCode
-  readonly message: string
-}
+/** The app's own: untagged, because no one pane produced them. */
+export type ProjectEntryBody =
+  | {
+      readonly type: 'project.openFailed'
+      /** As the caller asked for it: canonicalising the path is one of the things that fails. */
+      readonly path: string
+      /** The same stable code the route call failed with, so both surfaces branch alike. */
+      readonly code: WireErrorCode
+      readonly message: string
+    }
+  /** How the panes are arranged, and which one Focus now draws at 100%. */
+  | {
+      readonly type: 'project.layoutChanged'
+      readonly layout: Layout
+      readonly focusedPane: string | null
+    }
+  /** The zoom control's value, which may be Fit ([ADR-0009]). */
+  | { readonly type: 'project.zoomChanged'; readonly zoom: Zoom }
 
 /**
  * A pane's lifecycle, tagged with the pane. The log's first pane-tagged producer: a
@@ -247,6 +257,10 @@ function copyBody(body: EntryBody): EntryBody {
   switch (body.type) {
     case 'project.openFailed':
       return { type: body.type, path: body.path, code: body.code, message: body.message }
+    case 'project.layoutChanged':
+      return { type: body.type, layout: body.layout, focusedPane: body.focusedPane }
+    case 'project.zoomChanged':
+      return { type: body.type, zoom: body.zoom }
     case 'pane.created':
     case 'pane.loaded':
       return { type: body.type, url: body.url }

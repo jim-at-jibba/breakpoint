@@ -1,5 +1,5 @@
 import { reconcilePaneStatuses, type PaneStatus } from './panes'
-import type { Pane, Project } from './project'
+import type { Layout, Pane, Project, Zoom } from './project'
 
 /**
  * What the renderer renders from: a snapshot, kept current by patches.
@@ -35,6 +35,10 @@ export type StatePatch =
   | { type: 'pane.status'; pane: string; status: PaneStatus }
   /** A saved declaration; any affected capabilities were marked pending before this patch. */
   | { type: 'pane.changed'; pane: Pane }
+  /** How the panes are arranged, and which one Focus draws at 100%. */
+  | { type: 'project.layout'; layout: Layout; focusedPane: string | null }
+  /** The zoom control's value, which may be Fit ([ADR-0009]). */
+  | { type: 'project.zoom'; zoom: Zoom }
 
 export interface RevisionedPatch {
   revision: number
@@ -67,6 +71,17 @@ export function applyPatch(
       }
       const panes = project.panes.map((candidate) => (candidate.id === pane.id ? pane : candidate))
       return { ...before, revision, project: { ...project, panes } }
+    }
+    case 'project.layout': {
+      const { project } = before
+      if (!project) return { ...before, revision }
+      const { layout, focusedPane } = patch
+      return { ...before, revision, project: { ...project, layout, focusedPane } }
+    }
+    case 'project.zoom': {
+      const { project } = before
+      if (!project) return { ...before, revision }
+      return { ...before, revision, project: { ...project, zoom: patch.zoom } }
     }
   }
 }

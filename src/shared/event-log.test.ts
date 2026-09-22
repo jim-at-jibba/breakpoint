@@ -9,7 +9,7 @@ import {
 } from './event-log'
 import { encodeLine, LineBuffer, MAX_FRAME_BYTES, MAX_REQUEST_ID_BYTES, success } from './protocol'
 
-function failure(path: string): ProjectEntryBody {
+function failure(path: string): Extract<ProjectEntryBody, { type: 'project.openFailed' }> {
   return {
     type: 'project.openFailed',
     path,

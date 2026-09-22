@@ -37,11 +37,15 @@ let launched: LaunchedApp | undefined
 let repos: string
 let fixture: Fixture
 
-/** A repo whose stored project starts on the fixture, so the panes have something real to load. */
+/**
+ * A repo whose stored project starts on the fixture, so the panes have something real to
+ * load. Drawn at 100%: what zoom does to a pane is #13's spec, and every assertion here
+ * is about the pane rather than about the canvas it sits on.
+ */
 function makeRepo(name: string, startUrl: string): Project {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = { ...createProject(realpathSync.native(path)), startUrl }
+  const project: Project = { ...createProject(realpathSync.native(path)), startUrl, zoom: 100 }
   saveProject(project)
   return project
 }
@@ -133,7 +137,7 @@ test('opening a project renders its panes on a horizontal scrolling canvas, each
   await open(shop)
   await settled(shop)
 
-  // One element per pane, in order, each drawn at its declared size: zoom is 100% until Fit lands.
+  // One element per pane, in order, each drawn at its declared size at this project's 100%.
   const panes = page.getByTestId('pane')
   await expect(panes).toHaveCount(3)
   expect(
