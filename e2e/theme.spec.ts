@@ -10,8 +10,15 @@ import {
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
+import {
+  createProject,
+  projectFileName,
+  writeProjectFile,
+  type Project
+} from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { APP_THEME_BACKGROUND, type AppTheme, type ThemePreference } from '../src/shared/theme'
+import { startFixture, type Fixture } from './fixture'
 import {
   closeApp,
   launchApp,
@@ -36,6 +43,7 @@ import {
 let sandbox: Sandbox
 let launched: LaunchedApp | undefined
 let repos: string
+let fixture: Fixture
 
 function settingsFile(): string {
   return join(sandbox.userDataDir, 'settings.json')
@@ -47,16 +55,76 @@ function storedSettings(): unknown {
     : undefined
 }
 
-function makeRepo(name: string): string {
+/**
+ * A repo with a project already written for it, pointed at the fixture and drawn at
+ * 100%: these cases need panes that actually load a page, because what the page makes of
+ * the app's theme is the thing under test.
+ */
+function makeRepo(name: string): Project {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  return realpathSync.native(path)
+  const project: Project = {
+    ...createProject(realpathSync.native(path)),
+    startUrl: `${fixture.a}/`,
+    zoom: 100
+  }
+  const projects = join(sandbox.userDataDir, 'projects')
+  mkdirSync(projects, { recursive: true })
+  writeFileSync(
+    join(projects, projectFileName(project.repoPath)),
+    `${JSON.stringify(writeProjectFile(project), null, 2)}\n`
+  )
+  return project
+}
+
+function guestId(page: Page, pane: string): Promise<number> {
+  return page
+    .locator(`webview[data-pane="${pane}"]`)
+    .evaluate((element) =>
+      (element as unknown as { getWebContentsId(): number }).getWebContentsId()
+    )
+}
+
+/** What the page inside a pane makes of the colour scheme it is being served. */
+function guestPrefersDark(app: LaunchedApp['app'], id: number): Promise<boolean> {
+  return app.evaluate(
+    ({ webContents }, id) =>
+      webContents
+        .fromId(id)!
+        .executeJavaScript(
+          `matchMedia('(prefers-color-scheme: dark)').matches`
+        ) as Promise<boolean>,
+    id
+  )
+}
+
+/** Every pane loaded, attached, measured and emulating what it declares. */
+async function settled(project: Project): Promise<void> {
+  await expect
+    .poll(async () => {
+      const panes = (await snapshot()).panes
+      return project.panes.every((pane) => {
+        const status = panes[pane.id]
+        return (
+          status?.attachment === 'attached' &&
+          status.geometry !== 'unchecked' &&
+          Object.values(status.emulation).every((capability) => capability !== 'pending')
+        )
+      })
+    })
+    .toBe(true)
 }
 
 async function snapshot(): Promise<StateSnapshot> {
   const run = await runCli(sandbox, ['state', '--json'])
   expect(run.stderr).toBe('')
   return JSON.parse(run.stdout) as StateSnapshot
+}
+
+async function openProject(project: Project): Promise<void> {
+  const run = await runCli(sandbox, ['.'], project.repoPath)
+  expect(run.stderr).toBe('')
+  expect(run.code).toBe(0)
 }
 
 async function setTheme(preference: ThemePreference): Promise<void> {
@@ -80,15 +148,17 @@ async function windowColour(app: LaunchedApp): Promise<string> {
   return colour.toLowerCase()
 }
 
-test.beforeEach(() => {
+test.beforeEach(async () => {
   sandbox = new Sandbox()
   launched = undefined
   repos = mkdtempSync(join(tmpdir(), 'bp-repos-'))
+  fixture = await startFixture()
 })
 
 test.afterEach(async () => {
   if (launched) await closeApp(launched)
   sandbox.dispose()
+  await fixture.close()
   rmSync(repos, { recursive: true, force: true })
 })
 
@@ -170,10 +240,38 @@ test('the theme reaches the window in the snapshot, as a patch and not a channel
   expect(state.revision).toBeGreaterThan(started.revision)
 })
 
+/**
+ * The case the whole separation exists for, and the one a snapshot comparison cannot
+ * see: a pane whose colour scheme is `system` emulates no override, so its page follows
+ * Chromium's native theme. Overriding the app theme through `nativeTheme.themeSource`
+ * would put the app's chrome inside that page — measured, and warned about in
+ * `shared/emulation.ts`. This probes the page itself, not what the snapshot says about it.
+ */
+test('the app theme does not reach the page inside a pane emulating no scheme', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  const shop = makeRepo('shop')
+  await openProject(shop)
+  await settled(shop)
+  const [mobile] = shop.panes
+  expect(mobile.colorScheme).toBe('system')
+  const id = await guestId(page, mobile.id)
+  const desktopDark = await guestPrefersDark(app, id)
+
+  // The app taken the other way from the desktop, which is the whole point of an override.
+  const away: AppTheme = desktopDark ? 'light' : 'dark'
+  await setTheme(away)
+  await expect.poll(async () => (await snapshot()).theme.active).toBe(away)
+
+  // The page has not moved with it.
+  expect(await guestPrefersDark(app, id)).toBe(desktopDark)
+})
+
 test('the app theme and a pane colour scheme leave each other alone', async () => {
   launched = await launchApp(sandbox)
   const shop = makeRepo('shop')
-  expect((await runCli(sandbox, ['.'], shop)).code).toBe(0)
+  await openProject(shop)
   const opened = await snapshot()
   const [pane] = opened.project?.panes ?? []
   expect(pane.colorScheme).toBe('system')

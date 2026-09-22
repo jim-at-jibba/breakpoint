@@ -3,7 +3,7 @@ import { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
 import type { AppSettings } from '../../shared/settings'
 import type { RevisionedPatch } from '../../shared/state'
-import type { AppTheme, ThemePreference } from '../../shared/theme'
+import type { AppTheme } from '../../shared/theme'
 import type { LoadSettingsResult, SettingsStore } from './settings-store'
 
 const mocks = vi.hoisted(() => ({
@@ -26,41 +26,30 @@ vi.mock('electron', () => ({
 import { AppService } from './app-service'
 
 /**
- * The platform, as the service is allowed to see it: `themeSource` overrides what the OS
- * says, and the platform announces every change to either.
+ * The platform, as the service is allowed to see it: a desktop that can be read and can
+ * change, and windows that can be painted. There is deliberately no way to override what
+ * the desktop reports, because the real host deliberately has none ([theme-host.ts]).
  */
 class FakeThemeHost implements ThemeHost {
   system: AppTheme = 'dark'
-  preference: ThemePreference = 'system'
   readonly painted: AppTheme[] = []
   private readonly listeners = new Set<() => void>()
 
-  apply(preference: ThemePreference): AppTheme {
-    this.preference = preference
-    this.announce()
-    return this.theme()
-  }
-
-  theme(): AppTheme {
-    return this.preference === 'system' ? this.system : this.preference
+  systemTheme(): AppTheme {
+    return this.system
   }
 
   paint(theme: AppTheme): void {
     this.painted.push(theme)
   }
 
-  onChanged(listener: () => void): () => void {
+  onChanged(listener: () => void): void {
     this.listeners.add(listener)
-    return () => this.listeners.delete(listener)
   }
 
-  /** The developer changing the OS appearance while the app is running. */
+  /** The developer changing the desktop's appearance while the app is running. */
   setSystem(theme: AppTheme): void {
     this.system = theme
-    this.announce()
-  }
-
-  private announce(): void {
     for (const listener of this.listeners) listener()
   }
 }
@@ -141,7 +130,6 @@ describe('the app theme', () => {
     await app.load()
 
     expect(app.theme()).toEqual({ preference: 'system', active: 'light' })
-    expect(host.preference).toBe('system')
   })
 
   it('restores the override from the last run rather than the OS', async () => {
@@ -151,8 +139,6 @@ describe('the app theme', () => {
     await app.load()
 
     expect(app.theme()).toEqual({ preference: 'dark', active: 'dark' })
-    // Handed to the platform, so Electron's own surfaces and every renderer follow.
-    expect(host.preference).toBe('dark')
   })
 
   it('announces nothing at load: the snapshot every surface fetches already carries it', async () => {
@@ -163,14 +149,13 @@ describe('the app theme', () => {
     expect(patches).toEqual([])
   })
 
-  it('keeps an override, tells the platform, and announces it once', async () => {
-    const { app, host, store, patches } = harness()
+  it('keeps an override and announces it once', async () => {
+    const { app, store, patches } = harness()
     await app.load()
 
     await expect(app.setTheme('light')).resolves.toEqual({ preference: 'light', active: 'light' })
 
     expect(store.saved).toEqual([{ theme: 'light' }])
-    expect(host.preference).toBe('light')
     expect(patches).toEqual([
       { revision: 1, patch: { type: 'app.theme', theme: { preference: 'light', active: 'light' } } }
     ])
@@ -244,18 +229,29 @@ describe('the app theme', () => {
 
     expect(store.saved).toEqual([])
     expect(patches).toEqual([])
-    // The chrome is still the OS's, which is the answer that needs nothing stored.
+    // The chrome is still the desktop's, which needs nothing stored to be true.
     expect(app.theme()).toEqual({ preference: 'system', active: 'dark' })
   })
 
+  it('refuses the preference it already has just as firmly, so the answer is the file', async () => {
+    const { app } = harness({
+      status: 'refused',
+      reason: 'newer',
+      message: 'written by a newer Breakpoint'
+    })
+    await app.load()
+
+    await expect(app.setTheme('system')).rejects.toMatchObject({ code: 'SETTINGS_UNREADABLE' })
+  })
+
   it('does not announce a theme it could not keep', async () => {
-    const { app, store, host, patches } = harness()
+    const { app, store, patches } = harness()
     await app.load()
     store.save = (): Promise<void> => Promise.reject(new Error('disk full'))
 
     await expect(app.setTheme('light')).rejects.toThrow('disk full')
 
     expect(patches).toEqual([])
-    expect(host.preference).toBe('system')
+    expect(app.theme()).toEqual({ preference: 'system', active: 'dark' })
   })
 })

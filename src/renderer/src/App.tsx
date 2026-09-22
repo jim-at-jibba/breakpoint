@@ -33,7 +33,7 @@ export default function App(): React.JSX.Element {
   const snapshot = state.snapshot
   const project = snapshot?.project ?? null
   // The chrome's own appearance, from the same snapshot as everything else. Null until
-  // the first one arrives, which the hook draws from the window's own appearance.
+  // the first one arrives, which is the one moment the app draws nothing at all.
   useAppTheme(snapshot?.theme.active ?? null)
   // What the canvas draws at is the canvas's to settle and the toolbar's to show, so it
   // is held here between them. It is never stored: only the value `Fit` is (ADR-0009).
@@ -79,6 +79,12 @@ export default function App(): React.JSX.Element {
       if (!ok || project?.zoom === value) setZoomPreview(null)
     })
   }
+
+  // Before the first snapshot the app theme is unknown, and the window's own background
+  // colour — set from the stored preference before this window existed — is what is on
+  // screen. Drawing chrome over it would mean drawing it in a guessed theme, so nothing
+  // is drawn: a fetch that never returns says so through the error below instead.
+  if (!snapshot && state.status !== 'error') return <div className="h-screen" />
 
   return (
     <div className="flex h-screen flex-col">

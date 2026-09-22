@@ -14,6 +14,12 @@ import { DEFAULT_THEME_PREFERENCE, isThemePreference, type ThemePreference } fro
 export const SETTINGS_FILE_VERSION = 1
 
 export interface AppSettings {
+  /**
+   * The app theme the developer chose, which is a preference and not an appearance:
+   * `system` is a setting, and what it resolves to is `ThemeState.active` rather than
+   * anything stored. Spelled `theme` on disk because that is what a developer editing
+   * this file by hand would look for.
+   */
   theme: ThemePreference
 }
 

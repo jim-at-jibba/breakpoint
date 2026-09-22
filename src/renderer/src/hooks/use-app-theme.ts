@@ -6,27 +6,24 @@ import type { AppTheme } from '../../../shared/theme'
  * `.dark` token layers in `index.css` are keyed on.
  *
  * The snapshot is where the theme comes from, and `null` is the moment before the first
- * one has arrived. The chrome still has to be drawn in that moment, so it falls back to
- * what the window itself reports: the main process handed the stored preference to
- * `nativeTheme` before this window was created, and `prefers-color-scheme` here is that
- * preference resolved. It is the platform answering, not a second channel for the theme,
- * and it agrees with the snapshot that replaces it.
+ * one has arrived. No class is put on in that moment and none is guessed at: the window's
+ * own background colour is already the right one, the document is transparent until a
+ * class lands (`index.css`), and the app draws nothing over it (`App.tsx`). So the
+ * handover is invisible, and there is no second answer to what the theme is that could
+ * disagree with the snapshot's.
+ *
+ * `prefers-color-scheme` is specifically not that second answer. Breakpoint never
+ * overrides Chromium's native theme, because a pane emulating no colour scheme follows
+ * it ([theme-host.ts]) — so in this window it reports the desktop, not the app.
  *
  * Laid out rather than merely effected, so the class is on before the first frame the
  * developer sees rather than one frame after it.
- *
- * Nothing here touches a pane: a pane's colour scheme is emulation, applied to its own
- * guest over the attachment, and a dark app hosting a light pane is the normal case.
  */
 export function useAppTheme(theme: AppTheme | null): void {
   useLayoutEffect(() => {
-    const drawn = theme ?? windowTheme()
+    if (theme === null) return
     const html = document.documentElement
-    html.classList.toggle('dark', drawn === 'dark')
-    html.classList.toggle('light', drawn === 'light')
+    html.classList.toggle('dark', theme === 'dark')
+    html.classList.toggle('light', theme === 'light')
   }, [theme])
-}
-
-function windowTheme(): AppTheme {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }

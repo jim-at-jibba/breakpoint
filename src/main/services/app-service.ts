@@ -1,6 +1,11 @@
 import { app, BrowserWindow } from 'electron'
-import { DEFAULT_THEME_PREFERENCE, type AppTheme, type ThemeState } from '../../shared/theme'
-import type { ThemePreference } from '../../shared/theme'
+import {
+  DEFAULT_THEME_PREFERENCE,
+  resolveAppTheme,
+  type AppTheme,
+  type ThemePreference,
+  type ThemeState
+} from '../../shared/theme'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
@@ -61,13 +66,14 @@ export class AppService {
   }
 
   /**
-   * Reads the stored preference once, at startup, and hands it to the platform.
+   * Reads the stored preference once, at startup, and resolves it against the desktop.
    *
    * Called before the first window is created, which is what makes the launch flash
-   * free: the window is given the right background colour when it is constructed, and
-   * the renderer's `prefers-color-scheme` is already the app's by the time it loads.
+   * free: the window is given the right background colour when it is constructed, rather
+   * than being painted the other theme and corrected once a renderer has something to
+   * say.
    *
-   * Settings this build will not read leave the theme following the OS, rather than
+   * Settings this build will not read leave the theme following the desktop, rather than
    * reporting a default the next save would make true.
    */
   async load(): Promise<void> {
@@ -77,11 +83,9 @@ export class AppService {
     } else if (loaded.status === 'loaded') {
       this.preference = loaded.settings.theme
     }
-    this.active = this.host.apply(this.preference)
+    this.active = resolveAppTheme(this.preference, this.host.systemTheme())
     this.announced = this.theme()
-    // Subscribed after the first apply, so handing the platform the stored preference is
-    // not itself reported as the developer changing the OS.
-    this.host.onChanged(() => this.settle())
+    this.host.onChanged(() => this.announce())
   }
 
   /** The preference and what it currently resolves to; what the snapshot carries. */
@@ -96,26 +100,34 @@ export class AppService {
    */
   setTheme(preference: ThemePreference): Promise<ThemeState> {
     return this.enqueue(async () => {
+      // Asked before the comparison, not after: a settings file this build will not read
+      // makes every choice unkeepable, and answering "yes" to the one that happens to be
+      // the current preference would make the refusal depend on what was already set.
+      this.requireReadable()
       if (preference !== this.preference) {
-        this.requireReadable()
         // Saved first: a choice that could not be kept is not one the developer made.
         await this.store.save({ theme: preference })
         this.preference = preference
       }
-      this.active = this.host.apply(preference)
-      this.settle()
+      this.announce()
       return this.theme()
     })
   }
 
   /**
-   * Takes the theme the platform now reports and announces it if anything a surface
-   * draws has moved. Both paths land here: the developer choosing, and the OS changing
-   * under a preference of `system`. Setting `themeSource` makes the platform announce a
-   * change of its own, so this has to be safe to run twice for one decision.
+   * Resolves the preference against the desktop, and tells everyone that draws the
+   * chrome if anything moved — the open windows, which carry the colour a renderer has
+   * not painted yet, and the feed, which carries it to every surface.
+   *
+   * Both paths land here: the developer choosing, and the desktop changing under a
+   * preference of `system`. Silent when nothing moved, so a desktop that announces an
+   * appearance the app already has is not a patch every surface has to fold in.
    */
-  private settle(): void {
-    const state: ThemeState = { preference: this.preference, active: this.host.theme() }
+  private announce(): void {
+    const state: ThemeState = {
+      preference: this.preference,
+      active: resolveAppTheme(this.preference, this.host.systemTheme())
+    }
     this.active = state.active
     const announced = this.announced
     if (announced?.preference === state.preference && announced.active === state.active) return

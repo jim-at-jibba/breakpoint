@@ -1,39 +1,35 @@
 import { BrowserWindow, nativeTheme } from 'electron'
-import { APP_THEME_BACKGROUND, type AppTheme, type ThemePreference } from '../shared/theme'
+import { APP_THEME_BACKGROUND, type AppTheme } from '../shared/theme'
 
 /**
  * The seam between the app theme and Electron, in the same spirit as `PaneHost`
- * ([ADR-0007]): everything Chromium and the platform have to be told lives behind this
- * interface, so the service that decides the theme can be tested without a browser.
+ * ([ADR-0007]): everything the platform has to be asked or told lives behind this
+ * interface, so the service that decides the theme is testable without a browser.
  *
- * Only three things outside the renderer care, and they are the three methods:
+ * **Nothing here sets `nativeTheme.themeSource`, and nothing ever may.** It is the
+ * obvious way to implement an override and it is the wrong one: a pane whose colour
+ * scheme is `system` emulates no override at all, so its page follows Chromium's native
+ * theme — which `themeSource` *is*. Using it would make every default pane render the
+ * page in the app's theme, which is precisely the code path the app theme and a pane's
+ * colour scheme are not allowed to share ([CONTEXT.md], and the measured note in
+ * `shared/emulation.ts`). So the platform is only ever read here, never set, and the
+ * resolving is ours.
  *
- * - `themeSource` is the platform's own switch. Setting it makes Electron's menus,
- *   scrollbars and dialogs follow, and makes `prefers-color-scheme` in every renderer
- *   follow with them.
- * - a window's background colour is what is on screen from the moment the window exists
- *   until its renderer has painted, which is the whole of the no-flash requirement.
- * - the OS appearance can change while the app is running, and with the preference on
- *   `system` that is a theme change.
+ * The price is that Electron's own surfaces — native menus, dialogs — keep following the
+ * desktop rather than an override. That is the right way round: they are the platform's
+ * chrome, and no page renders inside them.
  */
 export interface ThemeHost {
-  /** Hands the preference to the platform, and answers with the theme that results. */
-  apply(preference: ThemePreference): AppTheme
-  /** The theme now, without changing anything. */
-  theme(): AppTheme
-  /** Paints every window, including ones opened later, through `createWindow`. */
+  /** What the desktop is set to now. Never an override: this is the OS being read. */
+  systemTheme(): AppTheme
+  /** Paints every open window; a window opened later takes its colour at construction. */
   paint(theme: AppTheme): void
-  /** The platform's appearance changed. Returns its own unsubscribe. */
-  onChanged(listener: () => void): () => void
+  /** The desktop's appearance changed, which is a theme change while nothing overrides it. */
+  onChanged(listener: () => void): void
 }
 
 export class NativeThemeHost implements ThemeHost {
-  apply(preference: ThemePreference): AppTheme {
-    nativeTheme.themeSource = preference
-    return this.theme()
-  }
-
-  theme(): AppTheme {
+  systemTheme(): AppTheme {
     return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
   }
 
@@ -43,8 +39,11 @@ export class NativeThemeHost implements ThemeHost {
     }
   }
 
-  onChanged(listener: () => void): () => void {
+  /**
+   * Never unsubscribed, deliberately: the app theme is the app's and outlives every
+   * window, so there is no moment before the process ends at which it stops listening.
+   */
+  onChanged(listener: () => void): void {
     nativeTheme.on('updated', listener)
-    return () => nativeTheme.off('updated', listener)
   }
 }

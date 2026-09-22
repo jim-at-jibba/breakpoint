@@ -32,6 +32,19 @@ export function isThemePreference(value: unknown): value is ThemePreference {
 }
 
 /**
+ * The preference against what the desktop is set to. The whole of the override: an
+ * override is the answer, and `system` is the desktop's.
+ *
+ * Breakpoint resolves this itself rather than handing the preference to
+ * `nativeTheme.themeSource` and reading back what Chromium made of it. Chromium's native
+ * theme is what a pane emulating no colour scheme follows, so overriding it would put
+ * the app theme inside every default pane's page ([theme-host.ts]).
+ */
+export function resolveAppTheme(preference: ThemePreference, system: AppTheme): AppTheme {
+  return preference === 'system' ? system : preference
+}
+
+/**
  * The window's own background colour per theme.
  *
  * This is what is on screen from the moment the window exists until the renderer has
