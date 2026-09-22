@@ -25,7 +25,10 @@ import { PresetService } from './services/preset-service'
 import { PresetStore } from './services/preset-store'
 import { ProjectService } from './services/project-service'
 import { ProjectStore } from './services/project-store'
+import { SettingsStore } from './services/settings-store'
 import { StateFeed } from './state-feed'
+import { NativeThemeHost } from './theme-host'
+import { APP_THEME_BACKGROUND } from '../shared/theme'
 
 // Named before anything reads a path, so `userData` is the same directory in dev as in a
 // packaged build and the CLI — which computes the path without asking us — agrees.
@@ -47,10 +50,21 @@ let paneHost: PaneHost | undefined
 let launchReady = false
 const pendingRepoPaths: string[] = []
 /**
- * Constructed before readiness because the hand-off listeners registered below reach it.
- * Its window callback is only used after readiness.
+ * One counter across every service, so the window has a single sequence to check for
+ * gaps. Up here because the app service is, and that one publishes theme changes.
  */
-const appService = new AppService(createWindow)
+const feed = new StateFeed()
+/**
+ * Constructed before readiness because the hand-off listeners registered below reach it.
+ * Its window callback and its theme are only used after readiness, which is where
+ * `load` reads the stored preference and hands it to the platform.
+ */
+const appService = new AppService(
+  createWindow,
+  new SettingsStore(join(userDataDir, 'settings.json')),
+  feed,
+  new NativeThemeHost()
+)
 
 function launchMode(): { packaged: boolean; defaultApp: boolean } {
   return { packaged: app.isPackaged, defaultApp: process.defaultApp === true }
@@ -93,9 +107,11 @@ function createWindow(): void {
     minHeight: 480,
     show: false,
     autoHideMenuBar: true,
-    // Matches --bp-chrome, so the window does not flash white before the
-    // renderer paints. Follows the theme once nativeTheme drives it (PRD 8.2).
-    backgroundColor: '#191b28',
+    // The active theme's --bp-chrome, so the window is the right colour from the moment
+    // it exists rather than flashing white before the renderer paints. A window opened
+    // later takes the theme as it is then, and every open window is repainted when it
+    // changes.
+    backgroundColor: APP_THEME_BACKGROUND[appService.theme().active],
     // PRD 8.2: no title bar of our own. The toolbar is the drag region and the
     // traffic lights sit inside it, centred in its 44px (--bp-toolbar-h).
     ...(process.platform === 'darwin'
@@ -173,7 +189,10 @@ if (!hasSingleInstanceLock) {
       optimizer.watchWindowShortcuts(window)
     })
 
-    const feed = new StateFeed()
+    // Before the first window: it decides that window's background colour, and the
+    // renderer's own prefers-color-scheme, so neither has a wrong first frame.
+    await appService.load()
+
     const log = new EventLog()
     const projectStore = new ProjectStore(join(userDataDir, 'projects'))
     // Global, and beside the projects directory rather than inside it: one developer's
@@ -197,7 +216,15 @@ if (!hasSingleInstanceLock) {
       removePane: (pane) => projects.removePane(pane),
       rotatePane: (pane) => projects.rotatePane(pane)
     })
-    const projects = new ProjectService(projectStore, feed, log, panes, presets, certificates)
+    const projects = new ProjectService(
+      projectStore,
+      feed,
+      log,
+      panes,
+      presets,
+      certificates,
+      appService
+    )
     paneHost = new PaneHost(panes, feed)
     paneHost.install(app)
     dispatch = createDispatch(

@@ -307,8 +307,11 @@ test('a pane too narrow for the scheme glyph carries the scheme in its colour ta
   await settled(shop)
 
   const [mobile, tablet] = shop.panes
-  // The app's own chrome is dark, so a light pane is the one rendering the page in
-  // something other than the app's appearance.
+  // Pinned rather than assumed: the app theme follows the desktop unless it is set
+  // ([#18]), and this case is about a pane that differs from whatever the app is.
+  await sendRaw(sandbox.socketPath, requestLine('app.setTheme', { preference: 'dark' }))
+  // A light pane is now the one rendering the page in something other than the app's
+  // own appearance.
   await sendRaw(
     sandbox.socketPath,
     requestLine('panes.setEmulation', { pane: mobile.id, colorScheme: 'light' })

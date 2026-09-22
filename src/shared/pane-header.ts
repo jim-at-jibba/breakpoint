@@ -1,4 +1,4 @@
-import type { AppTheme } from './pane-palette'
+import type { AppTheme } from './theme'
 import type { CapabilityState, PaneStatus } from './panes'
 import type { ColorScheme } from './project'
 

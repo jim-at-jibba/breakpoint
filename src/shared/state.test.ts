@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { foldPaneStatus, initialPaneStatus, type PaneStatus } from './panes'
 import { createProject } from './project'
 import { applyPatch, snapshotReadiness, type StateSnapshot } from './state'
+import type { ThemeState } from './theme'
+/** The app theme every snapshot carries. Nothing in this file turns on its value. */
+const DARK: ThemeState = { preference: 'system', active: 'dark' }
 
 const shop = createProject('/repos/shop')
 const store = createProject('/repos/store')
@@ -13,7 +16,8 @@ const nothingOpen: StateSnapshot = {
   cursor: 4,
   project: null,
   panes: {},
-  certificates: { trusted: [], waiting: [] }
+  certificates: { trusted: [], waiting: [] },
+  theme: DARK
 }
 
 describe('applying a patch', () => {
@@ -32,7 +36,8 @@ describe('applying a patch', () => {
         [desktop]: initialPaneStatus()
       },
       // Certificate trust is the app's, not a project's: opening one leaves it alone.
-      certificates: nothingOpen.certificates
+      certificates: nothingOpen.certificates,
+      theme: nothingOpen.theme
     })
   })
 
@@ -270,7 +275,14 @@ describe('snapshotReadiness', () => {
   })
 
   function open(panes: Record<string, PaneStatus>): StateSnapshot {
-    return { revision: 1, cursor: 4, project: shop, panes, certificates: nothingOpen.certificates }
+    return {
+      revision: 1,
+      cursor: 4,
+      project: shop,
+      panes,
+      certificates: nothingOpen.certificates,
+      theme: nothingOpen.theme
+    }
   }
 
   it('is ready once every pane has loaded and passed its geometry check', () => {
@@ -343,7 +355,8 @@ describe('snapshotReadiness', () => {
       cursor: 4,
       project: { ...shop, panes: [] },
       panes: {},
-      certificates: nothingOpen.certificates
+      certificates: nothingOpen.certificates,
+      theme: nothingOpen.theme
     }
     expect(snapshotReadiness(empty)).toEqual({ ready: true })
   })
@@ -393,5 +406,74 @@ describe('certificate trust in the snapshot', () => {
       patch: { type: 'project.opened', project: shop }
     })
     expect(opened.certificates).toEqual(certificates)
+  })
+})
+
+describe('the app theme in the snapshot', () => {
+  const light: ThemeState = { preference: 'light', active: 'light' }
+
+  it('lands whether or not a project is open: the chrome is the app’s', () => {
+    const next = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'app.theme', theme: light }
+    })
+
+    expect(next).toEqual({ ...nothingOpen, revision: 1, theme: light })
+  })
+
+  it('carries the preference as well as what it resolves to', () => {
+    const following: ThemeState = { preference: 'system', active: 'light' }
+
+    const next = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'app.theme', theme: following }
+    })
+
+    expect(next.theme).toEqual(following)
+  })
+
+  it('survives a project opening over it', () => {
+    const themed = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'app.theme', theme: light }
+    })
+
+    const opened = applyPatch(themed, {
+      revision: 2,
+      patch: { type: 'project.opened', project: shop }
+    })
+
+    expect(opened.theme).toEqual(light)
+  })
+
+  // The two are different things that happen to spell two values the same way: the app
+  // theme is the chrome we own, a pane's colour scheme is emulation on a page we do not.
+  it('leaves every pane’s colour scheme exactly as it was', () => {
+    const opened = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+
+    const themed = applyPatch(opened, { revision: 2, patch: { type: 'app.theme', theme: light } })
+
+    expect(themed.project?.panes.map((pane) => pane.colorScheme)).toEqual(
+      shop.panes.map((pane) => pane.colorScheme)
+    )
+  })
+
+  it('is not changed by a pane taking a colour scheme of its own', () => {
+    const opened = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const themed = applyPatch(opened, { revision: 2, patch: { type: 'app.theme', theme: light } })
+    const [first] = themed.project?.panes ?? []
+
+    const emulated = applyPatch(themed, {
+      revision: 3,
+      patch: { type: 'pane.changed', pane: { ...first, colorScheme: 'dark' } }
+    })
+
+    expect(emulated.theme).toEqual(light)
   })
 })

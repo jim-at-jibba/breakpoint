@@ -1,3 +1,5 @@
+import type { AppTheme } from './theme'
+
 /**
  * Pane identity: ten colours separated by hue alone.
  *
@@ -11,9 +13,6 @@
  * value off `--bp-pane-1` … `--bp-pane-10`; `paneColor` is the same colour for anything
  * that cannot. `pane-palette.test.ts` holds the two to each other.
  */
-
-/** The app's own appearance, which is never a pane's colour scheme ([CONTEXT.md]). */
-export type AppTheme = 'light' | 'dark'
 
 /**
  * The hues, in the order panes take them. Hand-picked for separation rather than spaced

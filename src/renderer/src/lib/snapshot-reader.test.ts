@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { failure, success, type RouteResponse } from '../../../shared/protocol'
 import { createProject } from '../../../shared/project'
 import { paneStatusesFor, type PatchBatch, type StateSnapshot } from '../../../shared/state'
+import type { ThemeState } from '../../../shared/theme'
 import { createSnapshotReader, type SnapshotReader, type SnapshotState } from './snapshot-reader'
+
+/** The app theme every snapshot carries. Nothing in this file turns on its value. */
+const DARK: ThemeState = { preference: 'system', active: 'dark' }
 
 const shop = createProject('/repos/shop')
 const snapshot: StateSnapshot = {
@@ -10,7 +14,8 @@ const snapshot: StateSnapshot = {
   cursor: 0,
   project: shop,
   panes: paneStatusesFor(shop, {}),
-  certificates: { trusted: [], waiting: [] }
+  certificates: { trusted: [], waiting: [] },
+  theme: DARK
 }
 
 interface SnapshotHarness {
@@ -82,7 +87,8 @@ describe('snapshot recovery', () => {
           cursor: 0,
           project: { ...shop, name: 'updated' },
           panes: paneStatusesFor(shop, {}),
-          certificates: snapshot.certificates
+          certificates: snapshot.certificates,
+          theme: snapshot.theme
         }
       })
       reader.close()
@@ -192,7 +198,8 @@ describe('snapshot recovery', () => {
       cursor: 0,
       project: store,
       panes: paneStatusesFor(store, {}),
-      certificates: { trusted: [], waiting: [] }
+      certificates: { trusted: [], waiting: [] },
+      theme: DARK
     }
     h.fetchSnapshot.mockResolvedValueOnce(success('test', switched))
     reader.retry()

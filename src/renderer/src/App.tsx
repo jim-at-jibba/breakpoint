@@ -1,11 +1,13 @@
 import { AddPane } from '@renderer/components/add-pane'
 import { AddressBar } from '@renderer/components/address-bar'
 import { AllowedOrigins } from '@renderer/components/allowed-origins'
+import { AppThemeControl } from '@renderer/components/app-theme'
 import { Canvas } from '@renderer/components/canvas'
 import { CanvasControls } from '@renderer/components/canvas-controls'
 import { CertificatePrompt } from '@renderer/components/certificate-prompt'
 import { TrustedCertificates } from '@renderer/components/trusted-certificates'
 import { Button } from '@renderer/components/ui/button'
+import { useAppTheme } from '@renderer/hooks/use-app-theme'
 import { useSnapshot } from '@renderer/hooks/use-snapshot'
 import { useState } from 'react'
 import { MAX_ZOOM } from '../../shared/canvas'
@@ -30,6 +32,9 @@ export default function App(): React.JSX.Element {
   const state = useSnapshot()
   const snapshot = state.snapshot
   const project = snapshot?.project ?? null
+  // The chrome's own appearance, from the same snapshot as everything else. Null until
+  // the first one arrives, which the hook draws from the window's own appearance.
+  useAppTheme(snapshot?.theme.active ?? null)
   // What the canvas draws at is the canvas's to settle and the toolbar's to show, so it
   // is held here between them. It is never stored: only the value `Fit` is (ADR-0009).
   const [zoom, setZoom] = useState(MAX_ZOOM)
@@ -131,9 +136,11 @@ export default function App(): React.JSX.Element {
         )}
         {snapshot && (
           <div className="ml-auto flex items-center gap-[var(--bp-space-3)]">
-            {/* Certificate trust is the app's, not a project's ([ADR-0012]), so the
-                decisions stay reachable with nothing open. Everything beside it is the
-                open project's and goes with it. */}
+            {/* The theme and certificate trust are the app's, not a project's — a
+                certificate belongs to a host ([ADR-0012]) and the chrome is ours — so
+                both stay reachable with nothing open. Everything beside them is the open
+                project's and goes with it. */}
+            <AppThemeControl theme={snapshot.theme} />
             <TrustedCertificates certificates={snapshot.certificates.trusted} />
             {project && (
               <>
@@ -169,6 +176,7 @@ export default function App(): React.JSX.Element {
         <Canvas
           project={project}
           statuses={snapshot.panes}
+          theme={snapshot.theme.active}
           zoomPreview={activeZoomPreview}
           onZoom={setZoom}
           onFocusPane={(pane) => setLayout({ layout: 'focus', focusedPane: pane })}

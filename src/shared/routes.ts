@@ -16,6 +16,7 @@ import type { PaneStatus, Size } from './panes'
 import type { Preset } from './presets'
 import type { Layout, Pane, Zoom } from './project'
 import type { StateSnapshot } from './state'
+import type { ThemePreference, ThemeState } from './theme'
 
 /** A route is a dotted `noun.verb`. The noun is the service, the verb is the method. */
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
@@ -23,6 +24,7 @@ export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 export const ROUTE_NAMES = [
   'app.focus',
   'app.quit',
+  'app.setTheme',
   'certificates.decide',
   'certificates.forget',
   'certificates.list',
@@ -65,6 +67,15 @@ export interface RouteSignatures {
    */
   'app.focus': { params: undefined; payload: { focused: true } }
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Sets the app theme: `system` follows the OS, `light` and `dark` override it. An
+   * app-level setting rather than a project's, kept on this machine, so it survives a
+   * restart and does not change when a different project is opened.
+   *
+   * Never touches a pane's colour scheme, which is emulation applied to a page we do not
+   * own ([CONTEXT.md]). The payload is the preference and what it resolves to now.
+   */
+  'app.setTheme': { params: { preference: ThemePreference }; payload: ThemeState }
   /**
    * Answers one certificate that is waiting on the developer, naming it by the host and
    * fingerprint it is keyed on ([ADR-0012]). Trusting it releases every pane held by it

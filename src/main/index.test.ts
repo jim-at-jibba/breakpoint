@@ -37,7 +37,14 @@ const mocks = vi.hoisted(() => ({
     isMinimized: (): boolean => false,
     show: vi.fn(),
     showInactive: vi.fn(),
-    focus: vi.fn()
+    focus: vi.fn(),
+    setBackgroundColor: vi.fn()
+  },
+  nativeTheme: {
+    themeSource: 'system',
+    shouldUseDarkColors: true,
+    on: vi.fn(),
+    off: vi.fn()
   },
   dispatch: vi.fn<Dispatch>(),
   closeSocket: vi.fn(),
@@ -47,12 +54,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('electron', () => ({
   app: mocks.app,
   shell: {},
+  nativeTheme: mocks.nativeTheme,
   BrowserWindow: class {
     on = mocks.window.on
     webContents = mocks.window.webContents
     loadFile = mocks.window.loadFile
     show = mocks.window.show
     showInactive = mocks.window.showInactive
+    setBackgroundColor = mocks.window.setBackgroundColor
 
     constructor() {
       mocks.createWindow()

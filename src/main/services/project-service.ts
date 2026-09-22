@@ -15,6 +15,7 @@ import {
 import type { LayoutSetting, LayoutState, Navigation, Surface } from '../../shared/routes'
 import { isOriginAllowed, normaliseOrigins, sameOrigins } from '../../shared/urls'
 import type { StateSnapshot } from '../../shared/state'
+import type { ThemeState } from '../../shared/theme'
 import type { PaneCreation } from '../../shared/routes'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
@@ -41,6 +42,15 @@ import type { ProjectStore } from './project-store'
 export interface SnapshotCertificates {
   list(): CertificateState
 }
+
+/**
+ * What the snapshot needs from the app theme. The theme is the app's, not a project's,
+ * so this service does not own it either — it only has to put it in the one snapshot
+ * every surface renders from.
+ */
+export interface SnapshotTheme {
+  theme(): ThemeState
+}
 export class ProjectService {
   private current: Project | null = null
   /** Opens and pane changes, one at a time, in the order they were asked for. */
@@ -52,7 +62,8 @@ export class ProjectService {
     private readonly log: EventLog,
     private readonly panes: PaneService,
     private readonly presets: PresetService,
-    private readonly certificates: SnapshotCertificates
+    private readonly certificates: SnapshotCertificates,
+    private readonly appTheme: SnapshotTheme
   ) {}
 
   /**
@@ -333,7 +344,8 @@ export class ProjectService {
       cursor: this.log.cursor,
       project: this.current,
       panes: this.panes.statuses(),
-      certificates: this.certificates.list()
+      certificates: this.certificates.list(),
+      theme: this.appTheme.theme()
     }
   }
 }

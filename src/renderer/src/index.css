@@ -307,6 +307,13 @@
 
 /* ============================== base ===================================== */
 html, body { background: var(--bp-chrome); color: var(--bp-ink); }
+
+/* Not from globals.css, because it is not about the design: it is the moment before the
+   app has mounted and put a theme class on <html> (use-app-theme.ts). The document keeps
+   out of the way until then, so what shows is the window's own background colour — which
+   the main process set from the stored preference before the window existed. The handover
+   is then invisible rather than a flash of the other theme. */
+html:not(.light):not(.dark), html:not(.light):not(.dark) body { background: transparent; }
 body {
   font-family: var(--bp-font-ui);
   font-size: var(--bp-text-base);

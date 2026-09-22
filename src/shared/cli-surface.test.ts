@@ -15,6 +15,9 @@ import type { LogRead, ReadParams } from './event-log'
 import { foldPaneStatus } from './panes'
 import { createProject } from './project'
 import { paneStatusesFor, type StateSnapshot } from './state'
+import type { ThemeState } from './theme'
+/** The app theme every snapshot carries. Nothing in this file turns on its value. */
+const DARK: ThemeState = { preference: 'system', active: 'dark' }
 
 /** Every option off, with the ones a case is about turned on. */
 function options(on: Partial<CliOptions> = {}): CliOptions {
@@ -435,7 +438,8 @@ describe('the state as a terminal reads it', () => {
       cursor: 9,
       project: shop,
       panes,
-      certificates: { trusted: [], waiting: [] }
+      certificates: { trusted: [], waiting: [] },
+      theme: DARK
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -453,7 +457,8 @@ describe('the state as a terminal reads it', () => {
       cursor: 9,
       project: shop,
       panes,
-      certificates: { trusted: [], waiting: [] }
+      certificates: { trusted: [], waiting: [] },
+      theme: DARK
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -472,7 +477,8 @@ describe('the state as a terminal reads it', () => {
       cursor: 9,
       project: shop,
       panes,
-      certificates: { trusted: [], waiting: [] }
+      certificates: { trusted: [], waiting: [] },
+      theme: DARK
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -636,7 +642,8 @@ describe('certificate trust on the terminal', () => {
         cursor: 9,
         project,
         panes: project ? paneStatusesFor(project, {}) : {},
-        certificates: { trusted: [trusted], waiting: [waiting] }
+        certificates: { trusted: [trusted], waiting: [waiting] },
+        theme: DARK
       }
       expect((state?.render(snapshot) ?? '').split('\n')).toContain(
         'Certificates: 1 trusted, 1 waiting'
@@ -650,7 +657,8 @@ describe('certificate trust on the terminal', () => {
       cursor: 9,
       project: null,
       panes: {},
-      certificates: { trusted: [], waiting: [] }
+      certificates: { trusted: [], waiting: [] },
+      theme: DARK
     }
     expect(state?.render(snapshot)).toBe(
       'No project is open. Run `breakpoint .` in a repo.\nCursor 9'
