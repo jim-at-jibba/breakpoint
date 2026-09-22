@@ -55,6 +55,18 @@ export type ProjectEntryBody =
     }
   /** The zoom control's value, which may be Fit ([ADR-0009]). */
   | { readonly type: 'project.zoomChanged'; readonly zoom: Zoom }
+  /**
+   * Every pane was pointed at one URL, as expanded. Untagged: no one pane produced it,
+   * and each pane's own load follows as `pane.loaded` or `pane.loadFailed`.
+   */
+  | { readonly type: 'project.navigated'; readonly url: string }
+  /**
+   * Navigation from the CLI was refused: the target is outside the project's allowed
+   * origins and no pane moved ([ADR-0013]).
+   */
+  | { readonly type: 'project.navigationRefused'; readonly url: string }
+  /** The origins automation may navigate to were replaced, as now stored. */
+  | { readonly type: 'project.originsChanged'; readonly origins: readonly string[] }
 
 /**
  * A pane's lifecycle, tagged with the pane. The log's first pane-tagged producer: a
@@ -277,6 +289,11 @@ function copyBody(body: EntryBody): EntryBody {
       return { type: body.type, layout: body.layout, focusedPane: body.focusedPane }
     case 'project.zoomChanged':
       return { type: body.type, zoom: body.zoom }
+    case 'project.navigated':
+    case 'project.navigationRefused':
+      return { type: body.type, url: body.url }
+    case 'project.originsChanged':
+      return { type: body.type, origins: Object.freeze([...body.origins]) }
     case 'pane.created':
     case 'pane.loaded':
       return { type: body.type, url: body.url }

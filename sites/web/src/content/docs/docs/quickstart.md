@@ -35,7 +35,24 @@ Zoom is a separate control. Its value is a percentage, or `Fit`, which sizes the
 to the window the way a PDF reader does — and the moment you touch the zoom control you are
 no longer fitted. Fit is a zoom value, not a third layout.
 
-## 3. Check it from a terminal
+## 3. Navigate
+
+There is one address bar, and it points every pane at the same URL. Type `3000` and press
+Enter: a bare port is the dev server on this machine, so starting work is two keystrokes.
+
+The same navigation is available from a terminal, which is how an agent reaches the state
+that reproduces a bug:
+
+```sh
+breakpoint open 3000
+breakpoint open localhost:3000/checkout --json
+```
+
+Navigation from a terminal is held to the project's **allowed origins**; typing in the
+address bar and clicking links inside a pane never are. Edit the list from the **Origins**
+button in the toolbar. The [CLI reference](/docs/cli/#allowed-origins) has the rules.
+
+## 4. Check it from a terminal
 
 Everything the window knows, the CLI can print:
 

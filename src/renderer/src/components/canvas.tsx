@@ -240,6 +240,7 @@ function PaneView({
   index: number
   /** Percent. What this pane is drawn at, which is not always the canvas zoom. */
   zoom: number
+  /** Where the project points as this pane is created. It moves under the pane, not with it. */
   url: string
   status: PaneStatus | undefined
   /** Screen pixels the header's own controls occupy, measured off their tokens. */
@@ -253,6 +254,12 @@ function PaneView({
 }): React.JSX.Element {
   const webview = useRef<HTMLWebViewElement>(null)
   useGeometryCheck(webview, pane, zoom)
+  // Where this pane started, held for the element's lifetime. Navigation is the main
+  // process's over the attachment-side `loadURL`, because a pane that has followed a
+  // link inside itself has to be brought back even when the project's URL has not moved
+  // — and a `src` the window kept rewriting could only ever send a pane somewhere it
+  // already was.
+  const [src] = useState(url)
 
   const degraded = status?.degraded ?? []
   const drawn = drawnSize(pane, zoom)
@@ -294,7 +301,7 @@ function PaneView({
             declared height (Phase 0, ADR-0004). */}
         <webview
           ref={webview}
-          src={url}
+          src={src}
           partition={`persist:${pane.session}`}
           webpreferences={paneWebPreferences(pane.id)}
           data-pane={pane.id}

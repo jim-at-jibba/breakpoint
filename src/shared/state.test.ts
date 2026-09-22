@@ -197,6 +197,46 @@ describe('applying a patch', () => {
     ).toEqual({ ...nothingOpen, revision: 2 })
   })
 
+  it('moves the project to where a navigation announced, leaving the panes alone', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const next = applyPatch(open, {
+      revision: 2,
+      patch: { type: 'project.url', url: 'http://localhost:3000/checkout' }
+    })
+    expect(next).toEqual({
+      ...open,
+      revision: 2,
+      project: { ...shop, startUrl: 'http://localhost:3000/checkout' }
+    })
+  })
+
+  it('replaces the allowed origins wholesale', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const next = applyPatch(open, {
+      revision: 2,
+      patch: { type: 'project.allowedOrigins', origins: ['https://staging.example.com'] }
+    })
+    expect(next.project?.allowedOrigins).toEqual(['https://staging.example.com'])
+  })
+
+  it('ignores a navigation or an origin edit announced with nothing open', () => {
+    expect(
+      applyPatch(nothingOpen, { revision: 1, patch: { type: 'project.url', url: 'http://a/' } })
+    ).toEqual({ ...nothingOpen, revision: 1 })
+    expect(
+      applyPatch(nothingOpen, {
+        revision: 2,
+        patch: { type: 'project.allowedOrigins', origins: [] }
+      })
+    ).toEqual({ ...nothingOpen, revision: 2 })
+  })
+
   it('ignores a change to a pane the open project does not have', () => {
     const open = applyPatch(nothingOpen, {
       revision: 1,

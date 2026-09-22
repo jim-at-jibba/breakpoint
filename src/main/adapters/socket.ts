@@ -99,7 +99,9 @@ async function respond(connection: Socket, dispatch: Dispatch, line: string): Pr
     return
   }
 
-  const { response, afterRespond } = await dispatch(parsed.request)
+  // Named as the CLI's: navigation arriving here is automation acting on the developer's
+  // behalf, and is the one thing the origin allow-list binds ([ADR-0013]).
+  const { response, afterRespond } = await dispatch(parsed.request, { surface: 'cli' })
   write(connection, response, afterRespond)
 }
 

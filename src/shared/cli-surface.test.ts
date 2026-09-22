@@ -453,3 +453,64 @@ describe('the state as a terminal reads it', () => {
     expect(lines).toContain(`  ${tablet.name.padEnd(10)}820×1180 @2x`)
   })
 })
+
+describe('breakpoint open', () => {
+  const cwd = '/Users/dev/code/shop'
+
+  it('sends what was typed, so the route expands it the one way', () => {
+    const result = parseArgv(['open', '3000'], cwd)
+    expect(result.kind).toBe('command')
+    expect(result.kind === 'command' && result.command.route).toBe('project.navigate')
+    expect(result.kind === 'command' && result.params).toEqual({ url: '3000' })
+  })
+
+  it.each(['https://staging.example.com/cart', 'localhost:3000/checkout', ':5173'])(
+    'takes %s as its one argument',
+    (url: string) => {
+      const result = parseArgv(['open', url], cwd)
+      expect(result.kind === 'command' && result.params).toEqual({ url })
+    }
+  )
+
+  it('reads flags on either side of the URL', () => {
+    const before = parseArgv(['--json', 'open', '3000'], cwd)
+    const after = parseArgv(['open', '3000', '--json'], cwd)
+    expect(before).toEqual(after)
+    expect(before.kind === 'command' && before.options.json).toBe(true)
+  })
+
+  it('is a usage error with no URL', () => {
+    const result = parseArgv(['open'], cwd)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toBe('open needs <url>')
+  })
+
+  it('is a usage error with a second URL', () => {
+    const result = parseArgv(['open', '3000', '3001'], cwd)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toContain('3001')
+  })
+
+  it('refuses an argument for a command that takes none', () => {
+    const result = parseArgv(['state', 'now'], cwd)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toBe('unexpected argument now')
+  })
+
+  it('still reads a path as opening a project, not as navigating', () => {
+    const result = parseArgv(['.'], cwd)
+    expect(result.kind === 'command' && result.command.route).toBe('project.open')
+  })
+
+  it('renders the navigation on a terminal', () => {
+    const open = CLI_COMMANDS.find((command) => command.name === 'open')!
+    expect(open.render({ url: 'http://localhost:3000/', panes: ['a', 'b', 'c'] })).toBe(
+      'Pointed 3 panes at http://localhost:3000/'
+    )
+    expect(open.render({ url: 'http://localhost:3000/', panes: ['a'] })).toContain('1 pane at')
+  })
+
+  it('shows its argument in the help text', () => {
+    expect(helpText()).toContain('open <url>')
+  })
+})

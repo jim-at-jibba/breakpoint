@@ -341,6 +341,30 @@ describe('pane lifecycle entries', () => {
     expect(entry).toMatchObject({ code: -102, message: 'ERR_CONNECTION_REFUSED' })
   })
 
+  it('keep a navigation untagged, and shorten a long URL on read', () => {
+    const log = new EventLog()
+    const entry = log.append(null, { type: 'project.navigated', url: 'http://localhost:3000/' })
+    expect(entry).toMatchObject({ pane: null, type: 'project.navigated' })
+    expect(Object.keys(entry).sort()).toEqual(['cursor', 'pane', 'time', 'type', 'url'])
+
+    log.append(null, {
+      type: 'project.navigationRefused',
+      url: `https://evil.example.com/${'x'.repeat(600_000)}`
+    })
+    expect(log.read({ since: 1 }).entries[0].truncated).toEqual(['url'])
+  })
+
+  it("keep an origin list immutable and copied off the caller's array", () => {
+    const log = new EventLog()
+    const origins = ['http://localhost:3000']
+    const entry = log.append(null, { type: 'project.originsChanged', origins })
+    origins.push('https://evil.example.com')
+    expect(entry.type === 'project.originsChanged' && entry.origins).toEqual([
+      'http://localhost:3000'
+    ])
+    expect(entry.type === 'project.originsChanged' && Object.isFrozen(entry.origins)).toBe(true)
+  })
+
   it('keep a geometry mismatch immutable down to the sizes it reports', () => {
     const log = new EventLog()
     const entry = log.append('pane-1', {

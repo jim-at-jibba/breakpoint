@@ -9,9 +9,9 @@ the same state.
 
 :::note[Only what exists]
 Every command, flag, exit code, error code and route on this page is one the binary
-accepts today. Commands from later phases — `open`, `nav`, `shot`, `check`, and the
-rest — are deliberately absent until they ship, and this page grows in the same change
-that ships them.
+accepts today. Commands from later phases — `nav`, `shot`, `check`, and the rest — are
+deliberately absent until they ship, and this page grows in the same change that ships
+them.
 :::
 
 ## Commands
@@ -45,8 +45,8 @@ left exactly as it was.
 
 ### `breakpoint state`
 
-Prints the open project: name, repo path, start URL, panes, and the event log cursor the
-snapshot was taken at. With `--json` this is the snapshot the window itself renders from.
+Prints the open project: name, repo path, the URL its panes are on, the panes, and the
+event log cursor the snapshot was taken at. With `--json` this is the snapshot the window itself renders from.
 
 ```sh
 breakpoint state
@@ -71,6 +71,70 @@ connection to the pane, so the pane renders but cannot be observed; the app trie
 more after the page loads, then stops. `geometry`: the pane's element is not drawn at
 its declared size times the canvas zoom, measured in the window rather than asked of the
 page. A pane with the wrong geometry is never resized to hide it.
+
+### `breakpoint open <url>`
+
+Points every pane of the open project at one URL, so an agent can put the window into
+the state that reproduces a bug.
+
+```sh
+breakpoint open 3000                          # http://localhost:3000/
+breakpoint open :5173                         # the same, with the colon you would type
+breakpoint open localhost:3000/checkout
+breakpoint open https://staging.example.com/cart --json
+```
+
+What you type is expanded by one rule, the same rule the address bar in the window uses:
+
+- A bare port — `3000`, or `:3000` — is the dev server on this machine, so it becomes
+  `http://localhost:3000/`.
+- Anything carrying a scheme keeps it, and has to be `http` or `https`. `file:`, `data:`
+  and `javascript:` are `INVALID_PARAMS`, not pages a pane renders.
+- Anything else is a host: `http://` when that host is this machine (`localhost`,
+  `127.0.0.1`, `[::1]`, or a `.localhost` name) and `https://` when it is not. A LAN
+  address on a plain port is the one case to type the scheme for.
+
+The payload names where the panes were sent and which ones were sent there:
+
+```json
+{ "url": "http://localhost:3000/", "panes": ["9f1c…", "ad34…", "b207…"] }
+```
+
+The command returns as soon as the panes have been pointed; it does not wait for them to
+finish loading. Poll `breakpoint logs --since <cursor>` for each pane's `pane.loaded`.
+Navigating to the URL the project already holds still moves the panes, because a pane may
+have followed a link inside itself since.
+
+Where the project points is kept with the project, so it reopens where you left it.
+
+#### Allowed origins
+
+A project stores the origins **automation** may navigate it to. `breakpoint open` is held
+to them; nothing else is. A URL outside them fails with `ORIGIN_NOT_ALLOWED` and no pane
+moves:
+
+```sh
+breakpoint open https://example.com --json
+# stderr: {"error":{"code":"ORIGIN_NOT_ALLOWED","message":"https://example.com/ is outside this project's allowed origins","details":{"url":"https://example.com/","allowedOrigins":["http://localhost:3000"]}}}
+# exit 1
+```
+
+Typing that same URL in the window's address bar is **never** blocked, and neither is
+clicking a link inside a pane, or following a redirect out of an allowed origin into one
+that is not. This is a dev browser: staging redirects to SSO domains and docs link
+outward, and a tool that refuses to follow those is broken. The allow-list exists to
+bound what an agent can reach on your behalf, and that is the only thing it does.
+
+A new project allows its start URL's origin. Edit the list in the window, from the
+**Origins** button in the toolbar — an entry is expanded and reduced to its origin the
+same way an address is, so `localhost:3000` is stored as `http://localhost:3000` — or
+over the socket with `project.setAllowedOrigins`. Edits are kept with the project and
+survive a restart. An empty list allows automation nothing.
+
+The list is editable over the socket too, which is a real limit on what the refusal is
+worth: it bounds an agent following its instructions, not one working around them. The
+alternative would be a route the CLI cannot reach, and there are none. Deciding which
+surface may do what is the Phase 6 permission tiers' job.
 
 ### `breakpoint logs`
 
@@ -142,8 +206,19 @@ shortened fields, such as `"truncated": ["path", "message"]`. Human output inclu
 is separate from `droppedBefore`, which reports evicted entries, and the entry's cursor
 still lets a reader continue past it.
 
-What the log carries today is the app's own failures and pane lifecycle. Pane entries
-are tagged with the pane's `id`:
+What the log carries today is the app's own changes and failures, and pane lifecycle.
+The app's own entries carry `"pane": null`:
+
+| `type` | Fields | When |
+| --- | --- | --- |
+| `project.openFailed` | `path`, `code`, `message` | A project could not be opened |
+| `project.navigated` | `url` | Every pane was pointed at `url`, as expanded |
+| `project.navigationRefused` | `url` | `breakpoint open` named an origin the project does not allow, and no pane moved |
+| `project.originsChanged` | `origins` | The allowed origins were replaced, as now stored |
+| `project.layoutChanged` | `layout`, `focusedPane` | The panes were rearranged |
+| `project.zoomChanged` | `zoom` | The canvas zoom changed; may be `"fit"` |
+
+Pane entries are tagged with the pane's `id`:
 
 | `type` | Fields | When |
 | --- | --- | --- |
@@ -225,7 +300,7 @@ breakpoint quit --json --verbose | jq .quitting
 ## Error codes
 
 Stable strings, so a script can branch on the failure rather than on its wording. The
-first six come back from the app; the rest are raised by the command itself.
+first eight come back from the app; the rest are raised by the command itself.
 
 | Code | Exit | Meaning |
 | --- | --- | --- |
@@ -235,6 +310,8 @@ first six come back from the app; the rest are raised by the command itself.
 | `INTERNAL_ERROR` | `1` | The route failed |
 | `PROJECT_UNREADABLE` | `1` | The project's file is on disk but this build will not load it. `details.reason` is `newer` or `corrupt`, and `details.file` is the path |
 | `PANE_NOT_FOUND` | `1` | The open project has no pane with that id, or nothing is open |
+| `PROJECT_NOT_OPEN` | `1` | The route changes the open project and nothing is open |
+| `ORIGIN_NOT_ALLOWED` | `1` | `breakpoint open` named an origin the project does not allow. `details.url` is the expanded URL and `details.allowedOrigins` is the list it was checked against. Nothing moved |
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
@@ -252,12 +329,15 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
 | `panes.reportGeometry` | `{ "pane": id, "expected": { "width", "height" }, "measured": { "width", "height" } }` | `{ "status": … }` | the window |
+| `project.navigate` | `{ "url": "3000" }`, as typed | `{ "url": "http://localhost:3000/", "panes": [ … ] }` | `breakpoint open`, the address bar |
 | `project.open` | `{ "path": "/abs/repo" }` | the state snapshot | `breakpoint .`, `breakpoint <path>` |
+| `project.setAllowedOrigins` | `{ "origins": ["http://localhost:3000"] }` | `{ "origins": [ … ] }`, as stored | the window, the socket |
 | `project.state` | none | the state snapshot | `breakpoint state` |
 
 The state snapshot is `{ "revision": n, "cursor": n, "project": …, "panes": { … } }`,
 where `project` is `null` until one is opened, and otherwise carries `name`, `repoPath`,
-`startUrl`, `allowedOrigins`, `panes`, `layout`, `zoom` and `sessions`. Each pane has an
+`startUrl` — where the panes are pointed now, which a navigation moves — `allowedOrigins`,
+`panes`, `layout`, `zoom` and `sessions`. Each pane has an
 `id`, `name`, `width`, `height`, `dpr`, `mobile` flag, `colorScheme`, `session` and the
 `preset` it was made from. `revision` counts the changes the app has announced to its
 window; a script can ignore it. `cursor` is the event log position the snapshot was
@@ -286,6 +366,13 @@ other, so it is reachable over the socket, but it exists for the window.
 
 `since` must be an integer of 0 or more; anything else is `INVALID_PARAMS` from the
 route and a usage error from the command, which never sends it.
+
+`project.navigate` expands `url` itself, so every surface means the same thing by `3000`,
+and answers `INVALID_PARAMS` for anything that does not expand to an `http` or `https`
+URL. `ORIGIN_NOT_ALLOWED` is raised only for a call arriving over the socket; the same
+call from the window is never checked against the allow-list.
+`project.setAllowedOrigins` replaces the whole list, and answers `INVALID_PARAMS` if any
+entry is not an `http` or `https` URL.
 
 On the socket the exchange is one line of JSON each way. Each request or response line
 is limited to 1 MiB of UTF-8, excluding the terminating newline. An oversized request

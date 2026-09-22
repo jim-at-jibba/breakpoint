@@ -64,6 +64,8 @@ export class PaneHost {
   /** The latest emulation pass per guest, so a slow answer cannot report over a newer one. */
   private readonly passes = new WeakMap<WebContents, number>()
   private readonly allowLoads = new WeakMap<WebContents, () => void>()
+  /** The latest navigation missed by each pane because it had no live guest at the time. */
+  private readonly pendingNavigations = new Map<string, string>()
   private pending: PendingGuest | null = null
 
   constructor(
@@ -71,9 +73,22 @@ export class PaneHost {
     feed: StateFeed
   ) {
     feed.subscribe(({ patch }) => {
-      if (patch.type !== 'pane.changed') return
-      const guest = this.guests.get(patch.pane.id)
-      if (guest) void this.emulate(patch.pane.id, guest)
+      if (patch.type === 'project.opened') {
+        this.pendingNavigations.clear()
+        return
+      }
+      if (patch.type === 'pane.removed') {
+        this.pendingNavigations.delete(patch.pane)
+        return
+      }
+      if (patch.type === 'pane.changed') {
+        const guest = this.guests.get(patch.pane.id)
+        if (guest) void this.emulate(patch.pane.id, guest)
+        return
+      }
+      if (patch.type === 'project.url') {
+        this.navigate(patch.url)
+      }
     })
   }
 
@@ -152,6 +167,32 @@ export class PaneHost {
   }
 
   /**
+   * Sends every pane of the open project to one URL. Driven from the announcement rather
+   * than from the window's `src`, so a pane that has followed a link inside itself comes
+   * back: the developer navigating is an act, not a value the window happens to differ on.
+   *
+   * Emulation is not reapplied here — `did-navigate` does that for every navigation,
+   * whatever caused it — and a load that fails is already reported by `did-fail-load`,
+   * so the rejection this returns is the same failure told twice.
+   */
+  private navigate(url: string): void {
+    for (const { id: pane } of this.panes.list().panes) {
+      const guest = this.guests.get(pane)
+      if (!guest || guest.isDestroyed()) {
+        this.pendingNavigations.set(pane, url)
+        continue
+      }
+      this.pendingNavigations.delete(pane)
+      this.navigateGuest(pane, guest, url)
+    }
+  }
+
+  private navigateGuest(pane: string, guest: WebContents, url: string): void {
+    if (!this.panes.has(pane) || guest.isDestroyed()) return
+    void guest.loadURL(url).catch(() => undefined)
+  }
+
+  /**
    * Overwritten, never validated: what the renderer asked for is irrelevant, because
    * any answer other than these is wrong. A guest for no pane of the open project is
    * refused outright.
@@ -224,7 +265,14 @@ export class PaneHost {
     })
 
     this.panes.guestCreated(pane, src)
-    void this.attach({ pane, guest, attempt: 1 }).then(() => this.allowLoads.get(guest)?.())
+    void this.attach({ pane, guest, attempt: 1 }).then(() => {
+      this.allowLoads.get(guest)?.()
+      const url = this.pendingNavigations.get(pane)
+      if (url !== undefined && current() && !guest.isDestroyed()) {
+        this.pendingNavigations.delete(pane)
+        this.navigateGuest(pane, guest, url)
+      }
+    })
   }
 
   /** Whether `guest` is still the pane's, rather than one it has since replaced. */

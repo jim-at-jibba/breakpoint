@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { Dispatch } from './routes'
 
+/** A launch is the command line, whichever way the argv reached the app. */
+function launchCall(path: string): Parameters<Dispatch> {
+  return [{ id: 'launch', route: 'project.open', params: { path } }, { surface: 'cli' }]
+}
+
 const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (...args: unknown[]) => void>(),
   app: {
@@ -135,16 +140,8 @@ it('queues native opens before readiness and dispatches them in order after crea
   ready()
   await vi.waitFor(() => expect(mocks.dispatch).toHaveBeenCalledTimes(2))
   expect(mocks.createWindow).toHaveBeenCalledOnce()
-  expect(mocks.dispatch).toHaveBeenNthCalledWith(1, {
-    id: 'launch',
-    route: 'project.open',
-    params: { path: '/repos/shop' }
-  })
-  expect(mocks.dispatch).toHaveBeenNthCalledWith(2, {
-    id: 'launch',
-    route: 'project.open',
-    params: { path: '/repos/other' }
-  })
+  expect(mocks.dispatch).toHaveBeenNthCalledWith(1, ...launchCall('/repos/shop'))
+  expect(mocks.dispatch).toHaveBeenNthCalledWith(2, ...launchCall('/repos/other'))
 })
 
 it('opens a native request in the ready app and focuses its window', async () => {
@@ -154,10 +151,6 @@ it('opens a native request in the ready app and focuses its window', async () =>
   const preventDefault = vi.fn()
   mocks.listeners.get('open-file')?.({ preventDefault }, '/repos/shop')
   expect(preventDefault).toHaveBeenCalledOnce()
-  expect(mocks.dispatch).toHaveBeenCalledWith({
-    id: 'launch',
-    route: 'project.open',
-    params: { path: '/repos/shop' }
-  })
+  expect(mocks.dispatch).toHaveBeenCalledWith(...launchCall('/repos/shop'))
   expect(mocks.window.focus).toHaveBeenCalledOnce()
 })

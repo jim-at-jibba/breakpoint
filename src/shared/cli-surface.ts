@@ -5,7 +5,7 @@ import { formatDpr } from './pane-header'
 import { describeDegradation } from './panes'
 import { looksLikePath } from './paths'
 import type { Project, Zoom } from './project'
-import type { RouteName, RouteParams } from './routes'
+import type { Navigation, RouteName, RouteParams } from './routes'
 import type { StateSnapshot } from './state'
 
 /**
@@ -18,6 +18,8 @@ import type { StateSnapshot } from './state'
 
 interface CliCommandInput {
   positional: string
+  /** The token after the command name, for the commands that declare one. */
+  argument: string | undefined
   cwd: string
   values: ReadonlyMap<string, readonly string[]>
 }
@@ -27,6 +29,11 @@ interface CommandSpec<N extends RouteName> {
   name: string
   route: N
   summary: string
+  /**
+   * The one positional this command takes after its name. Required where it is declared
+   * and refused where it is not, so `breakpoint quit now` stays a usage error.
+   */
+  argument?: CliArgumentSpec
   /**
    * The value-carrying flags this command takes, which are the route's params by
    * another spelling. Given to a command that does not declare it, such a flag is a
@@ -50,13 +57,29 @@ export interface CliValueFlagSpec {
   placeholder: string
 }
 
+export interface CliArgumentSpec {
+  /** How it reads in the help text: `open <url>`. */
+  placeholder: string
+}
+
+/** Written once, because `parseArgv` and the command's own parser can both reach it. */
+function needsArgument(name: string, argument: CliArgumentSpec): string {
+  return `${name} needs ${argument.placeholder}`
+}
+
+const URL_ARGUMENT: CliArgumentSpec = { placeholder: '<url>' }
+
 const SINCE_FLAG: CliValueFlagSpec = {
   name: '--since',
   placeholder: '<cursor>'
 }
 
-/** The command a path invokes. `breakpoint .` and `breakpoint <path>` are both this. */
-export const OPEN_COMMAND: CliCommandSpec<'project.open'> = {
+/**
+ * The command a path invokes. `breakpoint .` and `breakpoint <path>` are both this.
+ * Named for the path and not for opening, because `open` is a different command that
+ * opens a URL rather than a project.
+ */
+export const PATH_COMMAND: CliCommandSpec<'project.open'> = {
   name: '<path>',
   route: 'project.open',
   summary: 'Open the project for that repo, creating it the first time',
@@ -70,8 +93,28 @@ export const OPEN_COMMAND: CliCommandSpec<'project.open'> = {
   render: (data) => renderSnapshot(data, 'Opened')
 }
 
+/**
+ * Navigation, as an agent reaches it: one URL, every pane. What was typed is sent as
+ * typed — a bare port expands in the route, so the terminal and the address bar cannot
+ * disagree about what `3000` means.
+ */
+const NAVIGATE_COMMAND: CliCommandSpec<'project.navigate'> = {
+  name: 'open',
+  route: 'project.navigate',
+  summary: 'Point every pane at a URL, or at a port on this machine',
+  argument: URL_ARGUMENT,
+  // A missing argument is already a usage error by the time this runs; whitespace is
+  // the case only the command itself can see.
+  parseParams: ({ argument }: CliCommandInput): ParsedValue<RouteParams<'project.navigate'>> =>
+    argument === undefined || argument.trim() === ''
+      ? { ok: false, message: needsArgument('open', URL_ARGUMENT) }
+      : { ok: true, value: { url: argument } },
+  render: renderNavigation
+}
+
 export const CLI_COMMANDS: readonly CliCommandSpec[] = [
-  OPEN_COMMAND,
+  PATH_COMMAND,
+  NAVIGATE_COMMAND,
   {
     name: 'logs',
     route: 'log.read',
@@ -83,7 +126,7 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
   {
     name: 'state',
     route: 'project.state',
-    summary: 'Print the open project: name, repo, start URL and panes',
+    summary: 'Print the open project: name, repo, the URL its panes are on, and the panes',
     parseParams: (): ParsedValue<RouteParams<'project.state'>> => ({ ok: true, value: undefined }),
     render: (data) => renderSnapshot(data, 'Open')
   },
@@ -106,6 +149,12 @@ function parseLogParams({ values }: CliCommandInput): ParsedValue<RouteParams<'l
     params.since = since
   }
   return { ok: true, value: params }
+}
+
+function renderNavigation(data: unknown): string {
+  const navigation = data as Partial<Navigation> | undefined
+  const panes = navigation?.panes?.length ?? 0
+  return `Pointed ${panes} ${panes === 1 ? 'pane' : 'panes'} at ${navigation?.url ?? 'nothing'}`
 }
 
 function renderSnapshot(data: unknown, verb: string): string {
@@ -179,6 +228,12 @@ function describeEntry(entry: Entry): string {
       return `layout ${entry.layout}${entry.focusedPane ? `, focused pane ${entry.focusedPane}` : ''}`
     case 'project.zoomChanged':
       return `zoom ${describeZoom(entry.zoom)}`
+    case 'project.navigated':
+      return `every pane pointed at ${entry.url}`
+    case 'project.navigationRefused':
+      return `refused: ${entry.url} is outside the project's allowed origins`
+    case 'project.originsChanged':
+      return `allowed origins ${entry.origins.length === 0 ? 'none' : entry.origins.join(', ')}`
     case 'pane.created':
       return `created, loading ${entry.url}`
     case 'pane.attached':
@@ -306,7 +361,8 @@ interface GivenValueFlag {
 export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
   const options: CliOptions = { json: false, noLaunch: false, verbose: false }
   const given: GivenValueFlag[] = []
-  let positional: string | undefined
+  /** The command name, then its one argument. Anything further is a usage error. */
+  const positionals: string[] = []
   let help = false
   let error: string | undefined
 
@@ -345,27 +401,34 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
       else options[flag.sets] = true
       continue
     }
-    if (positional !== undefined) {
+    if (positionals.length === 2) {
       error ??= `unexpected argument ${argument}`
       continue
     }
-    positional = argument
+    positionals.push(argument)
   }
 
   if (error !== undefined) return { kind: 'error', message: error, options }
   if (help) return { kind: 'help', options }
+  const [positional, argument] = positionals
   if (positional === undefined) {
     return { kind: 'error', message: 'no command or path given', options }
   }
 
   const command = looksLikePath(positional)
-    ? OPEN_COMMAND
+    ? PATH_COMMAND
     : CLI_COMMANDS.find((candidate) => candidate.name === positional)
   if (!command) return { kind: 'error', message: `unknown command ${positional}`, options }
+  if (!command.argument && argument !== undefined) {
+    return { kind: 'error', message: `unexpected argument ${argument}`, options }
+  }
+  if (command.argument && argument === undefined) {
+    return { kind: 'error', message: needsArgument(command.name, command.argument), options }
+  }
 
   const values = readValueFlags(command, given)
   if (!values.ok) return { kind: 'error', message: values.message, options }
-  const params = command.parseParams({ cwd, positional, values: values.value })
+  const params = command.parseParams({ cwd, positional, argument, values: values.value })
   if (!params.ok) return { kind: 'error', message: params.message, options }
 
   return { kind: 'command', command, options, params: params.value }
@@ -393,6 +456,7 @@ export function helpText(): string {
   const commandLabel = (command: CliCommandSpec): string =>
     [
       command.name,
+      ...(command.argument ? [command.argument.placeholder] : []),
       ...(command.flags ?? []).map((flag) => `[${flag.name} ${flag.placeholder}]`)
     ].join(' ')
 
@@ -414,6 +478,8 @@ export function helpText(): string {
     '',
     'Examples:',
     '  breakpoint .',
+    '  breakpoint open 3000',
+    '  breakpoint open https://staging.example.com/cart --json',
     '  breakpoint state --json | jq .project.panes',
     '  breakpoint logs --since 12 --json',
     '  breakpoint quit',
