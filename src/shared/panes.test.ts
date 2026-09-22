@@ -53,8 +53,22 @@ describe('a pane status', () => {
         touch: 'pending',
         colorScheme: 'pending'
       },
-      degraded: []
+      degraded: [],
+      errors: 0
     })
+  })
+
+  it('counts a failed load as an error against the pane without degrading it', () => {
+    const failed = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' }), {
+      type: 'loadFailed'
+    })
+    expect(failed.errors).toBe(2)
+    expect(failed.degraded).toEqual([])
+  })
+
+  it('forgets the errors of a guest that has been replaced', () => {
+    const failed = foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' })
+    expect(foldPaneStatus(failed, { type: 'guestCreated' }).errors).toBe(0)
   })
 
   it('is degraded with the reason when its attachment fails, and still has geometry of its own', () => {

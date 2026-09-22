@@ -18,3 +18,10 @@ panes the labels collide and identifying which is which becomes guesswork.
 Clipping is what makes the binding structural: a header can never claim width its pane does
 not have. The tier thresholds are in the design prototype and are not arbitrary — each is the
 narrowest width at which the remaining content still draws without clipping.
+
+Rotate and remove are in the header but not on the ladder: the ladder is what a header
+says, and those are things it does. They come off above the widest tier's threshold,
+because below that they would take the width that tier's own content was measured to
+need — and how much they take is measured off the tokens they are drawn with rather than
+written down, so the reserved width follows the tokens. The colour tab and the error count
+are the two things no tier takes away.

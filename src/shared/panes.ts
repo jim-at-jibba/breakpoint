@@ -104,6 +104,12 @@ export interface PaneStatus {
   emulation: EmulationState
   /** Empty when the pane is healthy. A degraded pane still renders ([CONTEXT.md]). */
   degraded: PaneDegradation[]
+  /**
+   * Errors observed of the page in this pane since its guest was created, which is what
+   * the pane header counts. Load failures are the only producer in Phase 1; the console's
+   * exceptions join them in Phase 2 without the header having to learn anything new.
+   */
+  errors: number
 }
 
 /** One reason as a person reads it, the same in the window and on a terminal. */
@@ -117,6 +123,8 @@ export type PaneObservation =
   | { type: 'attached' }
   | { type: 'attachFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
+  /** The page in the pane failed to load. One error, counted; the pane still renders. */
+  | { type: 'loadFailed' }
   | { type: 'emulationPending'; capabilities: readonly EmulationCapability[] }
   | { type: 'emulated'; results: readonly EmulationResult[] }
   | { type: 'guestDestroyed' }
@@ -125,7 +133,7 @@ export function initialPaneStatus(): PaneStatus {
   const emulation = Object.fromEntries(
     EMULATION_CAPABILITIES.map((capability) => [capability, 'pending'])
   ) as EmulationState
-  return { attachment: 'pending', geometry: 'unchecked', emulation, degraded: [] }
+  return { attachment: 'pending', geometry: 'unchecked', emulation, degraded: [], errors: 0 }
 }
 
 export function foldPaneStatus(status: PaneStatus, observation: PaneObservation): PaneStatus {
@@ -136,6 +144,8 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
       return initialPaneStatus()
     case 'attached':
       return { ...status, attachment: 'attached', degraded: without(status, 'attachment') }
+    case 'loadFailed':
+      return { ...status, errors: status.errors + 1 }
     case 'attachFailed':
       return {
         ...status,
