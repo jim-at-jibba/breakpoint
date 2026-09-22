@@ -157,6 +157,46 @@ describe('applying a patch', () => {
     })
   })
 
+  it('folds a new layout and its focused pane into the open project', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const next = applyPatch(open, {
+      revision: 2,
+      patch: { type: 'project.layout', layout: 'focus', focusedPane: tablet }
+    })
+
+    expect(next.project).toEqual({ ...shop, layout: 'focus', focusedPane: tablet })
+    expect(next.panes).toEqual(open.panes)
+    expect(next.revision).toBe(2)
+  })
+
+  it('folds a new zoom into the open project, Fit included', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const half = applyPatch(open, { revision: 2, patch: { type: 'project.zoom', zoom: 50 } })
+    expect(half.project).toEqual({ ...shop, zoom: 50 })
+
+    const fit = applyPatch(half, { revision: 3, patch: { type: 'project.zoom', zoom: 'fit' } })
+    expect(fit.project).toEqual({ ...shop, zoom: 'fit' })
+    expect(fit.revision).toBe(3)
+  })
+
+  it('ignores a layout or zoom announced with nothing open', () => {
+    expect(
+      applyPatch(nothingOpen, {
+        revision: 1,
+        patch: { type: 'project.layout', layout: 'focus', focusedPane: null }
+      })
+    ).toEqual({ ...nothingOpen, revision: 1 })
+    expect(
+      applyPatch(nothingOpen, { revision: 2, patch: { type: 'project.zoom', zoom: 50 } })
+    ).toEqual({ ...nothingOpen, revision: 2 })
+  })
+
   it('ignores a change to a pane the open project does not have', () => {
     const open = applyPatch(nothingOpen, {
       revision: 1,

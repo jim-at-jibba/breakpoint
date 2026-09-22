@@ -23,7 +23,9 @@ export const WIRE_ERROR_CODES = [
   /** The global presets file is on disk but this build will not read it: corrupt, or newer. */
   'PRESETS_UNREADABLE',
   /** No preset with that id, which is what an edited presets file makes possible. */
-  'PRESET_NOT_FOUND'
+  'PRESET_NOT_FOUND',
+  /** The route changes the open project and there is no project open. */
+  'PROJECT_NOT_OPEN'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

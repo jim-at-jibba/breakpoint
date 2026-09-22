@@ -1,6 +1,6 @@
 import { isCursorPosition, type EventLog } from '../shared/event-log'
 import { isPaneDimension, PANE_DIMENSION_RANGE } from '../shared/panes'
-import { isColorScheme } from '../shared/project'
+import { isColorScheme, isLayout } from '../shared/project'
 import { failure, success, type RouteRequest, type RouteResponse } from '../shared/protocol'
 import { isRouteName, type RouteName, type RouteParams, type RoutePayload } from '../shared/routes'
 import { RouteError } from './route-error'
@@ -77,6 +77,20 @@ function expectSince(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   return { ok: true, params: { since } }
 }
 
+/**
+ * The params object, or nothing if what arrived was not one. Every route taking params
+ * starts here, so "this is not even an object" is one answer rather than four.
+ */
+function asParams(raw: unknown): Record<string, unknown> | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  return raw as Record<string, unknown>
+}
+
+/** Names not in `allowed`: a misspelt field is a change that silently changes nothing. */
+function unknownFields(params: Record<string, unknown>, allowed: readonly string[]): string[] {
+  return Object.keys(params).filter((key) => !allowed.includes(key))
+}
+
 function expectSize(raw: unknown): { width: number; height: number } | undefined {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
   const { width, height } = raw as { width?: unknown; height?: unknown }
@@ -88,10 +102,8 @@ function expectSize(raw: unknown): { width: number; height: number } | undefined
 function expectGeometryReport(raw: unknown): ParamsOk<'panes.reportGeometry'> | ParamsBad {
   const shape =
     'this route takes { pane, expected: { width, height }, measured: { width, height } }'
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    return { ok: false, message: shape }
-  }
-  const report = raw as { pane?: unknown; expected?: unknown; measured?: unknown }
+  const report = asParams(raw)
+  if (!report) return { ok: false, message: shape }
   if (typeof report.pane !== 'string' || report.pane.length === 0) {
     return { ok: false, message: 'pane must be a non-empty string' }
   }
@@ -244,6 +256,39 @@ function expectEmulationSetting(raw: unknown): ParamsOk<'panes.setEmulation'> | 
   }
 }
 
+const LAYOUT_FIELDS = ['layout', 'focusedPane']
+
+function expectLayoutSetting(raw: unknown): ParamsOk<'project.setLayout'> | ParamsBad {
+  const shape = 'this route takes { layout } and optionally { focusedPane }'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, LAYOUT_FIELDS)
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { layout, focusedPane } = setting
+  if (!isLayout(layout)) return { ok: false, message: 'layout must be horizontal or focus' }
+  if (focusedPane !== undefined && (typeof focusedPane !== 'string' || focusedPane.length === 0)) {
+    return { ok: false, message: 'focusedPane must be a non-empty string' }
+  }
+  return { ok: true, params: { layout, ...(focusedPane !== undefined && { focusedPane }) } }
+}
+
+function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
+  const shape = 'this route takes { zoom }: a number of percent, or "fit"'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, ['zoom'])
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { zoom } = setting
+  if (zoom === 'fit') return { ok: true, params: { zoom } }
+  // A zoom past the ends of the control is clamped by the service, not refused here.
+  if (typeof zoom !== 'number' || !Number.isFinite(zoom)) {
+    return { ok: false, message: shape }
+  }
+  return { ok: true, params: { zoom } }
+}
+
 export interface DispatchResult {
   response: RouteResponse
   afterRespond?: () => void
@@ -309,6 +354,14 @@ export function createRouteTable(services: Services): RouteTable {
     'project.open': {
       parseParams: expectPath,
       handle: async ({ path }) => ({ payload: await services.project.open(path) })
+    },
+    'project.setLayout': {
+      parseParams: expectLayoutSetting,
+      handle: async (setting) => ({ payload: await services.project.setLayout(setting) })
+    },
+    'project.setZoom': {
+      parseParams: expectZoomSetting,
+      handle: async ({ zoom }) => ({ payload: await services.project.setZoom(zoom) })
     },
     'project.state': {
       parseParams: expectNoParams,

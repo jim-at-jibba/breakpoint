@@ -80,6 +80,8 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   const project: Project = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
+    // Pane-management assertions use exact screen pixels; zoom behavior belongs to #13.
+    zoom: 100,
     ...changes
   }
   saveProject(project)
@@ -234,11 +236,13 @@ test('a new project is created with the default three panes, resolved from the p
   const opened = await open(emptyRepo('shop'))
 
   const panes = panesOf(opened)
+  expect(opened.project?.zoom).toBe('fit')
   expect(panes.map((pane) => [pane.name, pane.width, pane.height, pane.preset])).toEqual([
     ['Mobile (small)', 320, 568, 'mobile'],
     ['Tablet', 820, 1180, 'tablet'],
     ['Desktop', 1440, 900, 'desktop']
   ])
+  await route('project.setZoom', { zoom: 100 })
   await drawn(
     page,
     panes.map((pane) => pane.id)

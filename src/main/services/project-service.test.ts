@@ -162,3 +162,107 @@ describe('async project opens', () => {
     expect(second.revision).toBe(2)
   })
 })
+
+describe('layout and zoom', () => {
+  it('keeps a new layout with the project, announces it and logs it', async () => {
+    const opened = await service.open(shop)
+    const [, tablet] = opened.project!.panes
+
+    const result = await service.setLayout({ layout: 'focus', focusedPane: tablet.id })
+
+    expect(result).toEqual({ layout: 'focus', focusedPane: tablet.id })
+    expect(service.snapshot().project).toMatchObject({ layout: 'focus', focusedPane: tablet.id })
+    // Kept on disk, which is what makes it survive a restart.
+    expect(await store.load(shop)).toMatchObject({
+      status: 'loaded',
+      project: { layout: 'focus', focusedPane: tablet.id }
+    })
+    expect(patches.at(-1)).toEqual({
+      revision: 2,
+      patch: { type: 'project.layout', layout: 'focus', focusedPane: tablet.id }
+    })
+    expect(log.read().entries).toEqual([
+      expect.objectContaining({
+        pane: null,
+        type: 'project.layoutChanged',
+        layout: 'focus',
+        focusedPane: tablet.id
+      })
+    ])
+  })
+
+  it('changes the focused pane without being told the layout again', async () => {
+    const opened = await service.open(shop)
+    const [mobile, , desktop] = opened.project!.panes
+    await service.setLayout({ layout: 'focus', focusedPane: mobile.id })
+
+    expect(await service.setLayout({ layout: 'focus', focusedPane: desktop.id })).toEqual({
+      layout: 'focus',
+      focusedPane: desktop.id
+    })
+    expect(service.snapshot().project?.focusedPane).toBe(desktop.id)
+  })
+
+  it('leaves the focused pane alone when the layout changes without naming one', async () => {
+    const opened = await service.open(shop)
+    const [, tablet] = opened.project!.panes
+    await service.setLayout({ layout: 'focus', focusedPane: tablet.id })
+
+    expect(await service.setLayout({ layout: 'horizontal' })).toEqual({
+      layout: 'horizontal',
+      focusedPane: tablet.id
+    })
+  })
+
+  it('refuses to focus a pane the open project does not have, and keeps the layout it had', async () => {
+    await service.open(shop)
+
+    await expect(
+      service.setLayout({ layout: 'focus', focusedPane: 'ghost' })
+    ).rejects.toMatchObject({ code: 'PANE_NOT_FOUND' })
+    expect(service.snapshot().project).toMatchObject({ layout: 'horizontal', focusedPane: null })
+  })
+
+  it('keeps a zoom with the project, Fit included, and announces it', async () => {
+    await service.open(shop)
+
+    expect(await service.setZoom(50)).toEqual({ zoom: 50 })
+    expect(await store.load(shop)).toMatchObject({ status: 'loaded', project: { zoom: 50 } })
+    expect(patches.at(-1)).toEqual({ revision: 2, patch: { type: 'project.zoom', zoom: 50 } })
+
+    expect(await service.setZoom('fit')).toEqual({ zoom: 'fit' })
+    expect(service.snapshot().project?.zoom).toBe('fit')
+  })
+
+  it('clamps a zoom past the ends of the control rather than refusing it', async () => {
+    await service.open(shop)
+
+    expect(await service.setZoom(400)).toEqual({ zoom: 100 })
+    expect(await service.setZoom(-10)).toEqual({ zoom: 25 })
+    expect(await service.setZoom(43.4)).toEqual({ zoom: 43 })
+    expect(service.snapshot().project?.zoom).toBe(43)
+  })
+
+  it('treats the layout or zoom it already has as no change at all', async () => {
+    const opened = await service.open(shop)
+    const saves = vi.spyOn(store, 'save')
+
+    expect(await service.setLayout({ layout: 'horizontal' })).toEqual({
+      layout: 'horizontal',
+      focusedPane: null
+    })
+    expect(await service.setZoom('fit')).toEqual({ zoom: 'fit' })
+
+    expect(saves).not.toHaveBeenCalled()
+    expect(log.read().entries).toEqual([])
+    expect(service.snapshot()).toEqual(opened)
+  })
+
+  it('refuses a layout or zoom change with no project open', async () => {
+    await expect(service.setLayout({ layout: 'focus' })).rejects.toMatchObject({
+      code: 'PROJECT_NOT_OPEN'
+    })
+    await expect(service.setZoom(50)).rejects.toMatchObject({ code: 'PROJECT_NOT_OPEN' })
+    expect(patches).toEqual([])
+  })
+})

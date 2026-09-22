@@ -96,6 +96,10 @@
   --bp-row: 24px;           /* pane header, list rows, table rows         */
   --bp-row-md: 26px;        /* toolbar controls, palette rows             */
   --bp-row-lg: 28px;        /* address bar, primary inputs                */
+  /* Focus layout: the drawn height of a pane in the strip, whatever it declares. */
+  --bp-strip-h: 120px;
+  --bp-zoom-slider-w: 76px;   /* the zoom slider's track                    */
+  --bp-zoom-label-w: 30px;    /* wide enough for 100%, so it never reflows  */
   --bp-toolbar-h: 44px;
   --bp-tabbar-h: 30px;
 

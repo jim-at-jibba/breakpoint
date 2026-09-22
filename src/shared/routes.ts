@@ -13,7 +13,7 @@ import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
 import type { PaneStatus, Size } from './panes'
 import type { Preset } from './presets'
-import type { Pane } from './project'
+import type { Layout, Pane, Zoom } from './project'
 import type { StateSnapshot } from './state'
 
 /** A route is a dotted `noun.verb`. The noun is the service, the verb is the method. */
@@ -31,6 +31,8 @@ export const ROUTE_NAMES = [
   'panes.setEmulation',
   'presets.list',
   'project.open',
+  'project.setLayout',
+  'project.setZoom',
   'project.state'
 ] as const
 
@@ -90,11 +92,35 @@ export interface RouteSignatures {
    * caller resolves it against its own working directory, which the app cannot know.
    */
   'project.open': { params: { path: string }; payload: StateSnapshot }
+  /**
+   * Arranges the open project's panes, and names the pane Focus draws at 100%. Naming a
+   * pane without changing the layout is how the focused pane is changed. Kept with the
+   * project.
+   */
+  'project.setLayout': { params: LayoutSetting; payload: LayoutState }
+  /**
+   * Sets the open project's zoom, which may be `Fit` — a value of the control, not a
+   * layout ([ADR-0009]). What Fit currently computes to is the renderer's, because only
+   * the renderer knows how much room it has; the main process keeps the value only.
+   */
+  'project.setZoom': { params: { zoom: Zoom }; payload: { zoom: Zoom } }
   /** The snapshot every surface renders from. `project` is null until one is opened. */
   'project.state': { params: undefined; payload: StateSnapshot }
 }
 
 export type PaneListing = Pane & { status: PaneStatus }
+
+export interface LayoutSetting {
+  layout: Layout
+  /** Omitted leaves the focused pane as it was. */
+  focusedPane?: string
+}
+
+/** How the panes are arranged now. `focusedPane` is null for whichever pane is first. */
+export interface LayoutState {
+  layout: Layout
+  focusedPane: string | null
+}
 
 export interface GeometryReport {
   pane: string

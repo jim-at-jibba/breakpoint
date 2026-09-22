@@ -20,6 +20,7 @@ describe('createProject', () => {
     expect(project.allowedOrigins).toEqual(['http://localhost:3000'])
     expect(project.layout).toBe('horizontal')
     expect(project.zoom).toBe('fit')
+    expect(project.focusedPane).toBeNull()
   })
 
   it('gives a new project the PRD 6.2 default pane set on one shared session', () => {
@@ -163,12 +164,12 @@ describe('readProjectFile', () => {
   })
 
   /**
-   * Version 1 had no `touch` and no `userAgent`: touch followed the mobile flag, and the
+   * Version 2 had no `touch` and no `userAgent`: touch followed the mobile flag, and the
    * user agent was always Breakpoint's own. Both carried forward as they were in force.
    */
-  it('migrates a version 1 file by giving each pane the touch and user agent it had', () => {
+  it('migrates a version 2 file by giving each pane the touch and user agent it had', () => {
     const before = {
-      version: 1,
+      version: 2,
       project: {
         ...stored,
         panes: stored.panes.map((pane) => {
@@ -210,9 +211,9 @@ describe('readProjectFile', () => {
     expect(result).toEqual({ ok: true, project: { ...stored, name: 'old' } })
   })
 
-  it('brings a version 1 pane whose size the current rules refuse into range', () => {
+  it('brings a version 2 pane whose size the current rules refuse into range', () => {
     const before = {
-      version: 1,
+      version: 2,
       project: {
         ...stored,
         panes: stored.panes.map((pane, index) => {
@@ -235,6 +236,26 @@ describe('readProjectFile', () => {
     expect(result.ok && result.project.panes.map((pane) => pane.height)).toEqual(
       stored.panes.map((pane) => pane.height)
     )
+  })
+
+  it('reads a focused pane the project no longer has as focusing none', () => {
+    const raw = writeProjectFile({ ...stored, focusedPane: 'ghost' })
+
+    expect(readProjectFile(raw)).toEqual({ ok: true, project: { ...stored, focusedPane: null } })
+  })
+
+  it('still refuses a focused pane that is not a pane id at all', () => {
+    const raw = writeProjectFile({ ...stored, focusedPane: 7 as unknown as string })
+
+    expect(readProjectFile(raw).ok).toBe(false)
+  })
+
+  it('reads a file from before Focus remembered its pane as focusing none', () => {
+    const before: Record<string, unknown> = { ...stored }
+    delete before.focusedPane
+    const result = readProjectFile({ version: 1, project: before })
+
+    expect(result).toEqual({ ok: true, project: { ...stored, focusedPane: null } })
   })
 
   it('treats a missing migration step as corruption rather than skipping it', () => {
