@@ -62,9 +62,12 @@ _Avoid_: mode, view, arrangement
 ### Projects and storage
 
 **Project**:
-A repo path plus everything Breakpoint remembers about working on it — URL, panes, layout,
-allowed origins, dev command. Identified by its absolute repo path.
-_Avoid_: workspace, site, app
+Everything Breakpoint remembers about working on something — URL, panes, layout, allowed
+origins, dev command. Identified by its absolute repo path when it has one. A project opened
+by typing a URL has no repo path, and so no identity: it is never stored and lasts as long as
+the window ([ADR-0015](docs/adr/0015-repo-less-projects-are-ephemeral.md)). A URL is never a
+project's identity, because a port is a lease rather than a name.
+_Avoid_: workspace, site, app, canvas (for the repo-less case — it is a project too)
 
 **Session**:
 An isolated store of cookies, cache and local storage that panes can share or be assigned
