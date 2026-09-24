@@ -14,9 +14,9 @@ import { isWebUrl } from './urls'
 
 /**
  * A project: a repo path, when it has one, plus everything Breakpoint remembers about
- * working on it. This
- * is the shape that is stored, the shape the route table returns, and the shape the
- * renderer projects — one type, so the three can never disagree about a field.
+ * working on it. This is the shape that is stored, the shape the route table returns,
+ * and the shape the renderer projects — one type, so the three can never disagree about
+ * a field.
  *
  * Pure: no file system here. The store in the main process reads and writes files; this
  * module decides what a valid one says.

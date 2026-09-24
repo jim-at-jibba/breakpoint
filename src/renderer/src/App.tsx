@@ -118,7 +118,7 @@ export default function App(): React.JSX.Element {
             is the way in, and it names the open project when there is one. */}
         <ProjectSwitcher project={project} open={snapshot.switcher.open} />
         <AddressBar
-          key={addressKey(project)}
+          key={draftKey(project)}
           project={project}
           onNavigate={(url) => invokeAction('project.navigate', { url })}
         />
@@ -161,7 +161,7 @@ export default function App(): React.JSX.Element {
             <TrustedCertificates certificates={snapshot.certificates.trusted} />
             {project && (
               <>
-                <AllowedOrigins key={addressKey(project)} project={project} />
+                <AllowedOrigins key={draftKey(project)} project={project} />
                 <AddPane />
                 <CanvasControls
                   project={project}
@@ -225,7 +225,7 @@ export default function App(): React.JSX.Element {
  * identity to key on ([ADR-0015]), and there is only ever one of it: the next is always a
  * repo project, or nothing.
  */
-function addressKey(project: Project | null): string {
+function draftKey(project: Project | null): string {
   if (!project) return 'none'
   return project.repoPath ?? 'ad-hoc'
 }
