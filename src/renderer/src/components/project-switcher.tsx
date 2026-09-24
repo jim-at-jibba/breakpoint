@@ -8,7 +8,11 @@ import {
   CommandList
 } from '@renderer/components/ui/command'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { projectListingLabel, type ProjectListing } from '../../../shared/project-listing'
+import {
+  projectListingLabel,
+  repoPathParent,
+  type ProjectListing
+} from '../../../shared/project-listing'
 import type { Project } from '../../../shared/project'
 
 /**
@@ -131,7 +135,7 @@ export function ProjectSwitcher({
       >
         {/* The open project names the button. With nothing open there is no project to
             name, and the button says what it is instead. */}
-        {project ? <span data-testid="project-name">{project.name}</span> : 'Projects'}
+        {project ? <OpenProjectLabel project={project} /> : 'Projects'}
       </Button>
       <CommandDialog
         open={open}
@@ -178,6 +182,34 @@ export function ProjectSwitcher({
         </CommandFooter>
       </CommandDialog>
     </>
+  )
+}
+
+/**
+ * The open project as the toolbar names it: which checkout it came from, and not only its
+ * name. The name is the directory's, which under git worktrees is the worktree and not
+ * the repo, so the segment above is drawn before it, quieter, with the whole path to
+ * hover (#31). A project with no repo path says so instead: it is named for the host it
+ * was opened on, and quitting loses it ([ADR-0015]).
+ */
+function OpenProjectLabel({ project }: { project: Project }): React.JSX.Element {
+  const name = <span data-testid="project-name">{project.name}</span>
+  if (project.repoPath === null) {
+    return (
+      <span className="flex min-w-0 items-baseline gap-[var(--bp-space-2)]">
+        {name}
+        <span data-testid="project-unsaved" className="text-[color:var(--bp-ink-faint)]">
+          not saved
+        </span>
+      </span>
+    )
+  }
+  const parent = repoPathParent(project.repoPath)
+  return (
+    <span className="flex min-w-0" title={project.repoPath} data-testid="project-checkout">
+      {parent !== null && <span className="text-[color:var(--bp-ink-faint)]">{parent}</span>}
+      {name}
+    </span>
   )
 }
 

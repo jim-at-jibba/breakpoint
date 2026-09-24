@@ -3,6 +3,7 @@ import {
   compareProjectListings,
   projectListingLabel,
   salvageProjectIdentity,
+  repoPathParent,
   shortenRepoPath,
   type ProjectListing
 } from './project-listing'
@@ -28,6 +29,18 @@ describe('salvageProjectIdentity', () => {
     })
     expect(salvageProjectIdentity(undefined)).toEqual({ name: null, repoPath: null })
     expect(salvageProjectIdentity([])).toEqual({ name: null, repoPath: null })
+  })
+})
+
+describe('repoPathParent', () => {
+  it('is the segment above the directory, with its separator: what tells worktrees apart', () => {
+    expect(repoPathParent('/Users/dev/code/breakpoint/feature-19-switcher')).toBe('breakpoint/')
+    expect(repoPathParent('C:\\code\\breakpoint\\main')).toBe('breakpoint\\')
+  })
+
+  it('is null for a path with nothing above the directory', () => {
+    expect(repoPathParent('/shop')).toBeNull()
+    expect(repoPathParent('/')).toBeNull()
   })
 })
 

@@ -8,7 +8,7 @@ import {
   writeProjectFile,
   type ColorScheme,
   type Pane,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import { snapshotReadiness as readiness, type StateSnapshot } from '../src/shared/state'
 import { HIT_TARGET, SCHEME_SWATCH, startFixture, SWATCH, type Fixture } from './fixture'
@@ -222,7 +222,7 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
 
   // Stored at a layout and zoom other than the ones under test, so that finding them at
   // 50% Horizontal after the restart can only mean the app wrote them.
-  const stored: Project = {
+  const stored: StoredProject = {
     ...createProject(repo),
     startUrl: `${fixture.a}/`,
     allowedOrigins: [fixture.a],

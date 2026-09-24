@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_PRESETS, type Preset } from './presets'
 import {
+  createAdHocProject,
   createProject,
+  parseProject,
   PROJECT_FILE_VERSION,
   PROJECT_MIGRATIONS,
   projectFileName,
   readProjectFile,
   writeProjectFile,
+  type Project,
   type ProjectMigrations
 } from './project'
 
@@ -65,6 +68,49 @@ describe('createProject', () => {
     expect(project.panes[1]).toMatchObject(
       expect.objectContaining({ name: 'Tablet', width: 820, height: 1180 })
     )
+  })
+})
+
+describe('createAdHocProject', () => {
+  it('has no repo path, and is pointed at the typed URL with only its origin allowed', () => {
+    const project = createAdHocProject('http://localhost:5173/checkout?step=2')
+
+    expect(project.repoPath).toBeNull()
+    expect(project.name).toBe('localhost:5173')
+    expect(project.startUrl).toBe('http://localhost:5173/checkout?step=2')
+    expect(project.allowedOrigins).toEqual(['http://localhost:5173'])
+  })
+
+  it('is the same shape as a repo project: default panes, layout, zoom and session', () => {
+    const adHoc = createAdHocProject('https://staging.example.com/')
+    const repo = createProject('/Users/dev/code/shop')
+
+    // Pane ids are minted fresh either way; everything else about a pane is the same.
+    const shape = ({ panes, layout, zoom, focusedPane, sessions }: Project): unknown => ({
+      panes: panes.map((pane) => ({ ...pane, id: undefined })),
+      layout,
+      zoom,
+      focusedPane,
+      sessions
+    })
+    expect(shape(adHoc)).toEqual(shape(repo))
+  })
+
+  it('resolves its panes from the presets it is given', () => {
+    const edited: Preset[] = DEFAULT_PRESETS.map((preset) =>
+      preset.id === 'mobile' ? { ...preset, width: 320, name: 'Mobile (small)' } : preset
+    )
+
+    expect(createAdHocProject('http://localhost:3000/', edited).panes[0]).toMatchObject({
+      name: 'Mobile (small)',
+      width: 320
+    })
+  })
+})
+
+describe('parseProject', () => {
+  it('refuses a stored project with no repo path: only a project with one is ever stored', () => {
+    expect(parseProject(createAdHocProject('http://localhost:3000/'))).toBeUndefined()
   })
 })
 

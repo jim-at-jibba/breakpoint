@@ -9,7 +9,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { startFixture, type Fixture } from './fixture'
@@ -38,10 +38,10 @@ let launched: LaunchedApp | undefined
 let repos: string
 let fixture: Fixture
 
-function makeRepo(name: string, changes: Partial<Project> = {}): Project {
+function makeRepo(name: string, changes: Partial<StoredProject> = {}): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
     // The ladder is keyed on screen pixels; at 100% those are the pane's declared ones.
@@ -57,7 +57,7 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   return project
 }
 
-async function open(project: Project): Promise<void> {
+async function open(project: StoredProject): Promise<void> {
   const run = await runCli(sandbox, ['.', '--json'], project.repoPath)
   expect(run.code).toBe(0)
 }
@@ -74,7 +74,7 @@ async function logs(since = 0): Promise<Entry[]> {
   return [...(JSON.parse(run.stdout) as LogRead).entries]
 }
 
-async function settled(project: Project): Promise<void> {
+async function settled(project: StoredProject): Promise<void> {
   await expect
     .poll(
       async () => {

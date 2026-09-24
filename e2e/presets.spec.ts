@@ -22,7 +22,7 @@ import {
   projectFileName,
   writeProjectFile,
   type Pane,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { PaneListing } from '../src/shared/routes'
 import type { StateSnapshot } from '../src/shared/state'
@@ -74,10 +74,10 @@ function presetsWith(id: string, changes: Partial<Preset>): Preset[] {
   return DEFAULT_PRESETS.map((preset) => (preset.id === id ? { ...preset, ...changes } : preset))
 }
 
-function makeRepo(name: string, changes: Partial<Project> = {}): Project {
+function makeRepo(name: string, changes: Partial<StoredProject> = {}): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
     // Pane-management assertions use exact screen pixels; zoom behavior belongs to #13.
@@ -88,7 +88,7 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   return project
 }
 
-function saveProject(project: Project): void {
+function saveProject(project: StoredProject): void {
   const projects = join(sandbox.userDataDir, 'projects')
   mkdirSync(projects, { recursive: true })
   writeFileSync(

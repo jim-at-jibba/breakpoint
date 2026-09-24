@@ -6,7 +6,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../../shared/project'
 import { EventLog } from '../../shared/event-log'
 import type { RevisionedPatch } from '../../shared/state'
@@ -17,7 +17,7 @@ import { PresetStore } from './preset-store'
 import { ProjectService } from './project-service'
 import { ProjectStore } from './project-store'
 
-function openedRepo({ patch }: RevisionedPatch): string | undefined {
+function openedRepo({ patch }: RevisionedPatch): string | null | undefined {
   return patch.type === 'project.opened' ? patch.project.repoPath : undefined
 }
 
@@ -130,13 +130,15 @@ describe('async project opens', () => {
     }
     const save = store.save.bind(store)
     const started = new Promise<void>((resolve) => {
-      vi.spyOn(store, 'save').mockImplementationOnce(async (project: Project): Promise<void> => {
-        await new Promise<void>((finish) => {
-          finishSave = finish
-          resolve()
-        })
-        await save(project)
-      })
+      vi.spyOn(store, 'save').mockImplementationOnce(
+        async (project: StoredProject): Promise<void> => {
+          await new Promise<void>((finish) => {
+            finishSave = finish
+            resolve()
+          })
+          await save(project)
+        }
+      )
     })
 
     const first = service.open(shop)
@@ -401,12 +403,82 @@ describe('navigation', () => {
       url: 'http://localhost:3000/cart?step=1'
     })
   })
+})
 
-  it('refuses navigation with no project open', async () => {
-    await expect(service.navigate('http://localhost:3000/', 'cli')).rejects.toMatchObject({
-      code: 'PROJECT_NOT_OPEN'
+describe('a project with no repo path', () => {
+  it('is opened by navigating with nothing open, and points every pane at the URL', async () => {
+    const navigation = await service.navigate('http://localhost:5173/cart', 'window')
+
+    const project = service.snapshot().project!
+    expect(project).toMatchObject({
+      repoPath: null,
+      startUrl: 'http://localhost:5173/cart',
+      allowedOrigins: ['http://localhost:5173']
     })
-    expect(patches).toEqual([])
+    expect(navigation).toEqual({
+      url: 'http://localhost:5173/cart',
+      panes: project.panes.map((pane) => pane.id)
+    })
+    expect(patches.map(({ patch }) => patch.type)).toEqual(['project.opened'])
+    expect(log.read().entries).toEqual([
+      expect.objectContaining({
+        pane: null,
+        type: 'project.navigated',
+        url: 'http://localhost:5173/cart'
+      })
+    ])
+  })
+
+  it('is opened from the CLI too, because its allowed origin is the one it was sent to', async () => {
+    await expect(service.navigate('https://staging.example.com/', 'cli')).resolves.toMatchObject({
+      url: 'https://staging.example.com/'
+    })
+    expect(service.snapshot().project?.repoPath).toBeNull()
+  })
+
+  it('is never written to the project directory, however it changes', async () => {
+    const saves = vi.spyOn(store, 'save')
+    await service.navigate('http://localhost:5173/', 'window')
+    const [pane] = service.snapshot().project!.panes
+
+    await service.navigate('http://localhost:5173/other', 'window')
+    await service.setZoom(50)
+    await service.setLayout({ layout: 'focus', focusedPane: pane.id })
+    await service.updatePane(pane.id, { width: 400 })
+    await service.setAllowedOrigins(['http://localhost:5173', 'https://staging.example.com'])
+    await service.addPane({ width: 500, height: 500 })
+    await service.removePane(pane.id)
+
+    expect(saves).not.toHaveBeenCalled()
+    expect(await store.list()).toEqual([])
+    // Held in memory all the same: the window it lives in sees every change.
+    expect(service.snapshot().project).toMatchObject({
+      startUrl: 'http://localhost:5173/other',
+      zoom: 50,
+      layout: 'focus'
+    })
+  })
+
+  it('navigates in place once it is open, rather than opening another', async () => {
+    await service.navigate('http://localhost:5173/', 'window')
+    const panesBefore = service.snapshot().project!.panes
+
+    await service.navigate('http://localhost:5173/other', 'window')
+
+    expect(service.snapshot().project!.panes).toEqual(panesBefore)
+    expect(patches.at(-1)?.patch).toEqual({
+      type: 'project.url',
+      url: 'http://localhost:5173/other'
+    })
+  })
+
+  it('is replaced by opening a repo project, and leaves nothing behind', async () => {
+    await service.navigate('http://localhost:5173/', 'window')
+
+    const opened = await service.open(shop)
+
+    expect(opened.project?.repoPath).toBe(shop)
+    expect((await store.list()).map((listing) => listing.repoPath)).toEqual([shop])
   })
 })
 

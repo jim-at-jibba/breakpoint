@@ -9,7 +9,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { startFixture, type Fixture } from './fixture'
@@ -38,10 +38,10 @@ let launched: LaunchedApp | undefined
 let repos: string
 let fixture: Fixture
 
-function makeRepo(name: string, changes: Partial<Project> = {}): Project {
+function makeRepo(name: string, changes: Partial<StoredProject> = {}): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
     ...changes
@@ -55,7 +55,7 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   return project
 }
 
-async function open(project: Project): Promise<void> {
+async function open(project: StoredProject): Promise<void> {
   const run = await runCli(sandbox, ['.', '--json'], project.repoPath)
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)
@@ -79,7 +79,7 @@ function ofType(entries: Entry[], type: Entry['type'], pane?: string): Entry[] {
   )
 }
 
-async function settled(project: Project): Promise<void> {
+async function settled(project: StoredProject): Promise<void> {
   await expect
     .poll(
       async () => {
@@ -112,7 +112,7 @@ function guestId(page: Page, pane: string): Promise<number> {
   )
 }
 
-async function guestIds(page: Page, project: Project): Promise<Record<string, number>> {
+async function guestIds(page: Page, project: StoredProject): Promise<Record<string, number>> {
   return Object.fromEntries(
     await Promise.all(
       project.panes.map(async (pane) => [pane.id, await guestId(page, pane.id)] as const)

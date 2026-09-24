@@ -15,6 +15,11 @@ import { expandUrl } from '../../../shared/urls'
  * That list binds automation and not the developer ([ADR-0013]); this field's only rule
  * is that the result has to be a page a pane can render.
  *
+ * With nothing open it is the way in: a URL typed here opens a project with no repo path,
+ * pointed at it ([ADR-0015]). That is the same route as any other navigation, which opens
+ * the project rather than refusing when there is none, so this field does not know
+ * which of the two it is asking for.
+ *
  * The field's border and background are the row's rather than the input's, so the
  * generated `Input` is not used here: the prototype draws the pane count inside the same
  * box as the text, which is one control and not a control beside a label.
@@ -23,12 +28,12 @@ export function AddressBar({
   project,
   onNavigate
 }: {
-  project: Project
+  project: Project | null
   /** Resolves false if the route refused it, which is when the typed text is worth keeping. */
   onNavigate(url: string): Promise<boolean>
 }): React.JSX.Element {
   const [draft, setDraft] = useState<string | null>(null)
-  const value = draft ?? project.startUrl
+  const value = draft ?? project?.startUrl ?? ''
   // Expanded here only to disable the commit; the route expands it again for real, so a
   // bare port means the same thing typed here and typed at a terminal.
   const navigable = expandUrl(value) !== undefined
@@ -55,18 +60,23 @@ export function AddressBar({
         spellCheck={false}
         autoComplete="off"
         value={value}
+        placeholder="localhost:3000, or any URL"
+        // Opened from the Dock, this is the only thing in the window to do.
+        autoFocus={project === null}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === 'Escape') setDraft(null)
         }}
-        className="min-w-0 flex-1 bg-transparent font-mono text-[length:var(--bp-text-lg)] text-[color:var(--bp-ink)] outline-none"
+        className="min-w-0 flex-1 bg-transparent font-mono placeholder:text-[color:var(--bp-ink-faint)] text-[length:var(--bp-text-lg)] text-[color:var(--bp-ink)] outline-none"
       />
-      <span
-        className="flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-faint)]"
-        data-testid="pane-count"
-      >
-        {project.panes.length} {project.panes.length === 1 ? 'pane' : 'panes'}
-      </span>
+      {project && (
+        <span
+          className="flex-none font-mono text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-faint)]"
+          data-testid="pane-count"
+        >
+          {project.panes.length} {project.panes.length === 1 ? 'pane' : 'panes'}
+        </span>
+      )}
     </form>
   )
 }

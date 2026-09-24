@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EmulationChanges, EmulationResult } from '../../shared/emulation'
 import { EventLog } from '../../shared/event-log'
 import { initialPaneStatus } from '../../shared/panes'
-import { createProject, type Pane, type Project } from '../../shared/project'
+import { createProject, type Pane, type StoredProject } from '../../shared/project'
 import { applyPatch, type RevisionedPatch } from '../../shared/state'
 import type { PaneListing } from '../../shared/routes'
 import { StateFeed } from '../state-feed'
@@ -84,11 +84,13 @@ function holdNextSave(): SaveGate {
   })
   const save = store.save.bind(store)
   const started = new Promise<void>((resolve) => {
-    vi.spyOn(store, 'save').mockImplementationOnce(async (project: Project): Promise<void> => {
-      resolve()
-      await held
-      await save(project)
-    })
+    vi.spyOn(store, 'save').mockImplementationOnce(
+      async (project: StoredProject): Promise<void> => {
+        resolve()
+        await held
+        await save(project)
+      }
+    )
   })
   return { started, release }
 }
@@ -112,7 +114,7 @@ describe('setting a pane’s emulation', () => {
       { type: 'pane.changed', pane: { ...tablet, colorScheme: 'dark' } }
     ])
 
-    const stored = await store.load(projects.snapshot().project!.repoPath)
+    const stored = await store.load(projects.snapshot().project!.repoPath!)
     expect(stored.status === 'loaded' && stored.project.panes.map((p) => p.colorScheme)).toEqual([
       mobile.colorScheme,
       'dark',

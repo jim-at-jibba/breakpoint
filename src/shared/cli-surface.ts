@@ -113,12 +113,13 @@ export const PATH_COMMAND: CliCommandSpec<'project.open'> = {
 /**
  * Navigation, as an agent reaches it: one URL, every pane. What was typed is sent as
  * typed — a bare port expands in the route, so the terminal and the address bar cannot
- * disagree about what `3000` means.
+ * disagree about what `3000` means. With nothing open it opens a project with no repo
+ * path pointed at the URL, rather than refusing ([ADR-0015]).
  */
 const NAVIGATE_COMMAND: CliCommandSpec<'project.navigate'> = {
   name: 'open',
   route: 'project.navigate',
-  summary: 'Point every pane at a URL, or at a port on this machine',
+  summary: 'Point every pane at a URL or a local port, opening a project if none is',
   argument: URL_ARGUMENT,
   waits: 'payload',
   // A missing argument is already a usage error by the time this runs; whitespace is
@@ -187,7 +188,11 @@ function renderSnapshot(data: unknown, verb: string): string {
   // "0 trusted, 0 waiting" is noise on every run that never met one.
   const certificates = describeCertificates(snapshot?.certificates)
   if (!project) {
-    return ['No project is open. Run `breakpoint .` in a repo.', ...certificates, cursor].join('\n')
+    return [
+      'No project is open. Run `breakpoint .` in a repo, or `breakpoint open <url>`.',
+      ...certificates,
+      cursor
+    ].join('\n')
   }
   const panes = project.panes.map((pane) => {
     const status = snapshot?.panes?.[pane.id]
@@ -202,7 +207,9 @@ function renderSnapshot(data: unknown, verb: string): string {
     return `${line}  degraded: ${degraded.map(describeDegradation).join('; ')}`
   })
   return [
-    `${verb} ${project.name} (${project.repoPath})`,
+    // A project with no repo path is lost on quit ([ADR-0015]), and that is worth saying
+    // to the one surface that cannot see the window.
+    `${verb} ${project.name} (${project.repoPath ?? 'no repo: not saved'})`,
     `  ${project.startUrl}`,
     `  ${describeLayout(project)}, zoom ${describeZoom(project.zoom)}`,
     'Panes:',

@@ -376,7 +376,9 @@ test('state with nothing open says so on both outputs', async () => {
     switcher: { open: false }
   })
   // The cursor is printed with nothing open: that is when the log matters most.
-  expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
+  expect(text.stdout).toBe(
+    'No project is open. Run `breakpoint .` in a repo, or `breakpoint open <url>`.\nCursor 0\n'
+  )
 })
 
 test('the renderer renders from a snapshot plus patches, and re-fetches on a desync', async () => {

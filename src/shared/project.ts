@@ -13,7 +13,8 @@ import {
 import { isWebUrl } from './urls'
 
 /**
- * A project: a repo path plus everything Breakpoint remembers about working on it. This
+ * A project: a repo path, when it has one, plus everything Breakpoint remembers about
+ * working on it. This
  * is the shape that is stored, the shape the route table returns, and the shape the
  * renderer projects — one type, so the three can never disagree about a field.
  *
@@ -54,8 +55,12 @@ export interface Session {
 
 export interface Project {
   name: string
-  /** Absolute and canonical. The project's identity ([CONTEXT.md]). */
-  repoPath: string
+  /**
+   * Absolute and canonical. The project's identity ([CONTEXT.md]). Null for a project
+   * opened by typing a URL, which has no identity: it is never stored and lasts as long
+   * as the window ([ADR-0015]).
+   */
+  repoPath: string | null
   /**
    * Where the project's panes are pointed: the URL it opens at, and the URL a navigation
    * leaves it on, so it reopens where it was left. Named for where a project starts
@@ -87,16 +92,33 @@ const DEFAULT_SESSION: Session = { id: 'default', name: 'Default' }
 export function createProject(
   repoPath: string,
   presets: readonly Preset[] = DEFAULT_PRESETS
+): StoredProject {
+  return { name: basename(repoPath), repoPath, ...projectAt(DEFAULT_START_URL, presets) }
+}
+
+/**
+ * A project opened by typing a URL rather than from a repo ([ADR-0015]). The same shape
+ * as any other, pointed where it was sent, and allowed that origin exactly as a repo
+ * project is allowed the one it starts on. Named for the host it was opened on, because
+ * there is nothing else to call it; the name is a label and never a way to find it.
+ *
+ * `url` must already be a web URL: the route expands and checks what was typed.
+ */
+export function createAdHocProject(
+  url: string,
+  presets: readonly Preset[] = DEFAULT_PRESETS
 ): Project {
+  return { name: new URL(url).host, repoPath: null, ...projectAt(url, presets) }
+}
+
+function projectAt(url: string, presets: readonly Preset[]): Omit<Project, 'name' | 'repoPath'> {
   const panes = DEFAULT_PANE_PRESETS.map((id) => {
     const preset = presetById(presets, id) ?? presetById(DEFAULT_PRESETS, id)!
     return { ...paneFromPreset(preset), id: newPaneId(), session: DEFAULT_SESSION.id }
   })
   return {
-    name: basename(repoPath),
-    repoPath,
-    startUrl: DEFAULT_START_URL,
-    allowedOrigins: [new URL(DEFAULT_START_URL).origin],
+    startUrl: url,
+    allowedOrigins: [new URL(url).origin],
     panes,
     layout: 'horizontal',
     zoom: 'fit',
@@ -124,7 +146,15 @@ export const PROJECT_FILE_VERSION = 3
 
 export interface ProjectFile {
   version: number
-  project: Project
+  project: StoredProject
+}
+
+/** What the store holds: only a project with a repo path is ever written ([ADR-0015]). */
+export type StoredProject = Project & { repoPath: string }
+
+/** Whether a project has an identity, and so a place in the store. */
+export function isStoredProject(project: Project): project is StoredProject {
+  return project.repoPath !== null
 }
 
 /** One step: takes a file at version `n` and returns it at `n + 1`. */
@@ -192,14 +222,14 @@ export const PROJECT_MIGRATIONS: ProjectMigrations = {
 export type RefusalReason = 'newer' | 'corrupt'
 
 export type ReadProjectResult =
-  { ok: true; project: Project } | { ok: false; reason: RefusalReason; message: string }
+  { ok: true; project: StoredProject } | { ok: false; reason: RefusalReason; message: string }
 
 interface ReadProjectOptions {
   version: number
   migrations: ProjectMigrations
 }
 
-export function writeProjectFile(project: Project): ProjectFile {
+export function writeProjectFile(project: StoredProject): ProjectFile {
   return { version: PROJECT_FILE_VERSION, project }
 }
 
@@ -302,8 +332,12 @@ function parsePane(value: unknown, sessionIds: ReadonlySet<string>): Pane | unde
   }
 }
 
-/** Every field checked, and only the known fields copied out, so the result is exactly a `Project`. */
-export function parseProject(value: unknown): Project | undefined {
+/**
+ * Every field checked, and only the known fields copied out, so the result is exactly a
+ * `Project`. A stored project always has a repo path — nothing without one is written —
+ * so a file that says null is not a project this store could have written.
+ */
+export function parseProject(value: unknown): StoredProject | undefined {
   const raw = asRecord(value)
   if (!raw) return undefined
   if (!isString(raw.name) || !isString(raw.repoPath) || !isWebUrl(raw.startUrl)) return undefined

@@ -5,11 +5,14 @@ import { clampZoom } from '../../shared/canvas'
 import { rotateSize } from '../../shared/panes'
 import { paneFromPreset, paneFromSize, presetById, type PaneDraft } from '../../shared/presets'
 import {
+  createAdHocProject,
   createProject,
+  isStoredProject,
   newPaneId,
   type Pane,
   type PaneChanges,
   type Project,
+  type StoredProject,
   type Zoom
 } from '../../shared/project'
 import type { ProjectListing } from '../../shared/project-listing'
@@ -132,7 +135,7 @@ export class ProjectService {
       })
     }
 
-    let project: Project
+    let project: StoredProject
     if (loaded.status === 'loaded') {
       project = loaded.project
     } else {
@@ -144,10 +147,15 @@ export class ProjectService {
       await this.store.save(project)
     }
 
+    this.adopt(project)
+    return this.snapshot()
+  }
+
+  /** Makes a project the open one, replacing whatever was, and tells every window. */
+  private adopt(project: Project): void {
     this.current = project
     this.panes.open(project)
     this.feed.publish({ type: 'project.opened', project })
-    return this.snapshot()
   }
 
   /**
@@ -204,6 +212,11 @@ export class ProjectService {
    * navigation from the CLI is automation acting on the developer's behalf and is held
    * to the project's allowed origins; navigation from the window is the developer, and
    * is never held to anything ([ADR-0013]).
+   *
+   * With nothing open it opens a project with no repo path, pointed at the URL, rather
+   * than refusing: that is how the window opened from the Dock and `breakpoint open
+   * <url>` both work cold, on the one route ([ADR-0015], [ADR-0005]). It is never matched
+   * onto a stored project — a port is a lease, not a name.
    */
   navigate(url: string, surface: Surface): Promise<Navigation> {
     return this.enqueue(() => this.pointPanes(url, surface))
@@ -305,7 +318,8 @@ export class ProjectService {
   }
 
   private async pointPanes(url: string, surface: Surface): Promise<Navigation> {
-    const project = this.requireOpen()
+    if (!this.current) return this.openAdHoc(url)
+    const project = this.current
     if (surface === 'cli' && !isOriginAllowed(url, project.allowedOrigins)) {
       this.log.append(null, { type: 'project.navigationRefused', url })
       throw new RouteError(
@@ -328,6 +342,19 @@ export class ProjectService {
     return { url, panes: project.panes.map((pane) => pane.id) }
   }
 
+  /**
+   * Its allowed origins are the URL's own, so the CLI is never refused the navigation
+   * that created the project. The panes are new and so already loading; opening them is
+   * what sends them, and there is no earlier URL for a `project.url` patch to move from.
+   */
+  private async openAdHoc(url: string): Promise<Navigation> {
+    const { presets } = await this.presets.list()
+    const project = createAdHocProject(url, presets)
+    this.adopt(project)
+    this.log.append(null, { type: 'project.navigated', url })
+    return { url, panes: project.panes.map((pane) => pane.id) }
+  }
+
   private async replaceAllowedOrigins(given: readonly string[]): Promise<{ origins: string[] }> {
     const project = this.requireOpen()
     const origins = normaliseOrigins(given)
@@ -347,9 +374,12 @@ export class ProjectService {
     return this.current
   }
 
-  /** Saved first: a change that could not be kept is not made. */
+  /**
+   * Saved first: a change that could not be kept is not made. A project with no repo
+   * path has nowhere to be kept and is changed in memory only ([ADR-0015]).
+   */
   private async save(project: Project): Promise<void> {
-    await this.store.save(project)
+    if (isStoredProject(project)) await this.store.save(project)
     this.current = project
     this.panes.open(project)
   }
