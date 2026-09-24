@@ -126,9 +126,10 @@ export interface RouteSignatures {
   'panes.remove': { params: { pane: string }; payload: { pane: Pane } }
   /**
    * The host-side geometry check's measurement of one pane ([ADR-0004]), in screen
-   * pixels: its declared size times the canvas zoom, and its element's own rendered box.
-   * The window is the surface that can measure, but the route is anyone's. A mismatch
-   * degrades the pane and writes an entry; nothing resizes the pane to match.
+   * pixels: its declared size times the canvas zoom, and the rendered box of the frame its
+   * guest is drawn into. The window is the surface that can measure, but the route is
+   * anyone's. A mismatch degrades the pane and writes an entry; nothing resizes the pane
+   * to match.
    */
   'panes.reportGeometry': { params: GeometryReport; payload: { status: PaneStatus } }
   /**

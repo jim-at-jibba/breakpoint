@@ -45,10 +45,10 @@ export function rotateSize({ width, height }: Size): Size {
 export const GEOMETRY_TOLERANCE_PX = 1
 
 /**
- * The host-side geometry check ([ADR-0004]): the pane element's own measured size
- * against its declared size times the canvas zoom, both in screen pixels. It never asks
- * emulation anything, which is what lets it catch a pane every CDP instrument would
- * call healthy.
+ * The host-side geometry check ([ADR-0004]): the measured size of the frame a pane's guest
+ * is drawn into, against its declared size times the canvas zoom, both in screen pixels.
+ * It never asks emulation anything, which is what lets it catch a pane every CDP
+ * instrument would call healthy.
  */
 export function compareGeometry(expected: Size, measured: Size): GeometryResult {
   const off =

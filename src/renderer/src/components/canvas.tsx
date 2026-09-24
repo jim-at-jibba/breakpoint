@@ -337,9 +337,15 @@ function PaneView({
 }
 
 /**
- * The host-side geometry check ([ADR-0004]), on every attach and resize: the element's
- * own rendered box against its declared size times the zoom it is drawn at. The main
- * process decides what the comparison means; nothing here corrects a pane that fails it.
+ * The host-side geometry check ([ADR-0004]), on every attach and resize: the rendered box
+ * of the frame the guest is drawn into, against its declared size times the zoom it is
+ * drawn at. The main process decides what the comparison means; nothing here corrects a
+ * pane that fails it.
+ *
+ * The frame and not the `<webview>` element, because Phase 0's collapse left the element
+ * at its declared size and shrank only the guest inside it (#42). Electron draws the guest
+ * into an `<iframe>` in the element's shadow root, laid out by the element's flex; that
+ * frame is what a click lands on, so it is what has to measure right.
  */
 function useGeometryCheck(
   webview: React.RefObject<HTMLWebViewElement | null>,
@@ -353,7 +359,10 @@ function useGeometryCheck(
     if (!element) return
 
     const check = (): void => {
-      const box = element.getBoundingClientRect()
+      // A frame that is not there is measured as nothing, so a change to how Electron
+      // builds the element shows as every pane degraded rather than as a check that
+      // quietly went back to measuring the element.
+      const box = guestFrame(element)?.getBoundingClientRect() ?? { width: 0, height: 0 }
       void window.breakpoint.invoke('panes.reportGeometry', {
         pane: id,
         expected: drawnSize({ width, height }, zoom),
@@ -361,16 +370,24 @@ function useGeometryCheck(
       })
     }
 
-    // A resize of the element fires the observer; a new guest fires `did-attach`, and
-    // the main process has forgotten the old guest's geometry by then.
+    // A resize of the element or of the frame inside it fires the observer — the frame
+    // alone changes when the element's own layout does — and a new guest fires
+    // `did-attach`, by when the main process has forgotten the old guest's geometry.
     const observer = new ResizeObserver(check)
     observer.observe(element)
+    const frame = guestFrame(element)
+    if (frame) observer.observe(frame)
     element.addEventListener('did-attach', check)
     return () => {
       observer.disconnect()
       element.removeEventListener('did-attach', check)
     }
   }, [webview, id, width, height, zoom])
+}
+
+/** Where Electron draws a `<webview>`'s guest: the frame in the element's shadow root. */
+function guestFrame(element: HTMLWebViewElement): HTMLIFrameElement | null {
+  return element.shadowRoot?.querySelector('iframe') ?? null
 }
 
 /** Screen pixels: what a pane declares, drawn at the zoom it is drawn at. */
