@@ -1,5 +1,4 @@
 import {
-  readAppTheme,
   readCanvasChrome,
   readPaneActionsWidth,
   readStripGap,
@@ -27,7 +26,8 @@ import {
   schemeGlyph,
   type PaneHeaderTier
 } from '../../../shared/pane-header'
-import { paneColorVar, type AppTheme } from '../../../shared/pane-palette'
+import { paneColorVar } from '../../../shared/pane-palette'
+import type { ThemeState } from '../../../shared/theme'
 import type { CapabilityState, PaneStatus, Size } from '../../../shared/panes'
 import { describeDegradation, isPaneDimension, paneWebPreferences } from '../../../shared/panes'
 import type { Pane, Project } from '../../../shared/project'
@@ -47,12 +47,19 @@ import type { Pane, Project } from '../../../shared/project'
 export function Canvas({
   project,
   statuses,
+  theme,
   zoomPreview,
   onZoom,
   onFocusPane
 }: {
   project: Project
   statuses: Readonly<Record<string, PaneStatus>>
+  /**
+   * The app's own appearance, from the snapshot. The header compares it with each pane's
+   * colour scheme to say when a pane is drawing the page in something other than the
+   * app's own; it never changes what a pane emulates ([CONTEXT.md]).
+   */
+  theme: ThemeState
   /** A slider value being manipulated, before it is committed to the project. */
   zoomPreview: number | null
   /** What the canvas settled on drawing at, so the toolbar cannot read a different number. */
@@ -67,10 +74,9 @@ export function Canvas({
       canvas: readCanvasChrome(root),
       stripGap: readStripGap(root),
       stripHeight: readStripHeight(root),
-      // What the header's own controls occupy, and the appearance its scheme glyph is
-      // read against. Both hold their screen size, so both are read once.
-      paneActions: readPaneActionsWidth(root),
-      theme: readAppTheme(root)
+      // What the header's own controls occupy. It holds its screen size, so it is read
+      // once; the appearance it is read against arrives as a prop and can change.
+      paneActions: readPaneActionsWidth(root)
     }
   })
   // Focus draws its pane at 100%, so Fit has nothing to say about that layout.
@@ -127,7 +133,7 @@ export function Canvas({
               url={project.startUrl}
               status={statuses[pane.id]}
               actionsWidth={chrome.paneActions}
-              theme={chrome.theme}
+              theme={theme}
               focused={focusedPane}
               strip={project.layout === 'focus' && !focusedPane}
               placement={focus?.panes.get(pane.id)}
@@ -245,7 +251,7 @@ function PaneView({
   status: PaneStatus | undefined
   /** Screen pixels the header's own controls occupy, measured off their tokens. */
   actionsWidth: number
-  theme: AppTheme
+  theme: ThemeState
   focused?: boolean
   strip?: boolean
   placement?: React.CSSProperties
@@ -405,7 +411,7 @@ function PaneHeader({
   width: number
   status: PaneStatus | undefined
   actionsWidth: number
-  theme: AppTheme
+  theme: ThemeState
 }): React.JSX.Element {
   const tier = paneHeaderTier(width)
   const silent = paneHeaderIsSilent(tier)
@@ -531,7 +537,7 @@ function PaneTab({
   pane: Pane
   index: number
   carriesScheme: boolean
-  theme: AppTheme
+  theme: ThemeState
 }): React.JSX.Element {
   const colour = paneColorVar(index)
   const split = carriesScheme && schemeDiffersFromApp(pane.colorScheme, theme)
@@ -545,7 +551,9 @@ function PaneTab({
       }}
       data-testid="pane-tab"
       data-split={split ? 'true' : undefined}
-      title={split ? `${pane.name}: ${pane.colorScheme}, where the app is ${theme}` : pane.name}
+      title={
+        split ? `${pane.name}: ${pane.colorScheme}, where the app is ${theme.active}` : pane.name
+      }
     />
   )
 }

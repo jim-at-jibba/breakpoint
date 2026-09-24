@@ -7,9 +7,9 @@ import {
   paneColor,
   paneColorIndex,
   paneColorToken,
-  paneColorVar,
-  type AppTheme
+  paneColorVar
 } from './pane-palette'
+import type { AppTheme } from './theme'
 
 describe('the pane palette', () => {
   test('is ten colours separated by hue alone', () => {

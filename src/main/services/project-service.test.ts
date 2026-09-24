@@ -49,10 +49,17 @@ beforeEach(async () => {
     removePane: (pane) => service.removePane(pane),
     rotatePane: (pane) => service.rotatePane(pane)
   })
-  // Certificate trust is not this service's; the snapshot simply carries it.
-  service = new ProjectService(store, feed, log, panes, presets, {
-    list: () => ({ trusted: [], waiting: [] })
-  })
+  // Neither certificate trust nor the app theme is this service's; the snapshot
+  // simply carries them.
+  service = new ProjectService(
+    store,
+    feed,
+    log,
+    panes,
+    presets,
+    { list: () => ({ trusted: [], waiting: [] }) },
+    { theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }) }
+  )
 })
 
 afterEach(async () => {
@@ -138,7 +145,8 @@ describe('async project opens', () => {
       cursor: 0,
       project: null,
       panes: {},
-      certificates: { trusted: [], waiting: [] }
+      certificates: { trusted: [], waiting: [] },
+      theme: { preference: 'system', system: 'dark', active: 'dark' }
     })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
@@ -167,7 +175,8 @@ describe('async project opens', () => {
       cursor: 1,
       project: before.project,
       panes: before.panes,
-      certificates: before.certificates
+      certificates: before.certificates,
+      theme: before.theme
     })
     expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, shop])
   })

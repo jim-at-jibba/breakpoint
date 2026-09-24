@@ -1,5 +1,4 @@
 import type { CanvasChrome } from '../../../shared/canvas'
-import type { AppTheme } from '../../../shared/pane-palette'
 
 /**
  * What the canvas spends on chrome, read off the tokens on the element itself rather
@@ -40,13 +39,4 @@ export function readPaneActionsWidth(element: Element): number {
   const style = getComputedStyle(element)
   const px = (token: string): number => Number.parseFloat(style.getPropertyValue(token)) || 0
   return px('--bp-pane-tab-h') * 2 + px('--bp-space-1') + px('--bp-space-2')
-}
-
-/**
- * Breakpoint's own appearance, read off the root rather than assumed. A pane's colour
- * scheme is never this, and never follows it ([CONTEXT.md]); the header compares the two
- * only to say when a pane is showing the page in something other than the app's own.
- */
-export function readAppTheme(element: Element): AppTheme {
-  return getComputedStyle(element).colorScheme.includes('light') ? 'light' : 'dark'
 }

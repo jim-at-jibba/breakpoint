@@ -1,6 +1,7 @@
 import type { CertificateState } from './certificates'
 import { reconcilePaneStatuses, whyPaneIsNotReady, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
+import type { ThemeState } from './theme'
 
 /**
  * What the renderer renders from: a snapshot, kept current by patches.
@@ -36,6 +37,13 @@ export interface StateSnapshot {
    * than inside it, and it survives a project closing.
    */
   certificates: CertificateState
+  /**
+   * The app theme: the developer's preference and what it resolves to right now. Here
+   * rather than on a separate channel, so the chrome is drawn from the same snapshot as
+   * everything else and a window never has two sources to reconcile. Nothing to do with
+   * any pane's colour scheme, which is emulation and lives on the pane ([CONTEXT.md]).
+   */
+  theme: ThemeState
 }
 
 export type StatePatch =
@@ -64,6 +72,12 @@ export type StatePatch =
    * the moment where it was in neither.
    */
   | { type: 'certificates.changed'; certificates: CertificateState }
+  /**
+   * The app theme after a change, whether the developer chose it or the OS moved under a
+   * preference of `system`. Carries the preference too: the control draws "System" and
+   * "Dark" differently even on a desktop where they resolve to the same chrome.
+   */
+  | { type: 'app.theme'; theme: ThemeState }
 
 export interface RevisionedPatch {
   revision: number
@@ -140,6 +154,10 @@ export function applyPatch(
     // anything is open.
     case 'certificates.changed':
       return { ...before, revision, certificates: patch.certificates }
+    // The app's chrome, so this one lands whether or not anything is open, and never
+    // touches a pane.
+    case 'app.theme':
+      return { ...before, revision, theme: patch.theme }
   }
 }
 

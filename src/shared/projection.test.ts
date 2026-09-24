@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { createProject } from './project'
 import { startProjection, receiveBatch, receiveSnapshot, type Projection } from './projection'
 import { paneStatusesFor, type RevisionedPatch, type StateSnapshot } from './state'
+import type { ThemeState } from './theme'
+/** The app theme every snapshot carries. Nothing in this file turns on its value. */
+const DARK: ThemeState = { preference: 'system', system: 'dark', active: 'dark' }
 
 const shop = createProject('/repos/shop')
 const store = createProject('/repos/store')
@@ -20,7 +23,8 @@ function snap(revision: number, project: StateSnapshot['project'], cursor = 12):
     cursor,
     project,
     panes: project ? paneStatusesFor(project, {}) : {},
-    certificates: { trusted: [], waiting: [] }
+    certificates: { trusted: [], waiting: [] },
+    theme: DARK
   }
 }
 

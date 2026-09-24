@@ -34,7 +34,9 @@ export const WIRE_ERROR_CODES = [
   /** The stored certificate decisions are on disk but this build will not read them. */
   'CERTIFICATES_UNREADABLE',
   /** No certificate is waiting on that host and fingerprint, and none is stored for it. */
-  'CERTIFICATE_NOT_FOUND'
+  'CERTIFICATE_NOT_FOUND',
+  /** The app's settings file is on disk but this build will not read it: corrupt, or newer. */
+  'SETTINGS_UNREADABLE'
 ] as const
 
 /** Codes a surface raises on its own side, before or instead of a route call. */

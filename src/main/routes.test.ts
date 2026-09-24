@@ -249,3 +249,54 @@ describe('the certificate routes', () => {
     expect(refused.response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
   })
 })
+
+describe('app.setTheme', () => {
+  interface ThemeDispatcher {
+    dispatch: Dispatch
+    setTheme: ReturnType<typeof vi.fn>
+  }
+
+  function themeDispatcher(): ThemeDispatcher {
+    const setTheme = vi
+      .fn()
+      .mockResolvedValue({ preference: 'light', system: 'dark', active: 'light' })
+    return {
+      dispatch: createDispatch(createRouteTable({ app: { setTheme } } as unknown as Services)),
+      setTheme
+    }
+  }
+
+  it.each(['system', 'light', 'dark'])('hands %j to the service', async (preference) => {
+    const { dispatch, setTheme } = themeDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setTheme', params: { preference } },
+      { surface: 'cli' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(setTheme).toHaveBeenCalledWith(preference)
+  })
+
+  // A pane's colour scheme spells two of its values the same way; nothing else does, and
+  // a field the route does not take would be a theme that changes nothing.
+  it.each([
+    undefined,
+    {},
+    { preference: 'auto' },
+    { preference: 'Light' },
+    { preference: true },
+    { preference: 'light', pane: 'mobile' },
+    { colorScheme: 'light' }
+  ])('refuses %j without reaching the service', async (params) => {
+    const { dispatch, setTheme } = themeDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setTheme', params },
+      { surface: 'window' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(setTheme).not.toHaveBeenCalled()
+  })
+})
