@@ -358,11 +358,22 @@ function useGeometryCheck(
     const element = webview.current
     if (!element) return
 
+    const observer = new ResizeObserver(() => check())
+    let observed: HTMLIFrameElement | null = null
+
     const check = (): void => {
+      const frame = guestFrame(element)
+      // The frame is looked up on every check and watched once found, because Electron
+      // builds a new one when it resets the element, and the old one never resizes again.
+      if (frame !== observed) {
+        if (observed) observer.unobserve(observed)
+        if (frame) observer.observe(frame)
+        observed = frame
+      }
       // A frame that is not there is measured as nothing, so a change to how Electron
       // builds the element shows as every pane degraded rather than as a check that
       // quietly went back to measuring the element.
-      const box = guestFrame(element)?.getBoundingClientRect() ?? { width: 0, height: 0 }
+      const box = frame?.getBoundingClientRect() ?? { width: 0, height: 0 }
       void window.breakpoint.invoke('panes.reportGeometry', {
         pane: id,
         expected: drawnSize({ width, height }, zoom),
@@ -373,10 +384,7 @@ function useGeometryCheck(
     // A resize of the element or of the frame inside it fires the observer — the frame
     // alone changes when the element's own layout does — and a new guest fires
     // `did-attach`, by when the main process has forgotten the old guest's geometry.
-    const observer = new ResizeObserver(check)
     observer.observe(element)
-    const frame = guestFrame(element)
-    if (frame) observer.observe(frame)
     element.addEventListener('did-attach', check)
     return () => {
       observer.disconnect()

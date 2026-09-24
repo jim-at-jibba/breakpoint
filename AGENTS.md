@@ -14,9 +14,9 @@ The five canonical triage roles, using their default label strings. See `docs/ag
 
 Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
-## Docs site
+## Docs
 
-**`sites/web/` is the docs site, and it may not fall behind the CLI.** Its reference,
+**`sites/web/` is the Site, and its Docs may not fall behind the CLI.** Its reference,
 `sites/web/src/content/docs/docs/cli.md`, documents every command, flag, exit code, error
 code and route that the code declares in `src/shared/cli-surface.ts`,
 `src/shared/protocol.ts` and `src/shared/routes.ts`. It documents nothing those files do
@@ -25,8 +25,8 @@ not declare.
 `src/shared/cli-reference.test.ts` enforces this in the unit run, in both directions.
 It also parses every fenced `breakpoint …` example on every page under
 `sites/web/src/content/docs/` with the CLI's own parser. If you add or drop any of these,
-update the reference in the same change. An example of a command that has not shipped yet
-does not belong on the site.
+update the reference in the same change. The check has no way to mark an example as not
+yet available, so a command that has not shipped yet stays off the Docs until it ships.
 
 ## Design
 

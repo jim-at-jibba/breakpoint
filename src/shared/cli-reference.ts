@@ -4,7 +4,7 @@ import { ERROR_CODES } from './protocol'
 import { ROUTE_NAMES } from './routes'
 
 /**
- * The docs site's CLI reference, checked against what the code declares (#21). The check
+ * The Docs' CLI reference, checked against what the code declares (#21). The check
  * runs both ways: a command the CLI accepts and the reference leaves out fails, and so
  * does a flag the reference describes and the CLI has dropped — a page that describes a
  * flag which no longer exists is worse than one that is merely incomplete.
@@ -103,18 +103,20 @@ function splitSections(markdown: string): Map<string, string> {
   return sections
 }
 
+/** Each line, and whether it is inside a fence. A fence's own ``` lines are neither. */
+function fencing(markdown: string): { line: string; fenced: boolean | undefined }[] {
+  let open = false
+  return markdown.split('\n').map((line) => {
+    if (!/^\s*```/.test(line)) return { line, fenced: open }
+    open = !open
+    return { line, fenced: undefined }
+  })
+}
+
 /** Blank lines where the fences were, so a `## ` or a `|` inside an example is not read. */
 function withoutFences(markdown: string): string {
-  let fenced = false
-  return markdown
-    .split('\n')
-    .map((line) => {
-      if (/^\s*```/.test(line)) {
-        fenced = !fenced
-        return ''
-      }
-      return fenced ? '' : line
-    })
+  return fencing(markdown)
+    .map(({ line, fenced }) => (fenced === false ? line : ''))
     .join('\n')
 }
 
@@ -149,11 +151,11 @@ function tableRows(section: string): string[][] {
         .map((cell) => cell.trim())
     )
   // A header row is always followed by its `| --- |` separator.
-  return rows.filter((cells, index) => {
-    const isSeparator = (row: string[] | undefined): boolean =>
-      row !== undefined && row.every((cell) => /^:?-+:?$/.test(cell))
-    return !isSeparator(cells) && !isSeparator(rows[index + 1])
-  })
+  return rows.filter((cells, index) => !isSeparator(cells) && !isSeparator(rows[index + 1]))
+}
+
+function isSeparator(row: string[] | undefined): boolean {
+  return row !== undefined && row.every((cell) => /^:?-+:?$/.test(cell))
 }
 
 function readFirstColumn(section: string): string[] {
@@ -172,12 +174,7 @@ function readFlagTable(section: string): string[] {
  */
 export function brokenExamples(markdown: string): string[] {
   const findings: string[] = []
-  let fenced = false
-  markdown.split('\n').forEach((line, index) => {
-    if (/^\s*```/.test(line)) {
-      fenced = !fenced
-      return
-    }
+  fencing(markdown).forEach(({ line, fenced }, index) => {
     if (!fenced) return
     const command = line.split(/\s#|\|/, 1)[0].trim()
     const [program, ...argv] = command.split(/\s+/)

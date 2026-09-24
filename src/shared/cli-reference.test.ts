@@ -18,7 +18,7 @@ const SMALL: DeclaredSurface = {
   routes: ['app.quit', 'project.open']
 }
 
-/** The reference for `SMALL`, in the shape the docs site writes it. */
+/** The reference for `SMALL`, in the shape the Docs write it. */
 const REFERENCE = `
 ## Commands
 
@@ -138,7 +138,7 @@ describe('the fenced examples', () => {
 const DOCS = fileURLToPath(new URL('../../sites/web/src/content/docs/', import.meta.url))
 const CLI_REFERENCE = join(DOCS, 'docs/cli.md')
 
-describe("the docs site's CLI reference", () => {
+describe("the Docs' CLI reference", () => {
   const reference = readFileSync(CLI_REFERENCE, 'utf8')
 
   it('documents exactly what the code declares', () => {
@@ -165,7 +165,7 @@ describe("the docs site's CLI reference", () => {
   })
 })
 
-/** Every page of the docs site, not only the reference (#29). */
+/** Every page of the Docs, not only the reference (#29). */
 function docsPages(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
@@ -174,7 +174,7 @@ function docsPages(directory: string): string[] {
   })
 }
 
-describe("the docs site's examples", () => {
+describe("the Docs' examples", () => {
   const pages = docsPages(DOCS)
 
   it('are read from every page, the reference and the quickstart among them', () => {
