@@ -14,19 +14,48 @@ interface Dispatcher {
   dispatch: Dispatch
   navigate: ReturnType<typeof vi.fn<Navigate>>
   setAllowedOrigins: ReturnType<typeof vi.fn>
+  list: ReturnType<typeof vi.fn>
 }
 
 /** The table over a project service that records what reached it and nothing more. */
 function dispatcher(): Dispatcher {
   const navigate = vi.fn<Navigate>().mockResolvedValue({ url: 'http://localhost:3000/', panes: [] })
   const setAllowedOrigins = vi.fn().mockResolvedValue({ origins: [] })
-  const project = { navigate, setAllowedOrigins }
+  const list = vi.fn().mockResolvedValue({ projects: [] })
+  const project = { navigate, setAllowedOrigins, list }
   return {
     dispatch: createDispatch(createRouteTable({ project } as unknown as Services)),
     navigate,
-    setAllowedOrigins
+    setAllowedOrigins,
+    list
   }
 }
+
+describe('project.list', () => {
+  it('takes no params and answers with what the store holds', async () => {
+    const { dispatch, list } = dispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'project.list', params: undefined },
+      { surface: 'window' }
+    )
+
+    expect(list).toHaveBeenCalledWith()
+    expect(response).toMatchObject({ ok: true, data: { projects: [] } })
+  })
+
+  it('refuses params rather than ignoring them', async () => {
+    const { dispatch, list } = dispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'project.list', params: { name: 'shop' } },
+      { surface: 'window' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(list).not.toHaveBeenCalled()
+  })
+})
 
 describe('project.navigate', () => {
   it('expands what was typed before the service sees it', async () => {

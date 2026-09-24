@@ -12,6 +12,7 @@ import {
   type Project,
   type Zoom
 } from '../../shared/project'
+import type { ProjectListing } from '../../shared/project-listing'
 import type { LayoutSetting, LayoutState, Navigation, Surface } from '../../shared/routes'
 import { isOriginAllowed, normaliseOrigins, sameOrigins } from '../../shared/urls'
 import type { StateSnapshot } from '../../shared/state'
@@ -72,6 +73,19 @@ export class ProjectService {
    */
   open(path: string): Promise<StateSnapshot> {
     return this.enqueue(() => this.openNext(path))
+  }
+
+  /**
+   * Every project the store holds, which is what the switcher lists. Read from the
+   * directory per call rather than held, for the same reason the presets file is: a
+   * project another window created is one this run has never opened, and the directory
+   * is the list.
+   *
+   * Not queued. It reads disk and not the open project, so it neither disturbs an open
+   * in flight nor has to wait behind one.
+   */
+  async list(): Promise<{ projects: ProjectListing[] }> {
+    return { projects: await this.store.list() }
   }
 
   /**

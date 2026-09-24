@@ -15,6 +15,7 @@ import type { LogRead, ReadParams } from './event-log'
 import type { PaneStatus, Size } from './panes'
 import type { Preset } from './presets'
 import type { Layout, Pane, Zoom } from './project'
+import type { ProjectListing } from './project-listing'
 import type { StateSnapshot } from './state'
 import type { ThemePreference, ThemeState } from './theme'
 
@@ -37,6 +38,7 @@ export const ROUTE_NAMES = [
   'panes.rotate',
   'panes.setEmulation',
   'presets.list',
+  'project.list',
   'project.navigate',
   'project.open',
   'project.setAllowedOrigins',
@@ -138,6 +140,13 @@ export interface RouteSignatures {
    * the developer edited in another window is the one the next pane is created from.
    */
   'presets.list': { params: undefined; payload: { presets: Preset[] } }
+  /**
+   * Every project Breakpoint has stored, which is what the switcher lists. Derived from
+   * the project directory per call rather than from an index, so it cannot fall out of
+   * step with what is on disk, and a project whose file refuses to load is listed as
+   * unopenable with the reason rather than dropped from the list.
+   */
+  'project.list': { params: undefined; payload: { projects: ProjectListing[] } }
   /**
    * Points every pane of the open project at one URL. `url` is what was typed: a bare
    * port expands to this machine's dev server, so `3000` is a navigation. Navigating to
