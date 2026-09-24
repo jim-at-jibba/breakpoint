@@ -2,6 +2,7 @@ import { Button } from '@renderer/components/ui/button'
 import {
   CommandDialog,
   CommandEmpty,
+  CommandFooter,
   CommandInput,
   CommandItem,
   CommandList
@@ -126,8 +127,9 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
       >
         {/* A message is about the entry that was chosen, so typing past it clears it. */}
         <CommandInput
-          placeholder="Switch project…"
+          placeholder="Search projects…"
           data-testid="project-search"
+          hint={SHORTCUT}
           onValueChange={() => setMessage(null)}
         />
         <CommandList data-testid="project-list">
@@ -143,15 +145,22 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
             />
           ))}
         </CommandList>
+        {/* A band of its own above the footer, so a long refusal wraps inside the
+            surface instead of stretching it. */}
         {message !== null && (
           <span
             role="alert"
             data-testid="project-switcher-message"
-            className="px-[var(--bp-space-3)] pb-[var(--bp-space-2)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
+            className="flex-none border-t border-[color:var(--bp-border)] px-[var(--bp-space-4)] py-[var(--bp-space-3)] text-[length:var(--bp-text-base)] text-[color:var(--bp-error)]"
           >
             {message}
           </span>
         )}
+        <CommandFooter>
+          <span>↵ open</span>
+          <span>↑↓ navigate</span>
+          <span className="ml-auto">esc close</span>
+        </CommandFooter>
       </CommandDialog>
     </>
   )

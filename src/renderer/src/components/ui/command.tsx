@@ -9,11 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@renderer/components/ui/dialog"
-import {
-  InputGroup,
-  InputGroupAddon,
-} from "@renderer/components/ui/input-group"
-import { SearchIcon, CheckIcon } from "lucide-react"
+import { SearchIcon } from "lucide-react"
 
 function Command({
   className,
@@ -23,7 +19,9 @@ function Command({
     <CommandPrimitive
       data-slot="command"
       className={cn(
-        "flex size-full flex-col overflow-hidden rounded-[var(--bp-radius-lg)]! bg-popover p-[var(--bp-space-2)] text-popover-foreground",
+        // No padding: the search row, the rows and the footer are flush bands that run
+        // the full width of the surface, divided by rules rather than by gaps.
+        "flex size-full flex-col overflow-hidden rounded-[var(--bp-radius-lg)]! bg-popover text-popover-foreground",
         className
       )}
       {...props}
@@ -66,25 +64,39 @@ function CommandDialog({
   )
 }
 
+/**
+ * The search row, which is a header rather than a field: a flush band the width of the
+ * surface, ruled off from the list below it. There is nothing else on this surface to
+ * take focus, so a well drawn around the input would only be a box inside a box — the
+ * row is the field, and `index.css` keeps the focus ring off the control.
+ *
+ * `hint` is the shortcut that opened it, sat at the trailing edge in mono, where the
+ * prototype puts it.
+ */
 function CommandInput({
   className,
+  hint,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & { hint?: React.ReactNode }) {
   return (
-    <div data-slot="command-input-wrapper" className="p-[var(--bp-space-2)] pb-0">
-      <InputGroup className="h-[var(--bp-row-lg)]! rounded-[var(--bp-radius-sm)]! border-input/30 bg-input/30 shadow-none! *:data-[slot=input-group-addon]:pl-[var(--bp-space-2)]!">
-        <CommandPrimitive.Input
-          data-slot="command-input"
-          className={cn(
-            "w-full text-[length:var(--bp-text-xl)] outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
-            className
-          )}
-          {...props}
-        />
-        <InputGroupAddon>
-          <SearchIcon className="size-4 shrink-0 opacity-50" />
-        </InputGroupAddon>
-      </InputGroup>
+    <div
+      data-slot="command-input-wrapper"
+      className="flex h-[var(--bp-switcher-search-h)] flex-none items-center gap-[var(--bp-space-3)] border-b border-[color:var(--bp-border)] px-[var(--bp-space-4)]"
+    >
+      <SearchIcon className="size-4 shrink-0 text-[color:var(--bp-ink-faint)]" />
+      <CommandPrimitive.Input
+        data-slot="command-input"
+        className={cn(
+          "min-w-0 flex-1 bg-transparent text-[length:var(--bp-text-xl)] text-[color:var(--bp-ink)] outline-hidden placeholder:text-[color:var(--bp-ink-faint)] disabled:cursor-not-allowed disabled:opacity-50",
+          className
+        )}
+        {...props}
+      />
+      {hint !== undefined && (
+        <span className="flex-none font-[family-name:var(--bp-font-mono)] text-[length:var(--bp-text-micro)] text-[color:var(--bp-ink-faint)]">
+          {hint}
+        </span>
+      )}
     </div>
   )
 }
@@ -97,7 +109,7 @@ function CommandList({
     <CommandPrimitive.List
       data-slot="command-list"
       className={cn(
-        "no-scrollbar max-h-[var(--bp-switcher-list-h)] scroll-py-1 overflow-x-hidden overflow-y-auto outline-none",
+        "no-scrollbar max-h-[var(--bp-switcher-list-h)] scroll-py-[var(--bp-space-2)] overflow-x-hidden overflow-y-auto py-[var(--bp-space-2)] outline-none",
         className
       )}
       {...props}
@@ -112,7 +124,10 @@ function CommandEmpty({
   return (
     <CommandPrimitive.Empty
       data-slot="command-empty"
-      className={cn("py-[var(--bp-space-6)] text-center text-[length:var(--bp-text-base)] text-[color:var(--bp-ink-faint)]", className)}
+      className={cn(
+        "py-[var(--bp-space-6)] text-center text-[length:var(--bp-text-lg)] text-[color:var(--bp-ink-faint)]",
+        className
+      )}
       {...props}
     />
   )
@@ -147,6 +162,12 @@ function CommandSeparator({
   )
 }
 
+/**
+ * One row. Flush and square rather than an inset pill: a row is the full width of the
+ * surface, and its selection is read by running edge to edge, the way the prototype
+ * draws it. Selection is `--bp-selected`, the accent wash, so the row that Enter opens
+ * is distinguishable from the row merely under the pointer.
+ */
 function CommandItem({
   className,
   children,
@@ -156,14 +177,30 @@ function CommandItem({
     <CommandPrimitive.Item
       data-slot="command-item"
       className={cn(
-        "group/command-item relative flex h-[var(--bp-row-md)] cursor-default items-center gap-[var(--bp-space-3)] rounded-[var(--bp-radius-sm)] px-[var(--bp-space-2)] text-[length:var(--bp-text-lg)] outline-hidden select-none in-data-[slot=dialog-content]:rounded-[var(--bp-radius-sm)]! data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-muted data-selected:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-selected:*:[svg]:text-foreground",
+        "group/command-item relative flex h-[var(--bp-switcher-row-h)] cursor-default items-center gap-[var(--bp-space-3)] px-[var(--bp-space-4)] text-[length:var(--bp-text-lg)] text-[color:var(--bp-ink)] outline-hidden select-none data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50 data-selected:bg-[color:var(--bp-selected)] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
     >
       {children}
-      <CheckIcon className="ml-auto opacity-0 group-has-data-[slot=command-shortcut]/command-item:hidden group-data-[checked=true]/command-item:opacity-100" />
     </CommandPrimitive.Item>
+  )
+}
+
+/**
+ * The strip along the bottom that says what the keys do. Sunken, so it reads as chrome
+ * belonging to the surface rather than as another row that could be chosen.
+ */
+function CommandFooter({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="command-footer"
+      className={cn(
+        "flex h-[var(--bp-row-md)] flex-none items-center gap-[var(--bp-space-5)] border-t border-[color:var(--bp-border)] bg-[color:var(--bp-chrome-sunken)] px-[var(--bp-space-4)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]",
+        className
+      )}
+      {...props}
+    />
   )
 }
 
@@ -189,6 +226,7 @@ export {
   CommandInput,
   CommandList,
   CommandEmpty,
+  CommandFooter,
   CommandGroup,
   CommandItem,
   CommandShortcut,
