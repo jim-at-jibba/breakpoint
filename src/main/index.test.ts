@@ -48,12 +48,19 @@ const mocks = vi.hoisted(() => ({
   },
   dispatch: vi.fn<Dispatch>(),
   closeSocket: vi.fn(),
-  startSocket: vi.fn()
+  startSocket: vi.fn(),
+  /** The application menu, which is where the app's one keyboard shortcut is bound. */
+  setApplicationMenu: vi.fn(),
+  buildFromTemplate: vi.fn((template: unknown) => ({ template }))
 }))
 
 vi.mock('electron', () => ({
   app: mocks.app,
   shell: {},
+  Menu: {
+    buildFromTemplate: mocks.buildFromTemplate,
+    setApplicationMenu: mocks.setApplicationMenu
+  },
   nativeTheme: mocks.nativeTheme,
   BrowserWindow: class {
     on = mocks.window.on

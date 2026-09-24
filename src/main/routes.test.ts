@@ -300,3 +300,52 @@ describe('app.setTheme', () => {
     expect(setTheme).not.toHaveBeenCalled()
   })
 })
+
+describe('app.setSwitcher', () => {
+  interface SwitcherDispatcher {
+    dispatch: Dispatch
+    setSwitcher: ReturnType<typeof vi.fn>
+  }
+
+  function switcherDispatcher(): SwitcherDispatcher {
+    const setSwitcher = vi.fn().mockReturnValue({ open: true })
+    return {
+      dispatch: createDispatch(createRouteTable({ app: { setSwitcher } } as unknown as Services)),
+      setSwitcher
+    }
+  }
+
+  it.each([true, false])('hands %j to the service', async (open) => {
+    const { dispatch, setSwitcher } = switcherDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setSwitcher', params: { open } },
+      { surface: 'window' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(setSwitcher).toHaveBeenCalledWith(open)
+  })
+
+  // The menu accelerator causes this route, so a params mistake here is a dead shortcut
+  // rather than a visible error: it is refused rather than read generously.
+  it.each([
+    undefined,
+    {},
+    { open: 'true' },
+    { open: 1 },
+    { open: null },
+    { open: true, project: '/repos/shop' },
+    { showing: true }
+  ])('refuses %j without reaching the service', async (params) => {
+    const { dispatch, setSwitcher } = switcherDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setSwitcher', params },
+      { surface: 'window' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(setSwitcher).not.toHaveBeenCalled()
+  })
+})

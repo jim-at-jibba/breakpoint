@@ -115,7 +115,7 @@ export default function App(): React.JSX.Element {
       >
         {/* The switcher is mounted whether or not a project is open: with nothing open it
             is the way in, and it names the open project when there is one. */}
-        <ProjectSwitcher project={project} />
+        <ProjectSwitcher project={project} open={snapshot.switcher.open} />
         {project ? (
           <AddressBar
             key={project.repoPath}

@@ -370,7 +370,10 @@ test('state with nothing open says so on both outputs', async () => {
       preference: 'system',
       system: expect.stringMatching(/^(light|dark)$/),
       active: expect.stringMatching(/^(light|dark)$/)
-    }
+    },
+    // The switcher is the app's too, and with nothing open it is the way in. Closed:
+    // a window comes up over the canvas rather than over a question ([ADR-0016]).
+    switcher: { open: false }
   })
   // The cursor is printed with nothing open: that is when the log matters most.
   expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
@@ -470,11 +473,48 @@ test('a native macOS open-file request opens the repo and recreates a closed win
  * table it does.
  */
 
+/** The menu item the chord is bound to, as `src/main/app-menu.ts` declares it. */
+const SWITCH_PROJECT_ITEM = 'switch-project'
+
+/**
+ * Presses the switcher's chord, as far as a test is able to.
+ *
+ * The chord is an application menu accelerator (#38), because a pane is an
+ * out-of-process `<webview>` and a renderer `keydown` listener is deaf whenever one has
+ * focus. A native menu answers a key before any `webContents` sees it — and before any
+ * key a test can synthesise, too: neither Playwright's `page.keyboard.press`, which
+ * dispatches over CDP, nor `webContents.sendInputEvent` reaches an accelerator, though
+ * both reach a `before-input-event` listener. Both were probed against this app.
+ *
+ * So choosing the item is the whole of the binding a test can exercise, and the chord
+ * bound to it is asserted as data instead, below. What that leaves untested is the
+ * window server's delivery of a real keystroke to the menu, which is macOS's to get
+ * right rather than ours.
+ */
+async function pressSwitcherChord(): Promise<void> {
+  if (!launched) throw new Error('no app has been launched')
+  await launched.app.evaluate(({ Menu }, id) => {
+    const item = Menu.getApplicationMenu()?.getMenuItemById(id)
+    if (!item) throw new Error(`the application menu has no ${id} item`)
+    item.click()
+  }, SWITCH_PROJECT_ITEM)
+}
+
 /** Opens the switcher on its shortcut and waits for the list to have been read. */
 async function openSwitcher(page: Page): Promise<void> {
-  await page.keyboard.press('ControlOrMeta+p')
+  await pressSwitcherChord()
   await expect(page.getByTestId('project-list')).toBeVisible()
   await expect(page.getByTestId('project-option').first()).toBeVisible()
+}
+
+/**
+ * Closes it, and waits until it has gone. Whether the switcher is showing is snapshot
+ * state now ([ADR-0016]), so Escape is a route and a round trip rather than a local
+ * `setState`: a test that opened it again immediately could win the race.
+ */
+async function closeSwitcher(page: Page): Promise<void> {
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('project-list')).toHaveCount(0)
 }
 
 /** What the switcher lists, in the order it lists it: each entry's repo path or file. */
@@ -509,6 +549,86 @@ test('the switcher opens on its shortcut and lists every stored project', async 
 
   expect(await listedProjects(page)).toEqual([admin, shop])
   await expect(page.getByTestId('project-switcher-message')).toHaveCount(0)
+})
+
+/**
+ * #38: the shortcut used to be `window.addEventListener('keydown')` in the renderer, so
+ * it answered only while the app's own chrome had focus — the exceptional case, because
+ * clicking into a page is what the app is for. Every pane is an out-of-process
+ * `<webview>` and swallows the keys it has focus for.
+ *
+ * The binding is an application menu accelerator now, and what makes that a fix is that
+ * it is reached without the renderer: whichever `webContents` has focus, the item is
+ * enabled and choosing it opens the switcher. `pressSwitcherChord` says what a test can
+ * and cannot press.
+ */
+test('the shortcut opens the switcher with a pane focused, not only with the chrome focused', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const admin = makeRepo('admin')
+  await openProject(shop)
+  await openProject(admin)
+  await expect(page.locator('webview[data-pane]').first()).toBeVisible()
+
+  // Focus moves into a pane, which is where it is in every real minute of use.
+  await page.locator('webview[data-pane]').first().click()
+  await expect.poll(() => page.evaluate(() => document.activeElement?.tagName)).toBe('WEBVIEW')
+
+  await pressSwitcherChord()
+
+  await expect(page.getByTestId('project-list')).toBeVisible()
+  expect(await listedProjects(page)).toEqual([admin, shop])
+  // Escape still closes it, and the toolbar button still opens it, with focus where the
+  // pane left it rather than where the chrome wants it.
+  await closeSwitcher(page)
+  await page.getByTestId('project-switcher').click()
+  await expect(page.getByTestId('project-list')).toBeVisible()
+})
+
+/**
+ * What the chord is, asserted as data because no synthesised key can reach a native menu
+ * accelerator. One modifier per platform and never both: Control-P is emacs' "previous
+ * line" in every text field on macOS.
+ */
+test('the menu binds one chord to the switcher, and takes nothing the panes need', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  await openProject(makeRepo('shop'))
+  await expect(page.locator('webview[data-pane]').first()).toBeVisible()
+
+  const menu = await launched.app.evaluate(({ Menu }) => {
+    const collect = (
+      items: Electron.MenuItem[]
+    ): { label: string; role?: string; accelerator: string | null; enabled: boolean }[] =>
+      items.flatMap((item) => [
+        {
+          label: item.label,
+          role: item.role,
+          accelerator: item.accelerator,
+          enabled: item.enabled
+        },
+        ...(item.submenu ? collect(item.submenu.items) : [])
+      ])
+    const application = Menu.getApplicationMenu()
+    const switcher = application?.getMenuItemById('switch-project')
+    return {
+      items: application ? collect(application.items) : [],
+      switcher: switcher && { accelerator: switcher.accelerator, enabled: switcher.enabled }
+    }
+  })
+
+  expect(menu.switcher).toEqual({ accelerator: 'CommandOrControl+P', enabled: true })
+  expect(menu.items.filter((item) => item.accelerator === 'CommandOrControl+P')).toHaveLength(1)
+  // ⌘P is the switcher's, and nothing in a dev browser prints.
+  expect(menu.items.map((item) => item.role)).not.toContain('print')
+  // Nor does anything reload the host window: that throws away the app's own renderer
+  // rather than reloading a page.
+  expect(menu.items.map((item) => item.role)).not.toContain('reload')
+  // Editing is there, and as roles, so ⌘C and ⌘V are delivered to whichever webContents
+  // has focus — a pane included — rather than claimed by the menu.
+  expect(menu.items.map((item) => item.role)).toContain('copy')
+  expect(menu.items.map((item) => item.role)).toContain('paste')
 })
 
 test('two worktrees of one repo are told apart by the segment above them, with the whole path to hover', async () => {
@@ -659,7 +779,11 @@ test('an obsolete project selection cannot close a switcher opened afterwards', 
   )
 
   await chooseProject(page, shop)
-  await page.keyboard.press('Escape')
+  // Closed over the socket rather than with Escape: this test has stubbed the window's
+  // route channel, and whether the switcher is showing is state a route sets, so every
+  // surface can close it ([ADR-0016]).
+  await sendRaw(sandbox.socketPath, requestLine('app.setSwitcher', { open: false }))
+  await expect(page.getByTestId('project-list')).toHaveCount(0)
   await openSwitcher(page)
   await page.waitForTimeout(1_100)
 
@@ -682,7 +806,7 @@ test('the list is the project directory, not an index kept beside it', async () 
   await openSwitcher(page)
   expect(await listedProjects(page)).toEqual([shop])
 
-  await page.keyboard.press('Escape')
+  await closeSwitcher(page)
   writeFileSync(file, written)
   await openSwitcher(page)
   expect(await listedProjects(page)).toEqual([shop, store])

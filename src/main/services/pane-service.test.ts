@@ -58,7 +58,10 @@ beforeEach(async () => {
     panes,
     presetService,
     { list: () => ({ trusted: [], waiting: [] }) },
-    { theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }) }
+    {
+      theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }),
+      switcher: () => ({ open: false })
+    }
   )
 })
 

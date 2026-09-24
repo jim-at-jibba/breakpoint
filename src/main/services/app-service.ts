@@ -6,6 +6,7 @@ import {
   type ThemePreference,
   type ThemeState
 } from '../../shared/theme'
+import type { SwitcherState } from '../../shared/state'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
@@ -23,8 +24,21 @@ import type { SettingsStore } from './settings-store'
  * when it changes — so there is no second channel for a window to have to reconcile.
  *
  * It is not a pane's colour scheme and shares no code with one ([CONTEXT.md]).
+ *
+ * It owns whether the project switcher is showing for the same reason: the switcher is
+ * the way into a project, so it cannot belong to the project that is open ([ADR-0016]).
  */
 export class AppService {
+  /**
+   * Whether the project switcher is showing. Here and not in the renderer because the
+   * shortcut that opens it is a menu accelerator, which fires in this process
+   * ([ADR-0016]); it is the app's and not a project's for the same reason the theme is.
+   *
+   * Never stored. A switcher left open when the app quit is not a preference, and a
+   * window that came up with it already over the canvas would be answering a question
+   * nobody has asked yet.
+   */
+  private switcherOpen = false
   private preference: ThemePreference = DEFAULT_THEME_PREFERENCE
   private system: AppTheme = 'dark'
   /** What the feed has been told, so an OS event that changes nothing announces nothing. */
@@ -63,6 +77,27 @@ export class AppService {
     existing.focus()
     app.focus({ steal: true })
     return { focused: true }
+  }
+
+  /** Whether the switcher is showing; what the snapshot carries. */
+  switcher(): SwitcherState {
+    return { open: this.switcherOpen }
+  }
+
+  /**
+   * Shows or hides the project switcher, from whichever surface asked: the menu
+   * accelerator, the toolbar button, or Escape. Silent when it did not move, so a held
+   * shortcut is not a patch per repeat and a second Escape announces nothing.
+   *
+   * Not queued and not stored — nothing is written, so there is no save for a later call
+   * to land behind.
+   */
+  setSwitcher(open: boolean): SwitcherState {
+    if (open !== this.switcherOpen) {
+      this.switcherOpen = open
+      this.feed.publish({ type: 'app.switcher', switcher: this.switcher() })
+    }
+    return this.switcher()
   }
 
   /**

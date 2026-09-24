@@ -12,6 +12,17 @@ import type { ThemeState } from './theme'
  * event log is a separate channel and is not this.
  */
 
+/**
+ * Whether the project switcher is showing. State rather than a renderer's `useState`
+ * because the shortcut that opens it is an application menu accelerator, which fires in
+ * the main process: the only way for it to reach the switcher without a UI-only channel
+ * is for "the switcher is open" to be something a route sets and a patch announces
+ * ([ADR-0016]).
+ */
+export interface SwitcherState {
+  open: boolean
+}
+
 export interface StateSnapshot {
   /** The revision of the last patch folded into this snapshot. */
   revision: number
@@ -44,6 +55,11 @@ export interface StateSnapshot {
    * any pane's colour scheme, which is emulation and lives on the pane ([CONTEXT.md]).
    */
   theme: ThemeState
+  /**
+   * Whether the project switcher is showing. The app's and not a project's, like the
+   * theme: the switcher is the way in with nothing open, so it outlives every project.
+   */
+  switcher: SwitcherState
 }
 
 export type StatePatch =
@@ -78,6 +94,12 @@ export type StatePatch =
    * "Dark" differently even on a desktop where they resolve to the same chrome.
    */
   | { type: 'app.theme'; theme: ThemeState }
+  /**
+   * The project switcher opening or closing, whichever surface asked for it: the menu
+   * accelerator, the toolbar button, or Escape. Published only when it moves, so holding
+   * the shortcut down is not a patch per repeat.
+   */
+  | { type: 'app.switcher'; switcher: SwitcherState }
 
 export interface RevisionedPatch {
   revision: number
@@ -158,6 +180,10 @@ export function applyPatch(
     // touches a pane.
     case 'app.theme':
       return { ...before, revision, theme: patch.theme }
+    // The switcher is the app's chrome too, and is how a window with nothing open is
+    // given something to open, so this one also lands whatever the project is.
+    case 'app.switcher':
+      return { ...before, revision, switcher: patch.switcher }
   }
 }
 
