@@ -11,7 +11,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 import { PATCH_CHANNEL, ROUTE_CHANNEL } from '../src/shared/ipc'
 import { PROJECT_FILE_VERSION, projectFileName, type Project } from '../src/shared/project'
@@ -618,6 +618,53 @@ test('a project whose file refuses to load is listed, reports why when chosen, a
   await chooseProject(page, shop)
   await expect(page.getByTestId('project-list')).toHaveCount(0)
   await expect(page.getByTestId('project-name')).toHaveText('shop')
+})
+
+test('an obsolete project selection cannot close a switcher opened afterwards', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  const admin = makeRepo('admin')
+  await openProject(shop)
+  await openProject(admin)
+  await openSwitcher(page)
+
+  await launched.app.evaluate(
+    ({ ipcMain }, { route, projects }) => {
+      ipcMain.removeHandler(route)
+      ipcMain.handle(route, async (_event, request: { id: string; route: string }) => {
+        if (request.route === 'project.list') {
+          return { id: request.id, ok: true, data: { projects } }
+        }
+        if (request.route === 'project.open') {
+          await new Promise((resolve) => setTimeout(resolve, 1_000))
+          return { id: request.id, ok: true, data: {} }
+        }
+        return {
+          id: request.id,
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'not part of this test' }
+        }
+      })
+    },
+    {
+      route: ROUTE_CHANNEL,
+      projects: [admin, shop].map((repoPath) => ({
+        file: projectFileName(repoPath),
+        openable: true,
+        name: basename(repoPath),
+        repoPath
+      }))
+    }
+  )
+
+  await chooseProject(page, shop)
+  await page.keyboard.press('Escape')
+  await openSwitcher(page)
+  await page.waitForTimeout(1_100)
+
+  await expect(page.getByTestId('project-list')).toBeVisible()
+  expect(await listedProjects(page)).toEqual([admin, shop])
 })
 
 test('the list is the project directory, not an index kept beside it', async () => {

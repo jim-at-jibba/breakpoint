@@ -22,10 +22,10 @@ instance rather than starting a second one.
 
 ### Switching between projects
 
-Every project Breakpoint has stored is in the switcher: press `⌘P`, or click the project's
-name in the toolbar. Choosing one swaps the panes, layout, zoom and URL to that project's
-stored state without restarting, and the project you came from is waiting exactly as you
-left it when you switch back.
+Every project Breakpoint has stored is in the switcher: press `⌘P` on macOS or `Ctrl+P` on
+Windows and Linux, or click the project's name in the toolbar. Choosing one swaps the panes,
+layout, zoom and URL to that project's stored state without restarting, and the project you
+came from is waiting exactly as you left it when you switch back.
 
 Entries are labelled by the last two segments of the repo path, so two git worktrees of one
 repo — `breakpoint/main` and `breakpoint/feature-19` — read apart rather than alike. The whole

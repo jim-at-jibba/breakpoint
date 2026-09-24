@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -540,6 +540,41 @@ describe('the project list the switcher reads', () => {
       { file: projectFileName(shop), openable: true, name: 'shop', repoPath: shop }
     ])
   })
+
+  it('ignores a directory named like a project file rather than losing the valid list', async () => {
+    await service.open(shop)
+    await mkdir(join(root, 'projects', 'not-a-project.json'))
+
+    expect((await service.list()).projects).toEqual([
+      { file: projectFileName(shop), openable: true, name: 'shop', repoPath: shop }
+    ])
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    'lists an unreadable project file as unopenable without losing the valid list',
+    async () => {
+      await service.open(shop)
+      const unreadable = join(root, 'projects', 'aaaa.json')
+      await writeFile(unreadable, JSON.stringify(writeProjectFile(createProject(other))))
+      await chmod(unreadable, 0o000)
+
+      try {
+        expect((await service.list()).projects).toEqual([
+          {
+            file: 'aaaa.json',
+            openable: false,
+            name: null,
+            repoPath: null,
+            reason: 'unreadable',
+            message: expect.any(String)
+          },
+          { file: projectFileName(shop), openable: true, name: 'shop', repoPath: shop }
+        ])
+      } finally {
+        await chmod(unreadable, 0o600)
+      }
+    }
+  )
 
   it('refuses a file that is not the one its repo path is stored in, so the open cannot open something else', async () => {
     await service.open(shop)

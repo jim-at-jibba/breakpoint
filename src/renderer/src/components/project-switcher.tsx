@@ -33,20 +33,20 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
   const [open, setOpen] = useState(false)
   const [projects, setProjects] = useState<ProjectListing[] | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  /** Bumped on every open and close, so a slow list cannot answer a later one. */
-  const loadVersion = useRef(0)
+  /** Bumped on every interaction, so old list and selection results cannot affect a later one. */
+  const interactionVersion = useRef(0)
 
   /** Opens the switcher and reads the directory again: the list is never held between opens. */
   const show = useCallback((): void => {
     setOpen(true)
     setMessage(null)
     setProjects(null)
-    const version = (loadVersion.current += 1)
+    const version = (interactionVersion.current += 1)
 
     void (async (): Promise<void> => {
       try {
         const response = await window.breakpoint.invoke('project.list')
-        if (version !== loadVersion.current) return
+        if (version !== interactionVersion.current) return
         if (response.ok) {
           setProjects(response.data.projects)
           return
@@ -54,7 +54,7 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
         setProjects([])
         setMessage(response.error.message)
       } catch (error) {
-        if (version !== loadVersion.current) return
+        if (version !== interactionVersion.current) return
         setProjects([])
         setMessage(errorMessage(error))
       }
@@ -63,7 +63,7 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
 
   const hide = useCallback((): void => {
     setOpen(false)
-    loadVersion.current += 1
+    interactionVersion.current += 1
   }, [])
 
   // The shortcut is the window's own, so it answers wherever the app's chrome has focus.
@@ -85,18 +85,21 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
   }, [show])
 
   async function choose(listing: ProjectListing): Promise<void> {
+    const version = (interactionVersion.current += 1)
     if (!listing.openable) {
       setMessage(`${projectListingLabel(listing)} cannot be opened: ${listing.message}`)
       return
     }
     try {
       const response = await window.breakpoint.invoke('project.open', { path: listing.repoPath })
+      if (version !== interactionVersion.current) return
       if (!response.ok) {
         setMessage(`${listing.name} could not be opened: ${response.error.message}`)
         return
       }
       hide()
     } catch (error) {
+      if (version !== interactionVersion.current) return
       setMessage(errorMessage(error))
     }
   }

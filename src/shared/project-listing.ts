@@ -21,6 +21,9 @@ import type { RefusalReason } from './project'
  */
 export type ProjectListing = OpenableProject | UnopenableProject
 
+/** Why an entry cannot be opened, including failures before its contents can be parsed. */
+export type ProjectListingRefusalReason = RefusalReason | 'unreadable'
+
 export interface OpenableProject {
   /** The file's name in the project directory. What makes an entry unique. */
   file: string
@@ -40,7 +43,7 @@ export interface UnopenableProject {
    */
   name: string | null
   repoPath: string | null
-  reason: RefusalReason
+  reason: ProjectListingRefusalReason
   /** Why, in the words an open would have been refused with. */
   message: string
 }

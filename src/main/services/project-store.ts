@@ -70,19 +70,18 @@ export class ProjectStore {
    * a first run looks like before anything has been saved.
    */
   async list(): Promise<ProjectListing[]> {
-    let names: string[]
+    let files: string[]
     try {
-      names = await readdir(this.directory)
+      const entries = await readdir(this.directory, { withFileTypes: true })
+      files = entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(PROJECT_FILE_EXTENSION))
+        .map((entry) => entry.name)
     } catch (error) {
       if (isErrno(error, 'ENOENT')) return []
       throw error
     }
 
-    const listings = await Promise.all(
-      names
-        .filter((name) => name.endsWith(PROJECT_FILE_EXTENSION))
-        .map((name) => this.listOne(name))
-    )
+    const listings = await Promise.all(files.map((file) => this.listOne(file)))
     // A file removed between reading the directory and reading it is not in the list,
     // which is the answer a directory read a moment later would have given anyway.
     return listings
@@ -91,7 +90,21 @@ export class ProjectStore {
   }
 
   private async listOne(file: string): Promise<ProjectListing | undefined> {
-    const read = await this.read(join(this.directory, file))
+    let read: FileRead
+    try {
+      read = await this.read(join(this.directory, file))
+    } catch (error) {
+      const message = errnoMessage(error)
+      if (message === undefined) throw error
+      return {
+        file,
+        openable: false,
+        name: null,
+        repoPath: null,
+        reason: 'unreadable',
+        message
+      }
+    }
     if (read.status === 'missing') return undefined
     if (read.status === 'refused') {
       return {
@@ -161,4 +174,11 @@ export class ProjectStore {
 
 function isErrno(error: unknown, code: string): boolean {
   return error instanceof Error && 'code' in error && error.code === code
+}
+
+function errnoMessage(error: unknown): string | undefined {
+  if (!(error instanceof Error) || !('code' in error) || typeof error.code !== 'string') {
+    return undefined
+  }
+  return error.message
 }
