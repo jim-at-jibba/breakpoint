@@ -102,11 +102,13 @@ describe('what a header field says', () => {
   })
 
   test('calls a pane different from the app only when it renders the page differently', () => {
-    expect(schemeDiffersFromApp('light', 'dark')).toBe(true)
-    expect(schemeDiffersFromApp('dark', 'dark')).toBe(false)
-    // System follows what the app already follows, so it is never the odd one out.
-    expect(schemeDiffersFromApp('system', 'dark')).toBe(false)
-    expect(schemeDiffersFromApp('system', 'light')).toBe(false)
+    const darkOverride = { preference: 'dark', system: 'light', active: 'dark' } as const
+    expect(schemeDiffersFromApp('light', darkOverride)).toBe(true)
+    expect(schemeDiffersFromApp('dark', darkOverride)).toBe(false)
+    expect(schemeDiffersFromApp('system', darkOverride)).toBe(true)
+
+    const followingDark = { preference: 'system', system: 'dark', active: 'dark' } as const
+    expect(schemeDiffersFromApp('system', followingDark)).toBe(false)
   })
 })
 

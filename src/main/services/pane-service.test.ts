@@ -51,9 +51,15 @@ beforeEach(async () => {
     removePane: (pane) => projects.removePane(pane),
     rotatePane: (pane) => projects.rotatePane(pane)
   })
-  projects = new ProjectService(store, feed, log, panes, presetService, {
-    list: () => ({ trusted: [], waiting: [] })
-  })
+  projects = new ProjectService(
+    store,
+    feed,
+    log,
+    panes,
+    presetService,
+    { list: () => ({ trusted: [], waiting: [] }) },
+    { theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }) }
+  )
 })
 
 afterEach(async () => {

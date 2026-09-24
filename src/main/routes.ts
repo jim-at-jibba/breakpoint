@@ -10,6 +10,7 @@ import {
   type RoutePayload,
   type Surface
 } from '../shared/routes'
+import { isThemePreference } from '../shared/theme'
 import { expandUrl } from '../shared/urls'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
@@ -366,6 +367,19 @@ function expectCertificateDecision(raw: unknown): ParamsOk<'certificates.decide'
   return { ok: true, params: { ...key, trusted } }
 }
 
+const THEME_SHAPE = 'this route takes { preference }: system, light or dark'
+
+function expectThemeSetting(raw: unknown): ParamsOk<'app.setTheme'> | ParamsBad {
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: THEME_SHAPE }
+  const unknown = unknownFields(setting, ['preference'])
+  if (unknown.length > 0) return { ok: false, message: `${THEME_SHAPE}, not ${unknown.join(', ')}` }
+
+  const { preference } = setting
+  if (!isThemePreference(preference)) return { ok: false, message: THEME_SHAPE }
+  return { ok: true, params: { preference } }
+}
+
 function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
   const shape = 'this route takes { zoom }: a number of percent, or "fit"'
   const setting = asParams(raw)
@@ -412,6 +426,10 @@ export function createRouteTable(services: Services): RouteTable {
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })
+    },
+    'app.setTheme': {
+      parseParams: expectThemeSetting,
+      handle: async ({ preference }) => ({ payload: await services.app.setTheme(preference) })
     },
     'certificates.decide': {
       parseParams: expectCertificateDecision,
