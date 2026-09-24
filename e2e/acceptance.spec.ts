@@ -31,19 +31,24 @@ import {
  * probe runs while every pane was 150px tall. So every claim here about a pane rendering
  * is made from outside the page's account of itself: the element's measured box on the
  * host, a click near its bottom edge landing, the image variant the server was asked for,
- * and the pixels of a swatch. The test then collapses a pane's element and shows that
- * those checks catch it while CDP still reports the declared viewport.
+ * and the pixels of a swatch.
  *
- * The click is the one that cannot be skipped. Phase 0's actual bug, `display: block` on
- * the `<webview>`, leaves the element at its declared size and collapses only the guest
- * inside it: measured by hand, the drawn size and the app's own geometry check both pass
- * with it in, and the bottom-edge click is what fails.
+ * The test then puts Phase 0's actual bug back — `display: block` on a `<webview>` — and
+ * shows the click catching it. That bug leaves the element at its declared size and
+ * collapses only the guest inside it, so CDP still reports the declared viewport, the
+ * drawn size still measures right and the app's own geometry check still passes. The
+ * bottom-edge click is the one check here that cannot be skipped.
  */
 
 const ZOOM = 50
 
 /** Explicit, and not all one value, so that a restart that dropped them would show. */
 const SCHEMES: readonly Exclude<ColorScheme, 'system'>[] = ['dark', 'light', 'dark']
+
+/** CSS pixels as the canvas draws them, in screen pixels. */
+function atZoom(cssPixels: number): number {
+  return (cssPixels * ZOOM) / 100
+}
 
 let sandbox: Sandbox
 let launched: LaunchedApp | undefined
@@ -83,9 +88,9 @@ function webview(page: Page, pane: string): ReturnType<Page['locator']> {
 }
 
 /**
- * The pane's whole drawn area brought on screen. The pane's frame rather than its
- * `<webview>`, because the frame keeps its declared size when the element inside it is
- * collapsed, and the declared bottom edge is exactly the place a click has to reach.
+ * The pane's whole drawn area brought on screen, scrolled by the pane's own element
+ * rather than its `<webview>`, so that the declared bottom edge — exactly the place a
+ * click has to reach — is on screen whatever the `<webview>` is doing.
  */
 async function reveal(page: Page, pane: string): Promise<void> {
   await page
@@ -133,8 +138,8 @@ async function hitsBottomEdge(page: Page, pane: Pane, timeout: number): Promise<
   do {
     const box = await drawnBox(page, pane.id)
     // HIT_TARGET CSS px is half that on screen at 50%; aim well inside it.
-    const inset = (HIT_TARGET * ZOOM) / 100 / 4
-    const bottom = box.y + (pane.height * ZOOM) / 100
+    const inset = atZoom(HIT_TARGET) / 4
+    const bottom = box.y + atZoom(pane.height)
     await page.mouse.click(box.x + inset, bottom - inset)
     if ((await hits()) > before) return true
     await page.waitForTimeout(100)
@@ -148,7 +153,7 @@ async function hitsBottomEdge(page: Page, pane: Pane, timeout: number): Promise<
  */
 async function swatchColour(page: Page, pane: string): Promise<number[]> {
   const box = await drawnBox(page, pane)
-  const size = (SWATCH * ZOOM) / 100
+  const size = atZoom(SWATCH)
   const rect = {
     x: Math.round(box.x + box.width - size),
     y: Math.round(box.y),
@@ -166,13 +171,30 @@ async function swatchColour(page: Page, pane: string): Promise<number[]> {
   }, rect)
 }
 
-function assetsRequested(since: number): string[] {
-  return fixture
-    .requests()
-    .slice(since)
-    .filter((request) => request.url.startsWith('/asset'))
-    .map((request) => request.url)
-    .sort()
+/**
+ * The device pixel ratio the pane renders at, as a server sees it: the pane is handed an
+ * image offered at 1x, 2x and 3x, tagged with its own id, and the variant it asks for is
+ * the ratio it chose by. Tagged, so the answer is this pane's and not any pane's.
+ */
+async function dprAsServed(page: Page, pane: string): Promise<number> {
+  const tag = `pane=${encodeURIComponent(pane)}`
+  const variants = [1, 2, 3].map((x) => `/asset?x=${x}&${tag} ${x}x`).join(', ')
+  await inGuest(
+    await guestId(page, pane),
+    `(() => {
+      const image = new Image(16, 16)
+      image.srcset = ${JSON.stringify(variants)}
+      document.body.append(image)
+    })()`
+  )
+  const asked = (): string[] =>
+    fixture
+      .requests()
+      .map((request) => new URL(request.url, 'http://fixture'))
+      .filter((url) => url.pathname === '/asset' && url.searchParams.get('pane') === pane)
+      .map((url) => url.searchParams.get('x')!)
+  await expect.poll(asked).toHaveLength(1)
+  return Number(asked()[0])
 }
 
 test.beforeAll(async () => {
@@ -214,14 +236,14 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
   )
   expect(stored.panes.map((pane) => pane.name)).toEqual(['Mobile', 'Tablet', 'Desktop'])
 
-  // --- `breakpoint . --wait --json` prints the pane set --------------------------------
+  // `breakpoint . --wait --json` prints the pane set.
   launched = await launchApp(sandbox)
   const first = await openAndWait()
   expect(first.project?.repoPath).toBe(repo)
   expect(first.project?.panes).toEqual(stored.panes)
   expect(Object.keys(first.panes).sort()).toEqual(stored.panes.map((pane) => pane.id).sort())
 
-  // --- The developer's changes, made through the same routes every surface uses --------
+  // The developer's changes, made through the same routes every surface uses.
   await route('project.setLayout', { layout: 'horizontal' })
   await route('project.setZoom', { zoom: ZOOM })
   for (const [index, pane] of stored.panes.entries()) {
@@ -234,10 +256,9 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
     })
     .toEqual(['horizontal', ZOOM, SCHEMES])
 
-  // --- Quit and reopen: the project, its panes, layout and zoom come back --------------
+  // Quit and reopen: the project, its panes, layout and zoom come back.
   await closeApp(launched)
   launched = undefined
-  const requestsBeforeRestart = fixture.requests().length
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()
 
@@ -256,10 +277,9 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-layout', 'horizontal')
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-zoom', String(ZOOM))
 
-  // --- Every pane, from outside the page ------------------------------------------------
   for (const pane of expectedPanes) {
     await reveal(page, pane.id)
-    const expected = { width: (pane.width * ZOOM) / 100, height: (pane.height * ZOOM) / 100 }
+    const expected = { width: atZoom(pane.width), height: atZoom(pane.height) }
 
     // Drawn at declared size times zoom, measured host-side on the element's own box.
     const box = await drawnBox(page, pane.id)
@@ -279,45 +299,44 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
       `${pane.name}'s colour scheme`
     ).toBe(pane.colorScheme === 'dark')
     expect(await swatchColour(page, pane.id), `${pane.name}'s swatch on screen`).toEqual([
-      ...SCHEME_SWATCH[pane.colorScheme as 'light' | 'dark']
+      ...SCHEME_SWATCH[pane.colorScheme]
     ])
 
-    expect(await inGuest<number>(id, 'devicePixelRatio'), `${pane.name}'s DPR`).toBe(pane.dpr)
+    // Its DPR as the server saw it, not as the page reports it.
+    expect(await dprAsServed(page, pane.id), `${pane.name}'s DPR`).toBe(pane.dpr)
   }
-
-  // DPR as the server saw it: each pane asked for the image variant its ratio implies —
-  // Mobile @3x, Tablet @2x, Desktop @1x — and nothing else.
+  // Mobile @3x, Tablet @2x, Desktop @1x: three different answers, so none is a default.
   expect(expectedPanes.map((pane) => pane.dpr)).toEqual([3, 2, 1])
-  expect(assetsRequested(requestsBeforeRestart)).toEqual(['/asset?x=1', '/asset?x=2', '/asset?x=3'])
 
-  // --- The negative control: Phase 0's collapse, and every check above catching it ------
+  // Phase 0's bug, put back on purpose: the element keeps its size, the guest collapses.
   const [mobile] = expectedPanes
   await reveal(page, mobile.id)
-  const declaredHeight = await webview(page, mobile.id).evaluate((element: HTMLElement) => {
-    const height = element.style.height
-    element.style.height = '150px'
-    return height
+  const display = await webview(page, mobile.id).evaluate((element: HTMLElement) => {
+    const display = element.style.display
+    element.style.display = 'block'
+    return display
   })
   const collapsedId = await guestId(page, mobile.id)
 
-  // CDP still reports the declared viewport, which is why it proves nothing ([ADR-0004]).
+  // Everything that asks, or measures the element, still says the pane is whole…
   expect(
     await inGuest<{ width: number; height: number }>(
       collapsedId,
       '({ width: innerWidth, height: innerHeight })'
     )
   ).toEqual({ width: mobile.width, height: mobile.height })
-  // The host-side measurement does not agree with it, nor does the app's own check…
-  expect((await drawnBox(page, mobile.id)).height).toBe(75)
-  await expect.poll(async () => (await state()).panes[mobile.id]?.geometry).toBe('mismatch')
-  // …and the bottom edge can no longer be clicked.
+  expect(await drawnBox(page, mobile.id)).toMatchObject({
+    width: atZoom(mobile.width),
+    height: atZoom(mobile.height)
+  })
+  expect((await state()).panes[mobile.id]?.geometry).toBe('ok')
+  // …and the bottom edge cannot be clicked, which is the only one of them that is true.
   expect(await hitsBottomEdge(page, mobile, 2_000)).toBe(false)
 
-  // Put back, it is whole again: the misses above were the collapse, not the probe.
-  await webview(page, mobile.id).evaluate((element: HTMLElement, height) => {
-    element.style.height = height
-  }, declaredHeight)
-  await expect.poll(async () => (await state()).panes[mobile.id]?.geometry).toBe('ok')
+  // Put back, it is whole again: the misses were the collapse, not the probe.
+  await webview(page, mobile.id).evaluate((element: HTMLElement, display) => {
+    element.style.display = display
+  }, display)
   await reveal(page, mobile.id)
   expect(await hitsBottomEdge(page, mobile, 5_000)).toBe(true)
 })
