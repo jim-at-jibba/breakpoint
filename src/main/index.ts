@@ -9,6 +9,7 @@ import {
   resolveSocketPath,
   resolveUserDataDir
 } from '../shared/paths'
+import { installAppMenu } from './app-menu'
 import { registerIpcAdapter } from './adapters/ipc'
 import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
@@ -96,6 +97,21 @@ function openProject(path: string): void {
       }
     })
     .catch((error: unknown) => console.error(`[breakpoint] could not open ${path}:`, error))
+}
+
+/**
+ * What the menu's ⌘P causes. The same route the toolbar button causes, over the same
+ * table: the accelerator is a surface acting, not a message to the window ([ADR-0005],
+ * [ADR-0016]).
+ *
+ * `window` and not `cli`, because a menu is the developer's hand on the app itself.
+ */
+function showSwitcher(): void {
+  if (!dispatch) return
+  const request = { id: 'menu', route: 'app.setSwitcher', params: { open: true } } as const
+  void dispatch(request, { surface: 'window' }).catch((error: unknown) =>
+    console.error('[breakpoint] could not show the switcher:', error)
+  )
 }
 
 function createWindow(): void {
@@ -239,6 +255,10 @@ if (!hasSingleInstanceLock) {
     )
 
     certificateHost.install(app, certificates)
+    // The menu is an adapter like the others: it holds no behaviour, it causes a route.
+    // Bound here rather than in the renderer because a pane's `webContents` swallows every
+    // key it has focus for, which is nearly all of them (#38, [ADR-0016]).
+    installAppMenu({ showSwitcher: () => showSwitcher() })
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)
 

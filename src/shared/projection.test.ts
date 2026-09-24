@@ -24,7 +24,8 @@ function snap(revision: number, project: StateSnapshot['project'], cursor = 12):
     project,
     panes: project ? paneStatusesFor(project, {}) : {},
     certificates: { trusted: [], waiting: [] },
-    theme: DARK
+    theme: DARK,
+    switcher: { open: false }
   }
 }
 

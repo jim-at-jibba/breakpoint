@@ -73,7 +73,9 @@ _Avoid_: workspace, site, app, canvas (for the repo-less case — it is a projec
 Every project Breakpoint has stored, and the way to move between them without restarting.
 Read from the project directory rather than from an index, so it cannot fall out of step
 with what is on disk; a project whose file will not load is listed as **unopenable** and
-says why when it is chosen, rather than being dropped.
+says why when it is chosen, rather than being dropped. Whether it is showing is the app's
+state and not the window's, because its shortcut is a menu accelerator that fires in the
+main process ([ADR-0016](docs/adr/0016-app-wide-shortcuts-are-menu-accelerators.md)).
 _Avoid_: project list, recent projects, palette (the command palette is a different thing)
 
 **Session**:

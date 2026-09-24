@@ -380,6 +380,18 @@ function expectThemeSetting(raw: unknown): ParamsOk<'app.setTheme'> | ParamsBad 
   return { ok: true, params: { preference } }
 }
 
+function expectSwitcherSetting(raw: unknown): ParamsOk<'app.setSwitcher'> | ParamsBad {
+  const shape = 'this route takes { open }: whether the project switcher is showing'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, ['open'])
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { open } = setting
+  if (typeof open !== 'boolean') return { ok: false, message: shape }
+  return { ok: true, params: { open } }
+}
+
 function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
   const shape = 'this route takes { zoom }: a number of percent, or "fit"'
   const setting = asParams(raw)
@@ -426,6 +438,10 @@ export function createRouteTable(services: Services): RouteTable {
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })
+    },
+    'app.setSwitcher': {
+      parseParams: expectSwitcherSetting,
+      handle: ({ open }) => ({ payload: services.app.setSwitcher(open) })
     },
     'app.setTheme': {
       parseParams: expectThemeSetting,

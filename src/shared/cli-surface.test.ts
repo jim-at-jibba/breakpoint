@@ -439,7 +439,8 @@ describe('the state as a terminal reads it', () => {
       project: shop,
       panes,
       certificates: { trusted: [], waiting: [] },
-      theme: DARK
+      theme: DARK,
+      switcher: { open: false }
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -458,7 +459,8 @@ describe('the state as a terminal reads it', () => {
       project: shop,
       panes,
       certificates: { trusted: [], waiting: [] },
-      theme: DARK
+      theme: DARK,
+      switcher: { open: false }
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -478,7 +480,8 @@ describe('the state as a terminal reads it', () => {
       project: shop,
       panes,
       certificates: { trusted: [], waiting: [] },
-      theme: DARK
+      theme: DARK,
+      switcher: { open: false }
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -643,7 +646,8 @@ describe('certificate trust on the terminal', () => {
         project,
         panes: project ? paneStatusesFor(project, {}) : {},
         certificates: { trusted: [trusted], waiting: [waiting] },
-        theme: DARK
+        theme: DARK,
+        switcher: { open: false }
       }
       expect((state?.render(snapshot) ?? '').split('\n')).toContain(
         'Certificates: 1 trusted, 1 waiting'
@@ -658,7 +662,8 @@ describe('certificate trust on the terminal', () => {
       project: null,
       panes: {},
       certificates: { trusted: [], waiting: [] },
-      theme: DARK
+      theme: DARK,
+      switcher: { open: false }
     }
     expect(state?.render(snapshot)).toBe(
       'No project is open. Run `breakpoint .` in a repo.\nCursor 9'

@@ -58,7 +58,10 @@ beforeEach(async () => {
     panes,
     presets,
     { list: () => ({ trusted: [], waiting: [] }) },
-    { theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }) }
+    {
+      theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }),
+      switcher: () => ({ open: false })
+    }
   )
 })
 
@@ -146,7 +149,8 @@ describe('async project opens', () => {
       project: null,
       panes: {},
       certificates: { trusted: [], waiting: [] },
-      theme: { preference: 'system', system: 'dark', active: 'dark' }
+      theme: { preference: 'system', system: 'dark', active: 'dark' },
+      switcher: { open: false }
     })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
@@ -176,7 +180,8 @@ describe('async project opens', () => {
       project: before.project,
       panes: before.panes,
       certificates: before.certificates,
-      theme: before.theme
+      theme: before.theme,
+      switcher: before.switcher
     })
     expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, shop])
   })

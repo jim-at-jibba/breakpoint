@@ -283,3 +283,69 @@ describe('the app theme', () => {
     expect(app.theme()).toEqual({ preference: 'system', system: 'dark', active: 'dark' })
   })
 })
+
+/**
+ * The project switcher's open state, which lives here rather than in the renderer
+ * because the chord that opens it is an application menu accelerator and fires in this
+ * process ([ADR-0016], #38).
+ */
+describe('the project switcher', () => {
+  it('starts closed: a window comes up over the canvas, not over a question', () => {
+    const { app } = harness()
+
+    expect(app.switcher()).toEqual({ open: false })
+  })
+
+  it('announces it opening, and answers with what it now is', () => {
+    const { app, patches } = harness()
+
+    expect(app.setSwitcher(true)).toEqual({ open: true })
+
+    expect(app.switcher()).toEqual({ open: true })
+    expect(patches).toEqual([
+      { revision: 1, patch: { type: 'app.switcher', switcher: { open: true } } }
+    ])
+  })
+
+  // Asking for a switcher that is already showing is what a held shortcut is, and it is
+  // not a change: the list was read when it opened.
+  it('says nothing when it did not move', () => {
+    const { app, patches } = harness()
+    app.setSwitcher(true)
+
+    expect(app.setSwitcher(true)).toEqual({ open: true })
+    expect(app.setSwitcher(false)).toEqual({ open: false })
+    expect(app.setSwitcher(false)).toEqual({ open: false })
+
+    expect(patches.map((entry) => entry.patch)).toEqual([
+      { type: 'app.switcher', switcher: { open: true } },
+      { type: 'app.switcher', switcher: { open: false } }
+    ])
+  })
+
+  // Nothing about it is written, so an unreadable settings file — which refuses every
+  // theme change — must not also cost the developer the way into another project.
+  it('is not a stored setting, so settings this build will not read do not refuse it', async () => {
+    const { app } = harness({
+      status: 'refused',
+      reason: 'newer',
+      message: 'written by a newer Breakpoint'
+    })
+    await app.load()
+
+    expect(app.setSwitcher(true)).toEqual({ open: true })
+  })
+
+  it('shares its sequence with the theme, so a window has one series to check', async () => {
+    const { app, patches } = harness()
+    await app.load()
+
+    app.setSwitcher(true)
+    await app.setTheme('light')
+
+    expect(patches.map((entry) => ({ revision: entry.revision, type: entry.patch.type }))).toEqual([
+      { revision: 1, type: 'app.switcher' },
+      { revision: 2, type: 'app.theme' }
+    ])
+  })
+})

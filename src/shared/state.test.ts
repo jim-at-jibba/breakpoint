@@ -17,7 +17,8 @@ const nothingOpen: StateSnapshot = {
   project: null,
   panes: {},
   certificates: { trusted: [], waiting: [] },
-  theme: DARK
+  theme: DARK,
+  switcher: { open: false }
 }
 
 describe('applying a patch', () => {
@@ -37,7 +38,8 @@ describe('applying a patch', () => {
       },
       // Certificate trust is the app's, not a project's: opening one leaves it alone.
       certificates: nothingOpen.certificates,
-      theme: nothingOpen.theme
+      theme: nothingOpen.theme,
+      switcher: nothingOpen.switcher
     })
   })
 
@@ -281,7 +283,8 @@ describe('snapshotReadiness', () => {
       project: shop,
       panes,
       certificates: nothingOpen.certificates,
-      theme: nothingOpen.theme
+      theme: nothingOpen.theme,
+      switcher: nothingOpen.switcher
     }
   }
 
@@ -356,7 +359,8 @@ describe('snapshotReadiness', () => {
       project: { ...shop, panes: [] },
       panes: {},
       certificates: nothingOpen.certificates,
-      theme: nothingOpen.theme
+      theme: nothingOpen.theme,
+      switcher: nothingOpen.switcher
     }
     expect(snapshotReadiness(empty)).toEqual({ ready: true })
   })
@@ -475,5 +479,52 @@ describe('the app theme in the snapshot', () => {
     })
 
     expect(emulated.theme).toEqual(light)
+  })
+})
+
+describe('the project switcher in the snapshot', () => {
+  // The switcher's open state is the snapshot's rather than the renderer's, because the
+  // chord that opens it is a main-process menu accelerator ([ADR-0016], #38).
+  it('lands whether or not a project is open: with nothing open it is the way in', () => {
+    const next = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'app.switcher', switcher: { open: true } }
+    })
+
+    expect(next).toEqual({ ...nothingOpen, revision: 1, switcher: { open: true } })
+  })
+
+  it('leaves the open project and its panes alone', () => {
+    const open = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+
+    const showing = applyPatch(open, {
+      revision: 2,
+      patch: { type: 'app.switcher', switcher: { open: true } }
+    })
+
+    expect(showing.project).toEqual(open.project)
+    expect(showing.panes).toEqual(open.panes)
+    expect(showing.switcher).toEqual({ open: true })
+  })
+
+  it('closes again, and a project opened while it was showing does not reopen it', () => {
+    const showing = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'app.switcher', switcher: { open: true } }
+    })
+    const closed = applyPatch(showing, {
+      revision: 2,
+      patch: { type: 'app.switcher', switcher: { open: false } }
+    })
+    const opened = applyPatch(closed, {
+      revision: 3,
+      patch: { type: 'project.opened', project: shop }
+    })
+
+    expect(closed.switcher).toEqual({ open: false })
+    expect(opened.switcher).toEqual({ open: false })
   })
 })

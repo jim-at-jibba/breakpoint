@@ -29,20 +29,58 @@ import type { Project } from '../../../shared/project'
  * This is the one surface drawn over the canvas rather than on the app's own rim. It is
  * not a pane-state event, which is what AGENTS.md keeps off a page — it is the developer
  * asking to leave this project, and nothing in the panes behind it is the subject.
+ *
+ * Whether it is showing is snapshot state, not this component's ([ADR-0016]). The chord
+ * that opens it is an application menu accelerator, which fires in the main process —
+ * a `keydown` listener here is deaf whenever a pane has focus, which is nearly always
+ * (#38). So the button, Escape and the accelerator all cause one route, and this draws
+ * what the snapshot says.
  */
-export function ProjectSwitcher({ project }: { project: Project | null }): React.JSX.Element {
-  const [open, setOpen] = useState(false)
+export function ProjectSwitcher({
+  project,
+  open
+}: {
+  project: Project | null
+  /** From the snapshot: `app.setSwitcher` is the only thing that changes it. */
+  open: boolean
+}): React.JSX.Element {
   const [projects, setProjects] = useState<ProjectListing[] | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   /** Bumped on every interaction, so old list and selection results cannot affect a later one. */
   const interactionVersion = useRef(0)
 
-  /** Opens the switcher and reads the directory again: the list is never held between opens. */
-  const show = useCallback((): void => {
-    setOpen(true)
-    setMessage(null)
+  /** Asks for the switcher to be shown or hidden. What is drawn follows from the snapshot. */
+  const ask = useCallback((next: boolean): void => {
+    void (async (): Promise<void> => {
+      try {
+        const response = await window.breakpoint.invoke('app.setSwitcher', { open: next })
+        if (!response.ok) setMessage(response.error.message)
+      } catch (error) {
+        setMessage(errorMessage(error))
+      }
+    })()
+  }, [])
+
+  const show = useCallback((): void => ask(true), [ask])
+  const hide = useCallback((): void => ask(false), [ask])
+
+  // What was read last time is forgotten the moment the switcher opens or closes, in
+  // render rather than in an effect: an effect would draw the previous open's list for a
+  // frame first, and that list is exactly the one that may no longer be true.
+  const [showing, setShowing] = useState(open)
+  if (showing !== open) {
+    setShowing(open)
     setProjects(null)
+    setMessage(null)
+  }
+
+  // The directory is read each time the switcher opens, and never held between opens: a
+  // project another window created is in the list and one whose file has gone is not.
+  // Keyed on the snapshot's `open`, so the accelerator's open and the button's open read
+  // it the same way.
+  useEffect(() => {
     const version = (interactionVersion.current += 1)
+    if (!open) return
 
     void (async (): Promise<void> => {
       try {
@@ -60,30 +98,7 @@ export function ProjectSwitcher({ project }: { project: Project | null }): React
         setMessage(errorMessage(error))
       }
     })()
-  }, [])
-
-  const hide = useCallback((): void => {
-    setOpen(false)
-    interactionVersion.current += 1
-  }, [])
-
-  // The shortcut is the window's own, so it answers wherever the app's chrome has focus.
-  // Opening an open switcher re-reads the list rather than closing it; Escape closes it.
-  //
-  // One modifier per platform, not either: Control-P is emacs' "previous line" in every
-  // text field on macOS, and taking it there would cost the address bar a binding the
-  // developer already has.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.altKey || event.shiftKey) return
-      if (!(isMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey)) return
-      if (event.key.toLowerCase() !== 'p') return
-      event.preventDefault()
-      show()
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [show])
+  }, [open])
 
   async function choose(listing: ProjectListing): Promise<void> {
     const version = (interactionVersion.current += 1)

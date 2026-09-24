@@ -16,7 +16,7 @@ import type { PaneStatus, Size } from './panes'
 import type { Preset } from './presets'
 import type { Layout, Pane, Zoom } from './project'
 import type { ProjectListing } from './project-listing'
-import type { StateSnapshot } from './state'
+import type { StateSnapshot, SwitcherState } from './state'
 import type { ThemePreference, ThemeState } from './theme'
 
 /** A route is a dotted `noun.verb`. The noun is the service, the verb is the method. */
@@ -25,6 +25,7 @@ export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 export const ROUTE_NAMES = [
   'app.focus',
   'app.quit',
+  'app.setSwitcher',
   'app.setTheme',
   'certificates.decide',
   'certificates.forget',
@@ -69,6 +70,16 @@ export interface RouteSignatures {
    */
   'app.focus': { params: undefined; payload: { focused: true } }
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Shows or hides the project switcher. A route rather than a message to the window,
+   * because the menu accelerator, the toolbar button and Escape all cause it, and the
+   * accelerator fires in the main process where no `useState` can hear it ([ADR-0016]).
+   *
+   * Opening a switcher that is already open changes nothing: the list was read when it
+   * opened, and re-reading it under whatever the developer has typed is not what asking
+   * for the switcher again means.
+   */
+  'app.setSwitcher': { params: SwitcherState; payload: SwitcherState }
   /**
    * Sets the app theme: `system` follows the OS, `light` and `dark` override it. An
    * app-level setting rather than a project's, kept on this machine, so it survives a
