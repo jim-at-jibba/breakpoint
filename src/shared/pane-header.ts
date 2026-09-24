@@ -1,4 +1,4 @@
-import type { AppTheme } from './theme'
+import type { ThemeState } from './theme'
 import type { CapabilityState, PaneStatus } from './panes'
 import type { ColorScheme } from './project'
 
@@ -93,11 +93,12 @@ export function schemeGlyph(scheme: ColorScheme): string {
 
 /**
  * Whether a pane is rendering the page in something other than the app's own appearance.
- * The colour tab carries this once the tier has taken the glyph away, and `system` is the
- * pane following what the app already follows, so it never differs ([CONTEXT.md]).
+ * The colour tab carries this once the tier has taken the glyph away. A `system` pane
+ * follows the desktop, which can differ from an app override ([CONTEXT.md]).
  */
-export function schemeDiffersFromApp(scheme: ColorScheme, theme: AppTheme): boolean {
-  return scheme !== 'system' && scheme !== theme
+export function schemeDiffersFromApp(scheme: ColorScheme, theme: ThemeState): boolean {
+  const paneTheme = scheme === 'system' ? theme.system : scheme
+  return paneTheme !== theme.active
 }
 
 /** The pane's device pixel ratio as the header writes it. */

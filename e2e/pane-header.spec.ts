@@ -299,42 +299,51 @@ test('a pane drawn at a size other than it declares reads its viewport as not em
   )
 })
 
-test('a pane too narrow for the scheme glyph carries the scheme in its colour tab', async () => {
+test('a pane too narrow for the scheme glyph carries its effective scheme in its colour tab', async () => {
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()
   const shop = makeRepo('shop')
   await open(shop)
   await settled(shop)
 
-  const [mobile, tablet] = shop.panes
-  // Pinned rather than assumed: the app theme follows the desktop unless it is set
-  // ([#18]), and this case is about a pane that differs from whatever the app is.
-  await sendRaw(sandbox.socketPath, requestLine('app.setTheme', { preference: 'dark' }))
-  // A light pane is now the one rendering the page in something other than the app's
-  // own appearance.
+  const [mobile, tablet, desktop] = shop.panes
+  const started = await state()
+  const away = started.theme.system === 'dark' ? 'light' : 'dark'
+  await sendRaw(sandbox.socketPath, requestLine('app.setTheme', { preference: away }))
+  // One explicit pane matches the override. Another explicitly follows the desktop, and
+  // the untouched system pane follows it implicitly; those two differ from the app.
   await sendRaw(
     sandbox.socketPath,
-    requestLine('panes.setEmulation', { pane: mobile.id, colorScheme: 'light' })
+    requestLine('panes.setEmulation', { pane: mobile.id, colorScheme: away })
+  )
+  await sendRaw(
+    sandbox.socketPath,
+    requestLine('panes.setEmulation', { pane: desktop.id, colorScheme: started.theme.system })
   )
   await expect
     .poll(
       async () => (await state()).project?.panes.find(({ id }) => id === mobile.id)?.colorScheme
     )
-    .toBe('light')
+    .toBe(away)
 
   // Wide enough for the glyph: the tab is the pane's colour and nothing else.
   await expect(headerOf(page, mobile.id).getByTestId('pane-tab')).not.toHaveAttribute('data-split')
 
   await resize(mobile.id, 40)
   await resize(tablet.id, 40)
+  await resize(desktop.id, 40)
   await expect.poll(() => tierOf(page, mobile.id)).toBe(PANE_HEADER_TIERS.length - 1)
 
-  // The glyph has gone, so the tab splits — but only for the pane that differs.
-  await expect(headerOf(page, mobile.id).getByTestId('pane-tab')).toHaveAttribute(
+  // The glyph has gone, so both ways of following the desktop split from the override.
+  await expect(headerOf(page, mobile.id).getByTestId('pane-tab')).not.toHaveAttribute('data-split')
+  await expect(headerOf(page, tablet.id).getByTestId('pane-tab')).toHaveAttribute(
     'data-split',
     'true'
   )
-  await expect(headerOf(page, tablet.id).getByTestId('pane-tab')).not.toHaveAttribute('data-split')
+  await expect(headerOf(page, desktop.id).getByTestId('pane-tab')).toHaveAttribute(
+    'data-split',
+    'true'
+  )
 })
 
 test('a pane whose page will not load counts the error, and keeps counting it at every tier', async () => {

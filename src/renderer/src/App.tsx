@@ -83,8 +83,28 @@ export default function App(): React.JSX.Element {
   // Before the first snapshot the app theme is unknown, and the window's own background
   // colour — set from the stored preference before this window existed — is what is on
   // screen. Drawing chrome over it would mean drawing it in a guessed theme, so nothing
-  // is drawn: a fetch that never returns says so through the error below instead.
-  if (!snapshot && state.status !== 'error') return <div className="h-screen" />
+  // is drawn. A failed first fetch keeps that background visible and draws only a
+  // difference-blended retry surface over it: legible on either colour without guessing
+  // which theme the unavailable snapshot would have named.
+  if (!snapshot) {
+    if (state.status === 'error') {
+      return (
+        <main className="grid h-screen place-content-center gap-[var(--bp-space-3)] bg-transparent text-center text-[color:var(--bp-n-100)] mix-blend-difference">
+          <p role="alert" className="text-[length:var(--bp-text-sm)]">
+            Could not load project: {state.message}
+          </p>
+          <button
+            type="button"
+            className="justify-self-center rounded-[var(--bp-radius-sm)] border border-current bg-transparent px-[var(--bp-space-3)] py-[var(--bp-space-2)] text-[length:var(--bp-text-sm)]"
+            onClick={state.retry}
+          >
+            Retry
+          </button>
+        </main>
+      )
+    }
+    return <div className="h-screen" data-testid="startup-background" />
+  }
 
   return (
     <div className="flex h-screen flex-col">
@@ -182,7 +202,7 @@ export default function App(): React.JSX.Element {
         <Canvas
           project={project}
           statuses={snapshot.panes}
-          theme={snapshot.theme.active}
+          theme={snapshot.theme}
           zoomPreview={activeZoomPreview}
           onZoom={setZoom}
           onFocusPane={(pane) => setLayout({ layout: 'focus', focusedPane: pane })}

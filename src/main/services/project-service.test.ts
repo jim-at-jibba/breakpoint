@@ -53,7 +53,7 @@ beforeEach(async () => {
     panes,
     presets,
     { list: () => ({ trusted: [], waiting: [] }) },
-    { theme: () => ({ preference: 'system', active: 'dark' }) }
+    { theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }) }
   )
 })
 
@@ -141,7 +141,7 @@ describe('async project opens', () => {
       project: null,
       panes: {},
       certificates: { trusted: [], waiting: [] },
-      theme: { preference: 'system', active: 'dark' }
+      theme: { preference: 'system', system: 'dark', active: 'dark' }
     })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)

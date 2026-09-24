@@ -228,7 +228,9 @@ describe('app.setTheme', () => {
   }
 
   function themeDispatcher(): ThemeDispatcher {
-    const setTheme = vi.fn().mockResolvedValue({ preference: 'light', active: 'light' })
+    const setTheme = vi
+      .fn()
+      .mockResolvedValue({ preference: 'light', system: 'dark', active: 'light' })
     return {
       dispatch: createDispatch(createRouteTable({ app: { setTheme } } as unknown as Services)),
       setTheme

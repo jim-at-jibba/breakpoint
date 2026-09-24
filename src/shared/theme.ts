@@ -17,11 +17,15 @@ export type AppTheme = 'light' | 'dark'
  */
 export type ThemePreference = 'system' | AppTheme
 
-export interface ThemeState {
-  preference: ThemePreference
-  /** The preference resolved against the OS: what the chrome is drawn as right now. */
-  active: AppTheme
-}
+/**
+ * The app preference, the desktop underneath it, and the resulting chrome. Written as a
+ * union so an override can never claim to have resolved to the opposite appearance.
+ */
+export type ThemeState =
+  | { preference: 'system'; system: 'light'; active: 'light' }
+  | { preference: 'system'; system: 'dark'; active: 'dark' }
+  | { preference: 'light'; system: AppTheme; active: 'light' }
+  | { preference: 'dark'; system: AppTheme; active: 'dark' }
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = 'system'
 
@@ -42,6 +46,18 @@ export function isThemePreference(value: unknown): value is ThemePreference {
  */
 export function resolveAppTheme(preference: ThemePreference, system: AppTheme): AppTheme {
   return preference === 'system' ? system : preference
+}
+
+/** Builds a state whose active appearance is constrained by its preference. */
+export function resolveThemeState(preference: ThemePreference, system: AppTheme): ThemeState {
+  if (preference === 'system') {
+    return system === 'light'
+      ? { preference, system, active: 'light' }
+      : { preference, system, active: 'dark' }
+  }
+  return preference === 'light'
+    ? { preference, system, active: 'light' }
+    : { preference, system, active: 'dark' }
 }
 
 /**

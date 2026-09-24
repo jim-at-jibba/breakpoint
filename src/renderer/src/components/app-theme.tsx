@@ -1,6 +1,6 @@
 import { Button } from '@renderer/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui/popover'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { ThemePreference, ThemeState } from '../../../shared/theme'
 
 const CHOICES: ReadonlyArray<{ preference: ThemePreference; label: string }> = [
@@ -21,15 +21,21 @@ const CHOICES: ReadonlyArray<{ preference: ThemePreference; label: string }> = [
 export function AppThemeControl({ theme }: { theme: ThemeState }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const choiceVersion = useRef(0)
   const chosen = CHOICES.find((choice) => choice.preference === theme.preference)
 
   async function choose(preference: ThemePreference): Promise<void> {
+    const version = choiceVersion.current + 1
+    choiceVersion.current = version
     setMessage(null)
     try {
       const response = await window.breakpoint.invoke('app.setTheme', { preference })
-      if (!response.ok) setMessage(response.error.message)
+      if (choiceVersion.current !== version) return
+      setMessage(response.ok ? null : response.error.message)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : String(error))
+      if (choiceVersion.current === version) {
+        setMessage(error instanceof Error ? error.message : String(error))
+      }
     }
   }
 

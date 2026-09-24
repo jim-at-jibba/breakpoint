@@ -6,7 +6,7 @@ import type { ThemeState } from '../../../shared/theme'
 import { createSnapshotReader, type SnapshotReader, type SnapshotState } from './snapshot-reader'
 
 /** The app theme every snapshot carries. Nothing in this file turns on its value. */
-const DARK: ThemeState = { preference: 'system', active: 'dark' }
+const DARK: ThemeState = { preference: 'system', system: 'dark', active: 'dark' }
 
 const shop = createProject('/repos/shop')
 const snapshot: StateSnapshot = {

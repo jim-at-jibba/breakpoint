@@ -129,7 +129,7 @@ describe('the app theme', () => {
 
     await app.load()
 
-    expect(app.theme()).toEqual({ preference: 'system', active: 'light' })
+    expect(app.theme()).toEqual({ preference: 'system', system: 'light', active: 'light' })
   })
 
   it('restores the override from the last run rather than the OS', async () => {
@@ -138,7 +138,7 @@ describe('the app theme', () => {
 
     await app.load()
 
-    expect(app.theme()).toEqual({ preference: 'dark', active: 'dark' })
+    expect(app.theme()).toEqual({ preference: 'dark', system: 'light', active: 'dark' })
   })
 
   it('announces nothing at load: the snapshot every surface fetches already carries it', async () => {
@@ -153,11 +153,21 @@ describe('the app theme', () => {
     const { app, store, patches } = harness()
     await app.load()
 
-    await expect(app.setTheme('light')).resolves.toEqual({ preference: 'light', active: 'light' })
+    await expect(app.setTheme('light')).resolves.toEqual({
+      preference: 'light',
+      system: 'dark',
+      active: 'light'
+    })
 
     expect(store.saved).toEqual([{ theme: 'light' }])
     expect(patches).toEqual([
-      { revision: 1, patch: { type: 'app.theme', theme: { preference: 'light', active: 'light' } } }
+      {
+        revision: 1,
+        patch: {
+          type: 'app.theme',
+          theme: { preference: 'light', system: 'dark', active: 'light' }
+        }
+      }
     ])
   })
 
@@ -170,7 +180,13 @@ describe('the app theme', () => {
     await app.setTheme('dark')
 
     expect(patches).toEqual([
-      { revision: 1, patch: { type: 'app.theme', theme: { preference: 'dark', active: 'dark' } } }
+      {
+        revision: 1,
+        patch: {
+          type: 'app.theme',
+          theme: { preference: 'dark', system: 'dark', active: 'dark' }
+        }
+      }
     ])
   })
 
@@ -189,23 +205,35 @@ describe('the app theme', () => {
 
     host.setSystem('light')
 
-    expect(app.theme()).toEqual({ preference: 'system', active: 'light' })
+    expect(app.theme()).toEqual({ preference: 'system', system: 'light', active: 'light' })
     expect(patches).toEqual([
       {
         revision: 1,
-        patch: { type: 'app.theme', theme: { preference: 'system', active: 'light' } }
+        patch: {
+          type: 'app.theme',
+          theme: { preference: 'system', system: 'light', active: 'light' }
+        }
       }
     ])
   })
 
-  it('ignores the OS while the developer has overridden it', async () => {
+  it('keeps the override while announcing the OS change for system panes', async () => {
     const { app, host, patches } = harness({ status: 'loaded', settings: { theme: 'dark' } })
     await app.load()
 
     host.setSystem('light')
 
-    expect(app.theme()).toEqual({ preference: 'dark', active: 'dark' })
-    expect(patches).toEqual([])
+    expect(app.theme()).toEqual({ preference: 'dark', system: 'light', active: 'dark' })
+    expect(patches).toEqual([
+      {
+        revision: 1,
+        patch: {
+          type: 'app.theme',
+          theme: { preference: 'dark', system: 'light', active: 'dark' }
+        }
+      }
+    ])
+    expect(host.painted).toEqual([])
   })
 
   it('says nothing when the platform reports an appearance it already has', async () => {
@@ -230,7 +258,7 @@ describe('the app theme', () => {
     expect(store.saved).toEqual([])
     expect(patches).toEqual([])
     // The chrome is still the desktop's, which needs nothing stored to be true.
-    expect(app.theme()).toEqual({ preference: 'system', active: 'dark' })
+    expect(app.theme()).toEqual({ preference: 'system', system: 'dark', active: 'dark' })
   })
 
   it('refuses the preference it already has just as firmly, so the answer is the file', async () => {
@@ -252,6 +280,6 @@ describe('the app theme', () => {
     await expect(app.setTheme('light')).rejects.toThrow('disk full')
 
     expect(patches).toEqual([])
-    expect(app.theme()).toEqual({ preference: 'system', active: 'dark' })
+    expect(app.theme()).toEqual({ preference: 'system', system: 'dark', active: 'dark' })
   })
 })

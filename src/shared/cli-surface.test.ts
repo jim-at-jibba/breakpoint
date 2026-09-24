@@ -17,7 +17,7 @@ import { createProject } from './project'
 import { paneStatusesFor, type StateSnapshot } from './state'
 import type { ThemeState } from './theme'
 /** The app theme every snapshot carries. Nothing in this file turns on its value. */
-const DARK: ThemeState = { preference: 'system', active: 'dark' }
+const DARK: ThemeState = { preference: 'system', system: 'dark', active: 'dark' }
 
 /** Every option off, with the ones a case is about turned on. */
 function options(on: Partial<CliOptions> = {}): CliOptions {

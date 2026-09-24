@@ -4,7 +4,7 @@ import { startProjection, receiveBatch, receiveSnapshot, type Projection } from 
 import { paneStatusesFor, type RevisionedPatch, type StateSnapshot } from './state'
 import type { ThemeState } from './theme'
 /** The app theme every snapshot carries. Nothing in this file turns on its value. */
-const DARK: ThemeState = { preference: 'system', active: 'dark' }
+const DARK: ThemeState = { preference: 'system', system: 'dark', active: 'dark' }
 
 const shop = createProject('/repos/shop')
 const store = createProject('/repos/store')

@@ -16,6 +16,7 @@ import {
   writeProjectFile,
   type Project
 } from '../src/shared/project'
+import { ROUTE_CHANNEL } from '../src/shared/ipc'
 import type { StateSnapshot } from '../src/shared/state'
 import { APP_THEME_BACKGROUND, type AppTheme, type ThemePreference } from '../src/shared/theme'
 import { startFixture, type Fixture } from './fixture'
@@ -170,6 +171,7 @@ test('a first launch follows the desktop and stores nothing', async () => {
 
   expect(state.theme.preference).toBe('system')
   expect(['light', 'dark']).toContain(state.theme.active)
+  expect(state.theme.system).toBe(state.theme.active)
   // Nothing was chosen, so there is nothing to keep.
   expect(storedSettings()).toBeUndefined()
   await expect.poll(() => themeClass(page)).toBe(state.theme.active)
@@ -185,7 +187,7 @@ test('an override takes the chrome away from the desktop, and the window with it
   await setTheme(away)
 
   const state = await snapshot()
-  expect(state.theme).toEqual({ preference: away, active: away })
+  expect(state.theme).toEqual({ preference: away, system: started.theme.system, active: away })
   await expect.poll(() => themeClass(page)).toBe(away)
   // The window's own colour moves with it, so the next window it opens is not the
   // colour the last theme was.
@@ -207,8 +209,71 @@ test('an override survives a restart, and the window never starts the wrong colo
   // before its renderer has painted anything: there is no white to flash.
   expect(await windowColour(launched)).toBe(APP_THEME_BACKGROUND[away])
   const state = await snapshot()
-  expect(state.theme).toEqual({ preference: away, active: away })
+  expect(state.theme).toEqual({ preference: away, system: started.theme.system, active: away })
   await expect.poll(() => themeClass(page)).toBe(away)
+})
+
+test('a failed first snapshot leaves the renderer transparent over the themed window', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  await setTheme('light')
+  await expect.poll(() => themeClass(page)).toBe('light')
+
+  await app.evaluate(({ ipcMain }, route) => {
+    ipcMain.removeHandler(route)
+    ipcMain.handle(route, () => ({
+      id: 'test',
+      ok: false,
+      error: { code: 'INTERNAL_ERROR', message: 'snapshot unavailable' }
+    }))
+  }, ROUTE_CHANNEL)
+  await page.reload()
+  await page.waitForTimeout(300)
+
+  await expect(page.getByRole('alert')).toContainText('snapshot unavailable')
+  await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible()
+  expect(await themeClass(page)).toBe('')
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(
+    'rgba(0, 0, 0, 0)'
+  )
+  expect(await windowColour(launched)).toBe(APP_THEME_BACKGROUND.light)
+})
+
+test('an older failed choice cannot leave an error after a newer choice succeeds', async () => {
+  launched = await launchApp(sandbox)
+  const { app } = launched
+  const page = await app.firstWindow()
+  await expect(page.getByTestId('app-theme')).toBeVisible()
+
+  await app.evaluate(({ ipcMain }, route) => {
+    let calls = 0
+    ipcMain.removeHandler(route)
+    ipcMain.handle(route, async () => {
+      calls += 1
+      if (calls === 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        return {
+          id: 'first',
+          ok: false,
+          error: { code: 'INTERNAL_ERROR', message: 'first choice failed' }
+        }
+      }
+      return {
+        id: 'second',
+        ok: true,
+        data: { preference: 'dark', system: 'light', active: 'dark' }
+      }
+    })
+  }, ROUTE_CHANNEL)
+
+  await page.getByTestId('app-theme').click()
+  const choices = page.getByTestId('app-theme-choice')
+  await choices.filter({ hasText: 'Light' }).click()
+  await choices.filter({ hasText: 'Dark' }).click()
+  await page.waitForTimeout(150)
+
+  await expect(page.getByTestId('app-theme-error')).toHaveCount(0)
 })
 
 test('going back to system hands the chrome to the desktop again', async () => {
@@ -220,7 +285,11 @@ test('going back to system hands the chrome to the desktop again', async () => {
   await setTheme('system')
 
   const state = await snapshot()
-  expect(state.theme).toEqual({ preference: 'system', active: started.theme.active })
+  expect(state.theme).toEqual({
+    preference: 'system',
+    system: started.theme.system,
+    active: started.theme.active
+  })
   await expect.poll(() => themeClass(page)).toBe(started.theme.active)
   expect(storedSettings()).toEqual({ version: 1, theme: 'system' })
 })

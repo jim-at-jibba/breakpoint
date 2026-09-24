@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import {
   DEFAULT_THEME_PREFERENCE,
-  resolveAppTheme,
+  resolveThemeState,
   type AppTheme,
   type ThemePreference,
   type ThemeState
@@ -26,7 +26,7 @@ import type { SettingsStore } from './settings-store'
  */
 export class AppService {
   private preference: ThemePreference = DEFAULT_THEME_PREFERENCE
-  private active: AppTheme = 'dark'
+  private system: AppTheme = 'dark'
   /** What the feed has been told, so an OS event that changes nothing announces nothing. */
   private announced: ThemeState | undefined
   /** Why the stored settings could not be read, if they could not be. */
@@ -83,14 +83,14 @@ export class AppService {
     } else if (loaded.status === 'loaded') {
       this.preference = loaded.settings.theme
     }
-    this.active = resolveAppTheme(this.preference, this.host.systemTheme())
+    this.system = this.host.systemTheme()
     this.announced = this.theme()
     this.host.onChanged(() => this.announce())
   }
 
   /** The preference and what it currently resolves to; what the snapshot carries. */
   theme(): ThemeState {
-    return { preference: this.preference, active: this.active }
+    return resolveThemeState(this.preference, this.system)
   }
 
   /**
@@ -124,15 +124,18 @@ export class AppService {
    * appearance the app already has is not a patch every surface has to fold in.
    */
   private announce(): void {
-    const state: ThemeState = {
-      preference: this.preference,
-      active: resolveAppTheme(this.preference, this.host.systemTheme())
-    }
-    this.active = state.active
+    this.system = this.host.systemTheme()
+    const state = this.theme()
     const announced = this.announced
-    if (announced?.preference === state.preference && announced.active === state.active) return
+    if (
+      announced?.preference === state.preference &&
+      announced.active === state.active &&
+      announced.system === state.system
+    ) {
+      return
+    }
     this.announced = state
-    this.host.paint(state.active)
+    if (announced?.active !== state.active) this.host.paint(state.active)
     this.feed.publish({ type: 'app.theme', theme: state })
   }
 

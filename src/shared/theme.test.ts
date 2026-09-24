@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'vitest'
-import { APP_THEME_BACKGROUND, isThemePreference, resolveAppTheme, type AppTheme } from './theme'
+import {
+  APP_THEME_BACKGROUND,
+  isThemePreference,
+  resolveAppTheme,
+  resolveThemeState,
+  type AppTheme
+} from './theme'
 
 describe('resolving the app theme', () => {
   test('an override is the answer, whatever the desktop is set to', () => {
@@ -12,6 +18,19 @@ describe('resolving the app theme', () => {
   test('system is the desktop', () => {
     expect(resolveAppTheme('system', 'light')).toBe('light')
     expect(resolveAppTheme('system', 'dark')).toBe('dark')
+  })
+
+  test('keeps the desktop separate from an override in a valid state', () => {
+    expect(resolveThemeState('dark', 'light')).toEqual({
+      preference: 'dark',
+      system: 'light',
+      active: 'dark'
+    })
+    expect(resolveThemeState('system', 'light')).toEqual({
+      preference: 'system',
+      system: 'light',
+      active: 'light'
+    })
   })
 
   test('is three preferences and no more', () => {

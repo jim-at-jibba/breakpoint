@@ -4,7 +4,7 @@ import { createProject } from './project'
 import { applyPatch, snapshotReadiness, type StateSnapshot } from './state'
 import type { ThemeState } from './theme'
 /** The app theme every snapshot carries. Nothing in this file turns on its value. */
-const DARK: ThemeState = { preference: 'system', active: 'dark' }
+const DARK: ThemeState = { preference: 'system', system: 'dark', active: 'dark' }
 
 const shop = createProject('/repos/shop')
 const store = createProject('/repos/store')
@@ -410,7 +410,7 @@ describe('certificate trust in the snapshot', () => {
 })
 
 describe('the app theme in the snapshot', () => {
-  const light: ThemeState = { preference: 'light', active: 'light' }
+  const light: ThemeState = { preference: 'light', system: 'dark', active: 'light' }
 
   it('lands whether or not a project is open: the chrome is the app’s', () => {
     const next = applyPatch(nothingOpen, {
@@ -422,7 +422,7 @@ describe('the app theme in the snapshot', () => {
   })
 
   it('carries the preference as well as what it resolves to', () => {
-    const following: ThemeState = { preference: 'system', active: 'light' }
+    const following: ThemeState = { preference: 'system', system: 'light', active: 'light' }
 
     const next = applyPatch(nothingOpen, {
       revision: 1,

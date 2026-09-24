@@ -364,7 +364,11 @@ test('state with nothing open says so on both outputs', async () => {
     certificates: { trusted: [], waiting: [] },
     // The app theme follows the desktop until it is set, and whichever this machine is
     // set to, nothing is open is still nothing is open.
-    theme: { preference: 'system', active: expect.stringMatching(/^(light|dark)$/) }
+    theme: {
+      preference: 'system',
+      system: expect.stringMatching(/^(light|dark)$/),
+      active: expect.stringMatching(/^(light|dark)$/)
+    }
   })
   // The cursor is printed with nothing open: that is when the log matters most.
   expect(text.stdout).toBe('No project is open. Run `breakpoint .` in a repo.\nCursor 0\n')
