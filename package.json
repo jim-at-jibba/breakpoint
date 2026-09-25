@@ -1,6 +1,6 @@
 {
   "name": "breakpoint",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0-rc.2",
   "description": "A multi-viewport dev browser for developers and their coding agents",
   "main": "./out/main/index.js",
   "author": "James Best",
