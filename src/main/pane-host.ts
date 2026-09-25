@@ -1,5 +1,5 @@
 import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
-import { applyEmulation, emulationFor } from '../shared/emulation'
+import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
 import type { PaneService } from './services/pane-service'
@@ -323,7 +323,7 @@ export class PaneHost {
     this.passes.set(guest, pass)
 
     const results = await applyEmulation(
-      emulationFor(declared, process.versions.chrome),
+      emulationFor(declared, process.versions.chrome, currentHostIdentity()),
       ({ method, params }) => guest.debugger.sendCommand(method, params)
     )
     if (this.passes.get(guest) === pass && this.isCurrent(pane, guest)) {

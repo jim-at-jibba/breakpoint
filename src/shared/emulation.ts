@@ -73,9 +73,14 @@ export type EmulationResult =
 
 /**
  * The overrides for one pane. `chromeVersion` is the engine's own, so the user agent and
- * its client hints claim the Chromium that is actually rendering.
+ * its client hints claim the Chromium that is actually rendering; `host` is the machine it
+ * is rendering on, which a desktop pane reports as its own.
  */
-export function emulationFor(pane: PaneEmulation, chromeVersion: string): EmulationCommand[] {
+export function emulationFor(
+  pane: PaneEmulation,
+  chromeVersion: string,
+  host: HostIdentity
+): EmulationCommand[] {
   return [
     {
       capability: 'viewport',
@@ -95,7 +100,8 @@ export function emulationFor(pane: PaneEmulation, chromeVersion: string): Emulat
       params: userAgentFor({
         mobile: pane.mobile,
         chromeVersion,
-        userAgent: pane.userAgent
+        userAgent: pane.userAgent,
+        host
       })
     },
     {
@@ -130,6 +136,63 @@ interface UserAgentOptions {
   chromeVersion: string
   /** The pane's own, resolved from its preset, or `null` for Breakpoint's ([presets.ts]). */
   userAgent: string | null
+  host: HostIdentity
+}
+
+/**
+ * The machine Breakpoint is running on, which a desktop pane reports as its own. Read at
+ * the boundary and passed in, the way [paths.ts] takes a `PathEnvironment`, so this module
+ * stays pure and a test can claim to be any host.
+ */
+export interface HostIdentity {
+  platform: NodeJS.Platform
+  arch: string
+}
+
+export function currentHostIdentity(): HostIdentity {
+  return { platform: process.platform, arch: process.arch }
+}
+
+/**
+ * What a desktop pane says it is running on. Chrome's reduced user agent is frozen per
+ * platform — macOS reports `Intel Mac OS X 10_15_7` on Apple silicon too, which is why the
+ * architecture only ever appears in the client hints.
+ */
+function desktopIdentity({ platform }: HostIdentity): {
+  system: string
+  navigatorPlatform: string
+  hintPlatform: string
+  hintVersion: string
+} {
+  if (platform === 'win32') {
+    // UA-CH reports Windows 11 as platformVersion 15.0.0; the UA string stays at NT 10.0.
+    return {
+      system: 'Windows NT 10.0; Win64; x64',
+      navigatorPlatform: 'Win32',
+      hintPlatform: 'Windows',
+      hintVersion: '15.0.0'
+    }
+  }
+  if (platform === 'darwin') {
+    return {
+      system: 'Macintosh; Intel Mac OS X 10_15_7',
+      navigatorPlatform: 'MacIntel',
+      hintPlatform: 'macOS',
+      hintVersion: '15.0.0'
+    }
+  }
+  return {
+    system: 'X11; Linux x86_64',
+    navigatorPlatform: 'Linux x86_64',
+    hintPlatform: 'Linux',
+    // Chrome sends an empty platform version on Linux rather than a kernel release.
+    hintVersion: ''
+  }
+}
+
+/** What UA-CH calls the architecture. Not the Node name, and never in the user agent string. */
+function hintArchitecture(arch: string): string {
+  return arch === 'arm64' || arch === 'arm' ? 'arm' : 'x86'
 }
 
 /**
@@ -138,7 +201,12 @@ interface UserAgentOptions {
  * it a user agent of its own sends that instead; the client hints keep following the
  * mobile flag, because a preset carries one user agent and not a whole hint set.
  */
-function userAgentFor({ mobile, chromeVersion, userAgent }: UserAgentOptions): UserAgentOverride {
+function userAgentFor({
+  mobile,
+  chromeVersion,
+  userAgent,
+  host
+}: UserAgentOptions): UserAgentOverride {
   const major = chromeVersion.split('.')[0]
   const brands: UserAgentBrand[] = [
     { brand: 'Chromium', version: major },
@@ -166,17 +234,21 @@ function userAgentFor({ mobile, chromeVersion, userAgent }: UserAgentOptions): U
       }
     }
   }
+  // A desktop pane is the machine it is running on. Reporting macOS from a Linux host
+  // would make every observation of a UA-sniffing page a quiet lie, and observation is the
+  // product. A preset that declares its own user agent still wins, as above.
+  const identity = desktopIdentity(host)
   return {
     userAgent:
       userAgent ??
-      `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
-    platform: 'MacIntel',
+      `Mozilla/5.0 (${identity.system}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`,
+    platform: identity.navigatorPlatform,
     userAgentMetadata: {
       brands,
       fullVersionList,
-      platform: 'macOS',
-      platformVersion: '15.0.0',
-      architecture: 'arm',
+      platform: identity.hintPlatform,
+      platformVersion: identity.hintVersion,
+      architecture: hintArchitecture(host.arch),
       model: '',
       mobile: false
     }
