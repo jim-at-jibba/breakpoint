@@ -113,9 +113,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A tag with a suffix (v0.1.0-rc.1) is a prerelease; a plain version is not.
+          # This matters beyond labelling: GitHub's `releases/latest` — where the site's
+          # and the README's download buttons point — skips prereleases, so marking a
+          # real release as one leaves every download link 404ing.
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease=--prerelease ;;
+            *) prerelease= ;;
+          esac
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --notes-file .github/RELEASE_TEMPLATE.md \
-            --prerelease \
+            $prerelease \
             --verify-tag \
             artifacts/*
