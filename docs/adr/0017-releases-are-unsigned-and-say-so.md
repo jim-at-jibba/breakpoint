@@ -50,6 +50,12 @@ updater, its only effect was shipping a placeholder URL to users. The release wo
 uploads artifacts with `gh release create` instead. Restore the block, pointed at GitHub, in
 the same change that adds `electron-updater`.
 
+Absence of that block is not enough on its own: on a tagged CI build electron-builder infers
+the GitHub provider from the git remote and fails asking for a token, which is how the first
+`v0.1.0-rc.1` run died on all three platforms at once. The `build:*` scripts pass
+`--publish never` to say it outright. Keep that flag when the `publish` block comes back —
+the workflow, not the builder, owns publishing.
+
 **Windows and Linux artifacts are unsigned too**, and neither platform refuses to run them —
 Windows SmartScreen warns rather than blocks. No separate decision is needed there.
 
