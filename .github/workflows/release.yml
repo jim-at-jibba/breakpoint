@@ -1,0 +1,116 @@
+name: Release
+
+# A tag is the deliberate act. Nothing else publishes: not a merge, not a schedule.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    name: Verify the tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # A tag that disagrees with package.json produces artifacts named after one
+      # version inside a release named after another. Fail here, not in the wild.
+      - name: The tag and package.json must agree
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME says $tag, package.json says $pkg"
+            exit 1
+          fi
+          echo "version=$pkg" >> "$GITHUB_OUTPUT"
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit
+      # e2e deliberately does not run here. It is the same commit CI already went
+      # green on, it needs a real app launch, and a flake blocking a release is a
+      # worse failure than the one it would catch.
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: verify
+    strategy:
+      # One platform failing should not destroy the other two artifacts; the
+      # release job decides whether what survived is enough.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macOS (universal)
+            script: build:mac
+            artifacts: |
+              dist/*.dmg
+              dist/*.zip
+          - os: windows-latest
+            name: Windows
+            script: build:win
+            artifacts: dist/*.exe
+          - os: ubuntu-latest
+            name: Linux
+            script: build:linux
+            artifacts: |
+              dist/*.AppImage
+              dist/*.deb
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      # No code signing. macOS falls back to an ad-hoc signature for arm64 and
+      # universal builds, which is what lets the app launch at all on Apple
+      # silicon; Gatekeeper still blocks the download until the user removes the
+      # quarantine attribute. See docs/adr/0017.
+      - run: npm run ${{ matrix.script }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: ${{ matrix.artifacts }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: What is being published
+        run: ls -lh artifacts
+
+      # electron-builder publishes nothing itself — electron-builder.yml has no
+      # `publish` block, deliberately, because that block is what bakes an updater
+      # URL into the app. The workflow owns the release from here.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file .github/RELEASE_TEMPLATE.md \
+            --prerelease \
+            --verify-tag \
+            artifacts/*
