@@ -6,6 +6,10 @@
  * same mark. The geometry below is the wordmark's own — 3px bars, 2px gaps,
  * 15px tall — scaled up; changing it here is changing the brand.
  *
+ * The site's favicon comes from here too, as an SVG off the same numbers. It had
+ * drifted to a different mark entirely once already; generating both from one
+ * source is what stops that happening again.
+ *
  * Source of truth rather than a rasteriser: the shape is four rounded
  * rectangles, which a signed distance field draws exactly at any size with
  * real antialiasing, so this needs nothing installed. Run `npm run icons`.
@@ -200,6 +204,45 @@ function ico(entries) {
   return Buffer.concat([header, ...directory, ...entries.map((e) => e.data)])
 }
 
+/* ---- SVG ---------------------------------------------------------------- */
+
+/** An sRGB triple as a hex literal, because a favicon is read by more than browsers. */
+function css([r, g, b]) {
+  return '#' + [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')
+}
+
+function round(value) {
+  return Number(value.toFixed(3))
+}
+
+/**
+ * The same mark as a resolution-independent file, for the site's favicon. Drawn in a
+ * 32-unit box, which is the size the geometry is most often rasterised at.
+ */
+function svg(shape) {
+  const size = 32
+  const margin = size * shape.inset
+  const box = size - margin * 2
+  const radius = box * shape.radius
+  const unit = (box * BAR_SCALE) / BAR_H
+  const barW = BAR_W * unit
+  const barH = BAR_H * unit
+  const pitch = (BAR_W + BAR_GAP) * unit
+  const top = (size - barH) / 2
+  const bars = BARS.map((colour, index) => {
+    const x = size / 2 + (index - 1) * pitch - barW / 2
+    return `<rect x="${round(x)}" y="${round(top)}" width="${round(barW)}" height="${round(barH)}" rx="${round(BAR_R * unit)}" fill="${css(colour)}"/>`
+  })
+  return [
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">`,
+    // The ground is part of the mark, not a backdrop: it is what keeps the bars legible
+    // on a light and a dark tab strip alike, so this needs no colour-scheme query.
+    `<rect x="${round(margin)}" y="${round(margin)}" width="${round(box)}" height="${round(box)}" rx="${round(radius)}" fill="${GROUND}"/>`,
+    ...bars,
+    '</svg>'
+  ].join('')
+}
+
 /* ---- writing ------------------------------------------------------------ */
 
 const cache = new Map()
@@ -221,6 +264,9 @@ function write(path, data) {
 // The PNG electron-builder gives Linux, and the one the running app loads.
 write('build/icon.png', render(1024, 'square'))
 write('resources/icon.png', render(512, 'square'))
+
+// The site's favicon, the same mark at any size.
+write('sites/web/public/favicon.svg', Buffer.from(svg(SHAPES.square)))
 
 // Windows wants every size in one file, down to the 16px it draws in a title bar.
 write(
