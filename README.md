@@ -124,6 +124,7 @@ which resolves the repo it sits in — symlink it onto your `PATH` after `npm ru
 | `npm run test:unit`               | Vitest, over the shared module both processes import                     |
 | `npm run test:e2e`                | Builds, then Playwright launches the real app and drives it with the CLI |
 | `npm run lint` / `npm run format` | ESLint / Prettier across the repo                                        |
+| `npm run icons`                   | Redraws the app icon — the site wordmark's three bars, in every format   |
 
 > [!NOTE]
 > Quit any running Breakpoint before `npm run test:e2e`. The app takes a single-instance
