@@ -59,6 +59,17 @@ _Avoid_: scale, page zoom
 How panes are arranged on the canvas: Horizontal or Focus. Fit is a zoom value, not a layout.
 _Avoid_: mode, view, arrangement
 
+**Panel**:
+The docked region beside or below the canvas that holds the Console and, later, the other
+tabs. Where it sits and how large it is are the app's, not a project's — they are how a
+developer likes to work rather than a property of a repo.
+_Avoid_: drawer, dock, tray, bottom bar
+
+**Console**:
+The panel tab that shows a developer the event log's console entries. A view onto the log and
+never a synonym for it: clearing the console changes what one window draws and nothing else.
+_Avoid_: log, output, terminal
+
 ### Projects and storage
 
 **Project**:
@@ -129,6 +140,33 @@ _Avoid_: settled (that is Phase 3's and stronger), loaded (that is half of it), 
 A monotonic position in the event log. A reader asks for everything after its cursor and is
 told if anything was evicted before it arrived.
 _Avoid_: offset, sequence, checkpoint, watermark
+
+**Resolution**:
+Turning a stack frame's URL, line and column into a path inside the project's repo. Happens
+before an entry is appended, so a location is as true later as it was on arrival; where it
+fails, the entry says so and keeps the location it came with.
+_Avoid_: source-mapping, symbolication, mapping
+
+**Change**:
+An entry reporting that something went wrong or that the page moved — the subset an agent asks
+for after an edit. Never the developer's own actions: a resize is not a change.
+_Avoid_: event, diff, delta, update
+
+**Handle**:
+A live reference to an object inside a pane, valid only while the execution context that made
+it lives. Never stored in the log, because an entry holds only what stays true.
+_Avoid_: remote object, object id, reference
+
+**Collapsing**:
+Showing identical entries from several panes as one row carrying their pane badges. A property
+of one response or one view and never of the log, so two surfaces may honestly disagree about
+how many rows there are while agreeing about what happened.
+_Avoid_: dedupe, grouping, merging
+
+**Display floor**:
+The position below which one window shows nothing. What Clear sets. It belongs to that window,
+no read consults it, and the log is untouched by it.
+_Avoid_: clear, truncate, filter
 
 ### State
 
