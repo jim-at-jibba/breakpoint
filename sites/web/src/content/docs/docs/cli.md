@@ -473,7 +473,7 @@ breakpoint quit --json --verbose | jq .quitting
 ## Error codes
 
 Stable strings, so a script can branch on the failure rather than on its wording. The
-first ten come back from the app; the rest are raised by the command itself.
+first thirteen come back from the app; the rest are raised by the command itself.
 
 | Code | Exit | Meaning |
 | --- | --- | --- |
@@ -483,10 +483,13 @@ first ten come back from the app; the rest are raised by the command itself.
 | `INTERNAL_ERROR` | `1` | The route failed |
 | `PROJECT_UNREADABLE` | `1` | The project's file is on disk but this build will not load it. `details.reason` is `newer` or `corrupt`, and `details.file` is the path |
 | `PANE_NOT_FOUND` | `1` | The open project has no pane with that id, or nothing is open |
+| `PRESETS_UNREADABLE` | `1` | The global presets file is on disk but this build will not read it. `details.reason` is `newer` or `corrupt`, and `details.file` is the path. The file is left exactly as it was |
+| `PRESET_NOT_FOUND` | `1` | `panes.add` named a preset the presets file does not have |
 | `PROJECT_NOT_OPEN` | `1` | The route changes the open project and nothing is open |
 | `ORIGIN_NOT_ALLOWED` | `1` | `breakpoint open` named an origin the project does not allow. `details.url` is the expanded URL and `details.allowedOrigins` is the list it was checked against. Nothing moved |
 | `CERTIFICATES_UNREADABLE` | `1` | The stored certificate decisions are on disk but this build will not read them. `details.file` is the path. The file is left exactly as it was, so nothing is trusted and nothing new can be stored until it is fixed or deleted |
 | `CERTIFICATE_NOT_FOUND` | `1` | No certificate is waiting on that host and fingerprint, and none is stored for it. `details.host` and `details.fingerprint` are what was named |
+| `SETTINGS_UNREADABLE` | `1` | The app's settings file is on disk but this build will not read it. `details.file` is the path. `app.setTheme` refuses rather than overwrite it |
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
@@ -502,19 +505,30 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | --- | --- | --- | --- |
 | `app.focus` | none | `{ "focused": true }`; creates a window first if the app is alive without one | `breakpoint .`, unless `--background` |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
+| `app.setSwitcher` | `{ "open": true }` | `{ "open": true }`, as it now stands | the window, the socket |
+| `app.setTheme` | `{ "preference": "dark" }`: `system`, `light` or `dark` | `{ "preference", "system", "active" }`: the preference and the theme it resolves to | the window, the socket |
 | `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
 | `certificates.forget` | `{ "host": "staging.example.com", "fingerprint": "sha256/…" }` | the same | the window, the socket |
 | `certificates.list` | none | the same | the socket |
 | `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
+| `panes.add` | `{ "preset": "mobile" }`, or `{ "width": 390, "height": 844 }` | `{ "pane": { … }, "index": n }`: the pane with its `status`, and where it was put | the window, the socket |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
+| `panes.remove` | `{ "pane": id }` | `{ "pane": { … } }`: the pane that was removed | the window, the socket |
 | `panes.reportGeometry` | `{ "pane": id, "expected": { "width", "height" }, "measured": { "width", "height" } }` | `{ "status": … }` | the window |
+| `panes.resize` | `{ "pane": id, "width": 390 }`, with `width`, `height` or both | `{ "pane": { … } }`, with its `status` | the window, the socket |
+| `panes.rotate` | `{ "pane": id }` | the same | the window, the socket |
+| `panes.setEmulation` | `{ "pane": id, "dpr": 2, "mobile": true, "touch": true, "colorScheme": "dark" }`, any of them | the same | the window, the socket |
+| `presets.list` | none | `{ "presets": [ … ] }`, read from the presets file per call | the window, the socket |
+| `project.list` | none | `{ "projects": [ … ] }`: every stored project, the unopenable ones with the reason | the window, the socket |
 | `project.navigate` | `{ "url": "3000" }`, as typed | `{ "url": "http://localhost:3000/", "panes": [ … ] }` | `breakpoint open`, the address bar |
 | `project.open` | `{ "path": "/abs/repo" }` | the state snapshot | `breakpoint .`, `breakpoint <path>` |
 | `project.setAllowedOrigins` | `{ "origins": ["http://localhost:3000"] }` | `{ "origins": [ … ] }`, as stored | the window, the socket |
+| `project.setLayout` | `{ "layout": "focus", "focusedPane": id }`; `focusedPane` is optional | `{ "layout", "focusedPane" }` | the window, the socket |
+| `project.setZoom` | `{ "zoom": 50 }`, or `"fit"` | `{ "zoom": 50 }` | the window, the socket |
 | `project.state` | none | the state snapshot | `breakpoint state` |
 
 The state snapshot is
-`{ "revision": n, "cursor": n, "project": …, "panes": { … }, "certificates": { … } }`,
+`{ "revision": n, "cursor": n, "project": …, "panes": { … }, "certificates": { … }, "theme": { … }, "switcher": { … } }`,
 where `project` is `null` until one is opened, and otherwise carries `name`, `repoPath`,
 `startUrl` — where the panes are pointed now, which a navigation moves — `allowedOrigins`,
 `panes`, `layout`, `zoom` and `sessions`. Each pane has an
@@ -522,6 +536,8 @@ where `project` is `null` until one is opened, and otherwise carries `name`, `re
 `preset` it was made from. `revision` counts the changes the app has announced to its
 window; a script can ignore it. `cursor` is the event log position the snapshot was
 taken at.
+`theme` is what `app.setTheme` answers and `switcher` is what `app.setSwitcher` answers;
+both are the window's, and a script can ignore them.
 
 The top-level `panes` is what is observed of each pane while the app runs, keyed by pane
 `id`, and empty when nothing is open. It is never stored:
