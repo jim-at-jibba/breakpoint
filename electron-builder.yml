@@ -22,7 +22,10 @@ files:
   # so inside app.asar it is both unreachable and wrong. The packaged launcher is
   # a separate thing.
   - '!bin/**'
-  - '!{AGENTS.md,CONTEXT.md,CONTEXT-MAP.md,components.json}'
+  - '!{AGENTS.md,CONTEXT.md,CONTEXT-MAP.md,CONTRIBUTING.md,components.json}'
+  # Build tooling, not product. make-icons.mjs draws the icon at package time and
+  # has no business being readable inside the app it drew.
+  - '!scripts/**'
 asarUnpack:
   - resources/**
 win:

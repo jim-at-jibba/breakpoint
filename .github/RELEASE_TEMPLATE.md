@@ -20,7 +20,11 @@ This is a pre-release. It is useful, and it is not finished.
 
 <!-- Written by hand. Auto-generated commit lists are noise at this stage. -->
 
-- First published release.
+- A real app icon: the three bars from the site's logo, replacing the Electron
+  template's atom. The site's favicon is now the same mark.
+- Build tooling no longer ships inside `app.asar`.
+
+Nothing about how the app behaves has changed since 0.1.0.
 
 ## Installing on macOS
 
