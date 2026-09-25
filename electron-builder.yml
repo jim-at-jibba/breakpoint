@@ -11,8 +11,17 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   # Nothing outside the built app ships. docs/ is the PRD, ADRs and design
   # reference; prototypes/ is throwaway spike code kept as a primary source;
-  # site/ is the marketing and docs site, deployed separately.
-  - '!{docs,prototypes,site}/**'
+  # sites/ is the marketing and docs site, deployed separately. The directory is
+  # `sites`, plural — an earlier `site` here matched nothing and shipped the whole
+  # Site inside app.asar.
+  - '!{docs,prototypes,sites}/**'
+  # The test suite and its config are not part of the product.
+  - '!{e2e,test-results}/**'
+  - '!{playwright.config.ts,vitest.config.ts,netlify.toml}'
+  # bin/breakpoint is the development launcher: it resolves the repo it sits in,
+  # so inside app.asar it is both unreachable and wrong. The packaged launcher is
+  # a separate thing.
+  - '!bin/**'
   - '!{AGENTS.md,CONTEXT.md,CONTEXT-MAP.md,components.json}'
 asarUnpack:
   - resources/**
@@ -24,6 +33,15 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  # One universal artifact rather than a per-arch pair. electron-builder only
+  # falls back to an ad-hoc signature for arm64 and universal, so a cross-built
+  # x64 slice would ship with no signature at all and read as "damaged" to
+  # Gatekeeper. See docs/adr/0017.
+  target:
+    - target: dmg
+      arch: [universal]
+    - target: zip
+      arch: [universal]
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -32,17 +50,19 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: James Best
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}-${arch}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+
+# No `publish:` block. Breakpoint has no updater yet, and a publish config is what
+# makes electron-builder bake Contents/Resources/app-update.yml into the app — the
+# placeholder that lived here shipped `https://example.com/auto-updates` to users.
+# The release workflow uploads artifacts itself. Restore this, pointed at github,
+# in the same change that adds electron-updater.
