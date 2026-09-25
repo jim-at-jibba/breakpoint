@@ -11,7 +11,7 @@ import type { StateSnapshot } from './state'
 
 /**
  * Everything the `breakpoint` command accepts, declared once: the parser reads it, the
- * help text is printed from it, and the docs site's reference is checked against it. A
+ * help text is printed from it, and the Docs' CLI reference is checked against it. A
  * flag that is not in this file is a flag the CLI does not accept.
  *
  * Only what exists is declared. Commands from later phases are absent until they ship.

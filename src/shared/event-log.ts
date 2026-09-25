@@ -147,7 +147,7 @@ export type PaneEntryBody =
       readonly type: 'pane.geometryMismatch'
       /** Screen pixels: declared size times the canvas zoom. */
       readonly expected: Readonly<Size>
-      /** Screen pixels: the pane element's own rendered box. */
+      /** Screen pixels: the rendered box of the frame the pane's guest is drawn into. */
       readonly measured: Readonly<Size>
       readonly message: string
     }

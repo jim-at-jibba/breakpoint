@@ -34,10 +34,11 @@ import {
  * and the pixels of a swatch.
  *
  * The test then puts Phase 0's actual bug back — `display: block` on a `<webview>` — and
- * shows the click catching it. That bug leaves the element at its declared size and
- * collapses only the guest inside it, so CDP still reports the declared viewport, the
- * drawn size still measures right and the app's own geometry check still passes. The
- * bottom-edge click is the one check here that cannot be skipped.
+ * shows both the click and the app's own geometry check catching it. That bug leaves the
+ * element at its declared size and collapses only the guest inside it, so CDP still
+ * reports the declared viewport and the element still measures right. The geometry check
+ * measures the frame the guest is drawn into rather than the element (#42), so it sees
+ * the collapse; the bottom-edge click is there to prove the check is right to.
  */
 
 const ZOOM = 50
@@ -318,7 +319,7 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
   })
   const collapsedId = await guestId(page, mobile.id)
 
-  // Everything that asks, or measures the element, still says the pane is whole…
+  // Everything that asks the page, or measures the element, still says the pane is whole…
   expect(
     await inGuest<{ width: number; height: number }>(
       collapsedId,
@@ -329,8 +330,11 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
     width: atZoom(mobile.width),
     height: atZoom(mobile.height)
   })
-  expect((await state()).panes[mobile.id]?.geometry).toBe('ok')
-  // …and the bottom edge cannot be clicked, which is the only one of them that is true.
+  // …while the app's own check, which measures what the guest is drawn into, does not…
+  await expect
+    .poll(async () => (await state()).panes[mobile.id])
+    .toMatchObject({ geometry: 'mismatch', degraded: [{ cause: 'geometry' }] })
+  // …and the bottom edge cannot be clicked, which is the check agreeing with the screen.
   expect(await hitsBottomEdge(page, mobile, 2_000)).toBe(false)
 
   // Put back, it is whole again: the misses were the collapse, not the probe.
@@ -339,4 +343,7 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
   }, display)
   await reveal(page, mobile.id)
   expect(await hitsBottomEdge(page, mobile, 5_000)).toBe(true)
+  await expect
+    .poll(async () => (await state()).panes[mobile.id])
+    .toMatchObject({ geometry: 'ok', degraded: [] })
 })
