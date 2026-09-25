@@ -1,11 +1,13 @@
 #!/bin/sh
-# Repo-local `breakpoint` shim. Symlink it somewhere on your PATH by hand:
+# The development launcher: it resolves the repo it sits in, so it needs a source
+# checkout and a completed `npm run build`. Symlink it onto your PATH by hand:
 #
 #   ln -s "$PWD/bin/breakpoint" /usr/local/bin/breakpoint
 #
-# Phase 5's "Install command line tool" replaces this. Until then it does what the
-# packaged launcher will do: run the CLI entry of the main build under the app's own
-# Electron runtime in Node mode, so there is no separate Node dependency.
+# The packaged launcher is the same idea against an installed app, and the README
+# carries it. Both run the CLI entry under the app's own Electron runtime in Node
+# mode, so neither needs a separate Node installation. Phase 5's "Install command
+# line tool" replaces both with a menu item.
 set -e
 
 # Resolve through any symlinks, so the shim still finds the repo when it is on PATH.

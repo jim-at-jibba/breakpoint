@@ -164,6 +164,35 @@ One named operation in the single table every surface calls through. If a surfac
 it, it is a route.
 _Avoid_: command, endpoint, IPC channel, tool
 
+### Distribution
+
+**Release**:
+One published, versioned set of artifacts, and the only way Breakpoint reaches anyone who is
+not building it from source. Named by its version alone. A release carries the state of the
+product honestly, including what is not built yet, because the version number is the only
+promise it makes.
+_Avoid_: build (that is the act), drop, version (that is the number, not the thing), ship
+
+**Artifact**:
+One installable file in a release, for one platform. The thing a person downloads, never the
+thing they run — an artifact becomes an installed app, and the two are not the same and do
+not share a name.
+_Avoid_: binary, package, installer (that is one kind of artifact), download, asset
+
+**Supported**:
+A platform whose artifact has been run by a person. Distinct from one that merely builds:
+Breakpoint publishes artifacts it has never run, and says so. A platform with known defects
+is **degraded**, which is the same word a pane earns for the same reason — something works,
+and less of it works than you would assume.
+_Avoid_: stable, tested (that is the suite, not the platform), official
+
+**Launcher**:
+Whatever puts `breakpoint` on a PATH, so the CLI can be reached without knowing where the
+app lives. The development launcher resolves the repo it sits in; the packaged launcher
+resolves the installed app. One term, two resolutions — never two names.
+_Avoid_: shim, wrapper, alias, CLI (the CLI is the surface; the launcher is only how it is
+reached)
+
 ### The site
 
 **Site**:

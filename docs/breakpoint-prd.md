@@ -597,7 +597,7 @@ This keeps the CLI from becoming a project of its own, and makes it the test har
 
 ## 14. Open questions
 
-1. Personal tool or open source from day one? Affects signing, notarisation, auto-update and naming.
+1. ~~Personal tool or open source from day one?~~ **Resolved: open source, MIT, from the first release.** Signing and notarisation are deferred rather than skipped — v0.1.0 ships unsigned and tells people what to type ([ADR-0017](adr/0017-releases-are-unsigned-and-say-so.md)); auto-update is not wired at all, and the `publish` config that would bake an updater URL into the app is deliberately absent until it is.
 2. Should the agent default to the developer's panes (shared view) or its own hidden workspace? v1 assumes shared; heavy agent use may make hidden the better default.
 3. Should Breakpoint ship agent rules (the agent guide in 7.2) and offer to add them to the project? Likely yes, and cheap.
 4. How much act capability is really needed in v1? Observe plus `navigate`, `reload` and `wait_for_settled` may cover most value, with click and type following once input sync (N8) has proven the locator and dispatch path.
