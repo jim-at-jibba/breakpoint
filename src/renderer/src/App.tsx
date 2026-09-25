@@ -23,8 +23,9 @@ interface ZoomPreview {
 
 // The shell, ahead of the real toolbar. The toolbar strip is the window's drag region
 // and clears the traffic lights; it names the open project and holds the one address bar
-// every pane follows. The body is the canvas once a project is open, and says what to do
-// when nothing is.
+// every pane follows. The body is the canvas once a project is open. With nothing open
+// the address bar is still there, because a window opened from the Dock has no repo to
+// greet you with — only a URL to ask for ([ADR-0015]).
 //
 // Quit stays in the toolbar as the renderer's end of the route table: the button causes
 // `app.quit` over typed IPC and a terminal causes the same route over the socket — one
@@ -116,17 +117,11 @@ export default function App(): React.JSX.Element {
         {/* The switcher is mounted whether or not a project is open: with nothing open it
             is the way in, and it names the open project when there is one. */}
         <ProjectSwitcher project={project} open={snapshot.switcher.open} />
-        {project ? (
-          <AddressBar
-            key={project.repoPath}
-            project={project}
-            onNavigate={(url) => invokeAction('project.navigate', { url })}
-          />
-        ) : (
-          <span className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-            {state.status === 'fetching' ? 'Loading project…' : 'No project open'}
-          </span>
-        )}
+        <AddressBar
+          key={draftKey(project)}
+          project={project}
+          onNavigate={(url) => invokeAction('project.navigate', { url })}
+        />
         {state.status === 'error' && (
           <>
             <span
@@ -140,7 +135,7 @@ export default function App(): React.JSX.Element {
             </Button>
           </>
         )}
-        {state.status === 'fetching' && snapshot && (
+        {state.status === 'fetching' && (
           <span
             role="status"
             className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]"
@@ -166,7 +161,7 @@ export default function App(): React.JSX.Element {
             <TrustedCertificates certificates={snapshot.certificates.trusted} />
             {project && (
               <>
-                <AllowedOrigins key={project.repoPath} project={project} />
+                <AllowedOrigins key={draftKey(project)} project={project} />
                 <AddPane />
                 <CanvasControls
                   project={project}
@@ -215,11 +210,22 @@ export default function App(): React.JSX.Element {
           </div>
           {!project && snapshot && (
             <p className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-              Run <code className="font-mono">breakpoint .</code> in a repo to open a project.
+              Type a URL above to see it in every pane.
             </p>
           )}
         </main>
       )}
     </div>
   )
+}
+
+/**
+ * What a control holding a draft of the open project's settings is keyed on, so a draft
+ * never outlives the project it was typed against. A project with no repo path has no
+ * identity to key on ([ADR-0015]), and there is only ever one of it: the next is always a
+ * repo project, or nothing.
+ */
+function draftKey(project: Project | null): string {
+  if (!project) return 'none'
+  return project.repoPath ?? 'ad-hoc'
 }

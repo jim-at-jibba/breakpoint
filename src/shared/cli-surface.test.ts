@@ -13,7 +13,7 @@ import {
 } from './cli-surface'
 import type { LogRead, ReadParams } from './event-log'
 import { foldPaneStatus } from './panes'
-import { createProject } from './project'
+import { createAdHocProject, createProject } from './project'
 import { paneStatusesFor, type StateSnapshot } from './state'
 import type { ThemeState } from './theme'
 /** The app theme every snapshot carries. Nothing in this file turns on its value. */
@@ -450,6 +450,26 @@ describe('the state as a terminal reads it', () => {
     )
   })
 
+  it('names a repo project by its path, and one without a repo as not saved', () => {
+    const render = (project: StateSnapshot['project']): string[] =>
+      (
+        state?.render({
+          revision: 3,
+          cursor: 9,
+          project,
+          panes: {},
+          certificates: { trusted: [], waiting: [] },
+          theme: DARK,
+          switcher: { open: false }
+        }) ?? ''
+      ).split('\n')
+
+    expect(render(shop)[0]).toMatch(/ shop \(\/repos\/shop\)$/)
+    expect(render(createAdHocProject('http://localhost:5173/'))[0]).toMatch(
+      / localhost:5173 \(no repo: not saved\)$/
+    )
+  })
+
   it('counts a pane’s errors, the way its header does', () => {
     const panes = paneStatusesFor(shop, {})
     panes[mobile.id] = foldPaneStatus(panes[mobile.id], { type: 'loadFailed' })
@@ -666,7 +686,7 @@ describe('certificate trust on the terminal', () => {
       switcher: { open: false }
     }
     expect(state?.render(snapshot)).toBe(
-      'No project is open. Run `breakpoint .` in a repo.\nCursor 9'
+      'No project is open. Run `breakpoint .` in a repo, or `breakpoint open <url>`.\nCursor 9'
     )
   })
 })

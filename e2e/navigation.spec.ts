@@ -7,7 +7,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { Navigation } from '../src/shared/routes'
 import type { StateSnapshot } from '../src/shared/state'
@@ -29,10 +29,10 @@ let launched: LaunchedApp | undefined
 let repos: string
 let fixture: Fixture
 
-function makeRepo(name: string, changes: Partial<Project> = {}): Project {
+function makeRepo(name: string, changes: Partial<StoredProject> = {}): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
     allowedOrigins: [new URL(fixture.a).origin],
@@ -49,7 +49,7 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   return project
 }
 
-async function open(project: Project): Promise<void> {
+async function open(project: StoredProject): Promise<void> {
   const run = await runCli(sandbox, ['.', '--json'], project.repoPath)
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)
@@ -68,7 +68,7 @@ async function logs(since = 0): Promise<Entry[]> {
 }
 
 /** Every pane loaded and attached, so a later navigation is the only thing moving. */
-async function settled(project: Project): Promise<void> {
+async function settled(project: StoredProject): Promise<void> {
   await expect
     .poll(
       async () => {
@@ -100,7 +100,7 @@ function inGuest<T>(app: LaunchedApp['app'], id: number, script: string): Promis
 }
 
 /** Where each pane's page actually is, asked of the page. */
-async function paneUrls(page: Page, project: Project): Promise<string[]> {
+async function paneUrls(page: Page, project: StoredProject): Promise<string[]> {
   const app = launched!.app
   return Promise.all(
     project.panes.map(async (pane) =>
@@ -110,7 +110,7 @@ async function paneUrls(page: Page, project: Project): Promise<string[]> {
 }
 
 /** Polls until every pane's page is `url`, which is what "navigates every pane" means. */
-async function expectPanesAt(page: Page, project: Project, url: string): Promise<void> {
+async function expectPanesAt(page: Page, project: StoredProject, url: string): Promise<void> {
   await expect
     .poll(() => paneUrls(page, project), { timeout: 20_000 })
     .toEqual(project.panes.map(() => url))

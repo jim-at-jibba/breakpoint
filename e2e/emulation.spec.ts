@@ -9,7 +9,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { RevisionedPatch, StateSnapshot } from '../src/shared/state'
 import {
@@ -42,10 +42,10 @@ let launched: LaunchedApp | undefined
 let repos: string
 let fixture: Fixture
 
-function makeRepo(name: string, changes: Partial<Project> = {}): Project {
+function makeRepo(name: string, changes: Partial<StoredProject> = {}): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
     // Drawn at 100% unless a test says otherwise: what emulation does is not the canvas's.
@@ -61,7 +61,7 @@ function makeRepo(name: string, changes: Partial<Project> = {}): Project {
   return project
 }
 
-async function open(project: Project): Promise<void> {
+async function open(project: StoredProject): Promise<void> {
   const run = await runCli(sandbox, ['.', '--json'], project.repoPath)
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)
@@ -93,7 +93,7 @@ const ALL_APPLIED: PaneStatus['emulation'] = {
 }
 
 /** Every pane loaded, attached, measured, and emulation reported one way or the other. */
-async function settled(project: Project): Promise<void> {
+async function settled(project: StoredProject): Promise<void> {
   await expect
     .poll(
       async () => {

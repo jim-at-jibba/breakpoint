@@ -76,9 +76,29 @@ export function salvageProjectIdentity(raw: unknown): {
  * `node:path` to ask which one the platform uses.
  */
 export function shortenRepoPath(repoPath: string): string {
-  const segments = repoPath.split(/[\\/]+/).filter((segment) => segment !== '')
+  const segments = repoPathSegments(repoPath)
   if (segments.length === 0) return repoPath
-  return segments.slice(-2).join(repoPath.includes('\\') ? '\\' : '/')
+  return segments.slice(-2).join(separatorOf(repoPath))
+}
+
+/**
+ * The segment above a repo path's directory, with the separator that joins them, or null
+ * when there is none. What the toolbar draws before the open project's name: the name
+ * is the directory, and under git worktrees it is this segment that says which repo the
+ * checkout belongs to (#31). `shortenRepoPath` is this followed by the directory.
+ */
+export function repoPathParent(repoPath: string): string | null {
+  const segments = repoPathSegments(repoPath)
+  if (segments.length < 2) return null
+  return `${segments.at(-2)}${separatorOf(repoPath)}`
+}
+
+function repoPathSegments(repoPath: string): string[] {
+  return repoPath.split(/[\\/]+/).filter((segment) => segment !== '')
+}
+
+function separatorOf(repoPath: string): string {
+  return repoPath.includes('\\') ? '\\' : '/'
 }
 
 /**

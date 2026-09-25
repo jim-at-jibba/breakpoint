@@ -8,7 +8,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import { snapshotReadiness as readiness, type StateSnapshot } from '../src/shared/state'
 import { startFixture, type Fixture } from './fixture'
@@ -36,11 +36,11 @@ let launched: LaunchedApp | undefined
 let repos: string
 let fixture: Fixture
 
-function makeRepo(name: string, startUrl: string): Project {
+function makeRepo(name: string, startUrl: string): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
   // Drawn at 100%: what zoom does to a pane is #13's spec, not this one's.
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl,
     allowedOrigins: [new URL(startUrl).origin],

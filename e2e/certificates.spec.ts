@@ -8,7 +8,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { createAuthority, issueCertificate, type TestCertificate } from './certificates'
@@ -40,10 +40,10 @@ async function serve(certificate: TestCertificate, host = 'localhost'): Promise<
   return fixture
 }
 
-function makeRepo(name: string, startUrl: string): Project {
+function makeRepo(name: string, startUrl: string): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl,
     allowedOrigins: [new URL(startUrl).origin],
@@ -58,7 +58,7 @@ function makeRepo(name: string, startUrl: string): Project {
   return project
 }
 
-async function open(project: Project): Promise<void> {
+async function open(project: StoredProject): Promise<void> {
   const run = await runCli(sandbox, ['.', '--json'], project.repoPath)
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)
@@ -81,7 +81,7 @@ async function logs(since = 0): Promise<Entry[]> {
 }
 
 /** Every pane of the project finished loading `url`, which is what "loads" means here. */
-async function expectPanesLoaded(project: Project, url: string): Promise<void> {
+async function expectPanesLoaded(project: StoredProject, url: string): Promise<void> {
   await expect
     .poll(
       async () => {

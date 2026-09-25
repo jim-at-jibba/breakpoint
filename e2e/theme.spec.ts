@@ -14,7 +14,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import { ROUTE_CHANNEL } from '../src/shared/ipc'
 import type { StateSnapshot } from '../src/shared/state'
@@ -61,10 +61,10 @@ function storedSettings(): unknown {
  * 100%: these cases need panes that actually load a page, because what the page makes of
  * the app's theme is the thing under test.
  */
-function makeRepo(name: string): Project {
+function makeRepo(name: string): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = {
+  const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
     startUrl: `${fixture.a}/`,
     zoom: 100
@@ -100,7 +100,7 @@ function guestPrefersDark(app: LaunchedApp['app'], id: number): Promise<boolean>
 }
 
 /** Every pane loaded, attached, measured and emulating what it declares. */
-async function settled(project: Project): Promise<void> {
+async function settled(project: StoredProject): Promise<void> {
   await expect
     .poll(async () => {
       const panes = (await snapshot()).panes
@@ -122,7 +122,7 @@ async function snapshot(): Promise<StateSnapshot> {
   return JSON.parse(run.stdout) as StateSnapshot
 }
 
-async function openProject(project: Project): Promise<void> {
+async function openProject(project: StoredProject): Promise<void> {
   const run = await runCli(sandbox, ['.'], project.repoPath)
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)

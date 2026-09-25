@@ -12,7 +12,7 @@ import {
   createProject,
   projectFileName,
   writeProjectFile,
-  type Project
+  type StoredProject
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { HIT_TARGET, startFixture, type Fixture } from './fixture'
@@ -42,15 +42,19 @@ let fixture: Fixture
  * load. Drawn at 100%: what zoom does to a pane is #13's spec, and every assertion here
  * is about the pane rather than about the canvas it sits on.
  */
-function makeRepo(name: string, startUrl: string): Project {
+function makeRepo(name: string, startUrl: string): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
-  const project: Project = { ...createProject(realpathSync.native(path)), startUrl, zoom: 100 }
+  const project: StoredProject = {
+    ...createProject(realpathSync.native(path)),
+    startUrl,
+    zoom: 100
+  }
   saveProject(project)
   return project
 }
 
-function saveProject(project: Project): void {
+function saveProject(project: StoredProject): void {
   const projects = join(sandbox.userDataDir, 'projects')
   mkdirSync(projects, { recursive: true })
   writeFileSync(
@@ -59,7 +63,7 @@ function saveProject(project: Project): void {
   )
 }
 
-async function open(project: Project): Promise<StateSnapshot> {
+async function open(project: StoredProject): Promise<StateSnapshot> {
   const run = await runCli(sandbox, ['.', '--json'], project.repoPath)
   expect(run.stderr).toBe('')
   expect(run.code).toBe(0)
@@ -85,7 +89,7 @@ function ofType(entries: Entry[], type: Entry['type'], pane?: string): Entry[] {
 }
 
 /** Waits until every pane has loaded and has been attached to or given up on. */
-async function settled(project: Project): Promise<void> {
+async function settled(project: StoredProject): Promise<void> {
   await expect
     .poll(
       async () => {
@@ -652,7 +656,7 @@ test('unknown and prototype-named pane ids return PANE_NOT_FOUND without changin
 test('guest permission checks and requests are denied on shared and isolated sessions', async () => {
   launched = await launchApp(sandbox)
   const original = makeRepo('shop', `${fixture.a}/`)
-  const shop: Project = {
+  const shop: StoredProject = {
     ...original,
     sessions: [...original.sessions, { id: 'isolated', name: 'Isolated' }],
     panes: original.panes.map((pane, index) =>

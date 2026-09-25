@@ -4,7 +4,7 @@ import {
   projectFileName,
   readProjectFile,
   writeProjectFile,
-  type Project,
+  type StoredProject,
   type ReadProjectResult,
   type RefusalReason
 } from '../../shared/project'
@@ -21,7 +21,7 @@ import {
  */
 
 export type LoadResult =
-  | { status: 'loaded'; project: Project }
+  | { status: 'loaded'; project: StoredProject }
   | { status: 'missing' }
   | { status: 'refused'; reason: RefusalReason; message: string; file: string }
 
@@ -30,7 +30,7 @@ const PROJECT_FILE_EXTENSION = '.json'
 
 /** One file read and parsed, before a caller decides what its refusal means. */
 type FileRead =
-  | { status: 'loaded'; project: Project }
+  | { status: 'loaded'; project: StoredProject }
   | { status: 'missing' }
   /** `raw` is what parsed as JSON, for salvaging an identity out of a file that is not a project. */
   | { status: 'refused'; reason: RefusalReason; message: string; raw: unknown }
@@ -163,7 +163,7 @@ export class ProjectStore {
    * Written beside the target and renamed over it, so a crash mid-write leaves the old
    * file rather than half of the new one.
    */
-  async save(project: Project): Promise<void> {
+  async save(project: StoredProject): Promise<void> {
     await mkdir(this.directory, { recursive: true })
     const file = this.fileFor(project.repoPath)
     const partial = `${file}.${process.pid}.tmp`
