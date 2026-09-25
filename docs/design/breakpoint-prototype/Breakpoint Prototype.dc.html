@@ -51,40 +51,53 @@
       </div>
 
       <button type="button" onClick="{{ openProjects }}" style="-webkit-app-region: no-drag; font: inherit; font-size: 12px; display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--bp-border-strong); background: var(--bp-chrome-sunken); color: var(--bp-ink); cursor: pointer; flex: none;">
-        <span style="width: 7px; height: 7px; border-radius: 1px; background: var(--bp-success);"></span>
-        <span style="font-weight: 500;">atlas-web</span>
-        <span style="color: var(--bp-ink-faint); font-family: var(--bp-font-mono); font-size: 10px;">:3000</span>
+        <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+          <span style="width: 7px; height: 7px; border-radius: 1px; background: var(--bp-success);"></span>
+          <span style="font-weight: 500;">atlas-web</span>
+          <span style="color: var(--bp-ink-faint); font-family: var(--bp-font-mono); font-size: 10px;">:3000</span>
+        </sc-if>
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <span style="font-weight: 500;">Projects</span>
+        </sc-if>
         <span style="color: var(--bp-ink-faint); font-size: 9px; margin-left: 2px;">▾</span>
       </button>
 
-      <div style="display: flex; align-items: center; gap: 1px; flex: none;">
-        <sc-for list="{{ navBtns }}" as="n" hint-placeholder-count="3">
-          <button type="button" title="{{ n.title }}" style="-webkit-app-region: no-drag; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: {{ n.fg }}; cursor: pointer; font-size: 13px; font-family: var(--bp-font-ui);" style-hover="background: var(--bp-hover);">{{ n.g }}</button>
-        </sc-for>
-      </div>
+      <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; align-items: center; gap: 1px; flex: none;">
+          <sc-for list="{{ navBtns }}" as="n" hint-placeholder-count="3">
+            <button type="button" title="{{ n.title }}" style="-webkit-app-region: no-drag; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 4px; background: transparent; color: {{ n.fg }}; cursor: pointer; font-size: 13px; font-family: var(--bp-font-ui);" style-hover="background: var(--bp-hover);">{{ n.g }}</button>
+          </sc-for>
+        </div>
+      </sc-if>
 
       <div style="-webkit-app-region: no-drag; flex: 1 1 auto; min-width: 120px; max-width: 620px; height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: 4px; border: 1px solid {{ addrBorder }}; background: var(--bp-chrome-sunken);">
-        <span style="color: var(--bp-success); font-size: 10px;">●</span>
-        <span data-selectable="true" style="font-family: var(--bp-font-mono); font-size: 13px; color: var(--bp-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ address }}</span>
-        <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint); flex: none;">6 panes</span>
+        <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+          <span style="color: var(--bp-success); font-size: 10px;">●</span>
+        </sc-if>
+        <span data-selectable="true" style="font-family: var(--bp-font-mono); font-size: 13px; color: {{ addressFg }}; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ address }}</span>
+        <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+          <span style="margin-left: auto; font-family: var(--bp-font-mono); font-size: 10px; color: var(--bp-ink-faint); flex: none;">6 panes</span>
+        </sc-if>
       </div>
 
-      <button type="button" onClick="{{ toggleSync }}" title="Sync scroll, clicks and navigation across panes" style="-webkit-app-region: no-drag; font: inherit; font-size: 11px; display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid {{ syncBorder }}; background: {{ syncBg }}; color: {{ syncFg }}; cursor: pointer; flex: none;">
-        <span style="font-size: 12px; line-height: 1;">⇄</span><span>Sync</span>
-      </button>
+      <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+        <button type="button" onClick="{{ toggleSync }}" title="Sync scroll, clicks and navigation across panes" style="-webkit-app-region: no-drag; font: inherit; font-size: 11px; display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: 4px; border: 1px solid {{ syncBorder }}; background: {{ syncBg }}; color: {{ syncFg }}; cursor: pointer; flex: none;">
+          <span style="font-size: 12px; line-height: 1;">⇄</span><span>Sync</span>
+        </button>
 
-      <div style="display: flex; align-items: center; gap: 1px; padding: 2px; border-radius: 4px; background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); flex: none;">
-        <sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
-          <button type="button" onClick="{{ m.on }}" style="-webkit-app-region: no-drag; font: inherit; font-size: 11px; height: 20px; padding: 0 8px; border: 0; border-radius: 3px; cursor: pointer; background: {{ m.bg }}; color: {{ m.fg }};">{{ m.t }}</button>
-        </sc-for>
-      </div>
+        <div style="display: flex; align-items: center; gap: 1px; padding: 2px; border-radius: 4px; background: var(--bp-chrome-sunken); border: 1px solid var(--bp-border); flex: none;">
+          <sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
+            <button type="button" onClick="{{ m.on }}" style="-webkit-app-region: no-drag; font: inherit; font-size: 11px; height: 20px; padding: 0 8px; border: 0; border-radius: 3px; cursor: pointer; background: {{ m.bg }}; color: {{ m.fg }};">{{ m.t }}</button>
+          </sc-for>
+        </div>
 
-      <div class="bpr" style="-webkit-app-region: no-drag; display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--bp-border); background: var(--bp-chrome-sunken); flex: none;">
-        <input type="range" min="25" max="100" step="5" value="{{ zoom }}" onChange="{{ onZoom }}" onInput="{{ onZoom }}" style="width: 76px;">
-        <span style="font-family: var(--bp-font-mono); font-size: 11px; color: var(--bp-ink-muted); width: 30px; text-align: right;">{{ zoomLabel }}</span>
-      </div>
+        <div class="bpr" style="-webkit-app-region: no-drag; display: flex; align-items: center; gap: 7px; height: 26px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--bp-border); background: var(--bp-chrome-sunken); flex: none;">
+          <input type="range" min="25" max="100" step="5" value="{{ zoom }}" onChange="{{ onZoom }}" onInput="{{ onZoom }}" style="width: 76px;">
+          <span style="font-family: var(--bp-font-mono); font-size: 11px; color: var(--bp-ink-muted); width: 30px; text-align: right;">{{ zoomLabel }}</span>
+        </div>
 
-      <button type="button" title="Add pane" style="-webkit-app-region: no-drag; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--bp-border-strong); border-radius: 4px; background: transparent; color: var(--bp-ink-muted); cursor: pointer; font-size: 14px; flex: none;" style-hover="background: var(--bp-hover); color: var(--bp-ink);">+</button>
+        <button type="button" title="Add pane" style="-webkit-app-region: no-drag; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid var(--bp-border-strong); border-radius: 4px; background: transparent; color: var(--bp-ink-muted); cursor: pointer; font-size: 14px; flex: none;" style-hover="background: var(--bp-hover); color: var(--bp-ink);">+</button>
+      </sc-if>
     </div>
 
     <!-- ------------------------ CANVAS + PANEL -------------------------- -->
@@ -93,17 +106,12 @@
       <div class="bpx" style="flex: 1 1 auto; min-width: 0; min-height: 0; overflow: auto; background: var(--bp-canvas); background-image: linear-gradient(90deg, var(--bp-canvas-grid) 1px, transparent 1px); background-size: 96px 100%; position: relative;">
 
         <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
-          <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0 clamp(24px, 8vw, 120px); gap: 14px;">
-            <div style="font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--bp-ink-faint);">No project open</div>
-            <div style="font-size: 20px; font-weight: 500; letter-spacing: -0.01em;">Open a local repo to start rendering it.</div>
-            <div style="display: flex; gap: 8px; margin-top: 2px;">
-              <button type="button" onClick="{{ exitEmpty }}" style="font: inherit; font-size: 12px; height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--bp-accent); background: transparent; color: var(--bp-accent-ink); cursor: pointer;">Open project…</button>
-              <button type="button" onClick="{{ openPalette }}" style="font: inherit; font-size: 12px; height: 28px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--bp-border-strong); background: transparent; color: var(--bp-ink); cursor: pointer;">Recent ⌘P</button>
+          <div style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--bp-space-4);">
+            <div style="display: flex; align-items: center; gap: var(--bp-space-2);">
+              <span style="width: var(--bp-space-2); height: var(--bp-space-2); border-radius: var(--bp-radius-xs); background: var(--bp-pane-1);"></span>
+              <span style="font-family: var(--bp-font-mono); font-size: var(--bp-text-lg); color: var(--bp-ink);">breakpoint</span>
             </div>
-            <div style="margin-top: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 11.5px; color: var(--bp-ink-faint);">
-              <span style="font-family: var(--bp-font-mono);">$ breakpoint open ~/src/atlas-web</span>
-              <span style="font-family: var(--bp-font-mono);">$ breakpoint pane add mobile --url /checkout</span>
-            </div>
+            <span style="font-size: var(--bp-text-sm); color: var(--bp-ink-faint);">Type a URL above to see it in every pane.</span>
           </div>
         </sc-if>
 
@@ -181,7 +189,8 @@
         </sc-if>
       </div>
 
-      <div style="flex: none; display: flex; flex-direction: column; background: var(--bp-chrome); border-top: {{ panelBorderTop }}; border-left: {{ panelBorderLeft }}; height: {{ panelH }}; width: {{ panelW }}; min-height: 0;">
+      <sc-if value="{{ hasPanes }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: none; display: flex; flex-direction: column; background: var(--bp-chrome); border-top: {{ panelBorderTop }}; border-left: {{ panelBorderLeft }}; height: {{ panelH }}; width: {{ panelW }}; min-height: 0;">
 
         <div style="height: 30px; flex: none; display: flex; align-items: stretch; gap: 0; border-bottom: 1px solid var(--bp-border); padding: 0 6px 0 0;">
           <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
@@ -282,7 +291,8 @@
             </sc-for>
           </div>
         </sc-if>
-      </div>
+        </div>
+      </sc-if>
 
     </div>
 
@@ -586,7 +596,8 @@ class Component extends DCLogic {
       zoom: s.zoom,
       zoomLabel: this.effectiveZoom() + '%',
       onZoom: (e) => this.setState({ zoom: Number(e.target.value), mode: 'horizontal' }),
-      address: 'localhost:3000/checkout?step=payment',
+      address: s.empty ? 'localhost:3000, or any URL' : 'localhost:3000/checkout?step=payment',
+      addressFg: s.empty ? 'var(--bp-ink-faint)' : 'var(--bp-ink)',
       addrBorder: 'var(--bp-border-strong)',
       toggleSync: () => this.set('sync', !s.sync),
       syncBg: s.sync ? 'var(--bp-accent-wash)' : 'var(--bp-chrome-sunken)',
@@ -594,8 +605,6 @@ class Component extends DCLogic {
       syncBorder: s.sync ? 'var(--bp-accent)' : 'var(--bp-border)',
       dockDir: s.dock === 'bottom' ? 'column' : 'row',
       openProjects: () => this.set('overlay', 'projects'),
-      openPalette: () => this.set('overlay', 'palette'),
-      exitEmpty: () => this.setState({ empty: false }),
 
       navBtns: [
         { g: '←', title: 'Back', fg: 'var(--bp-ink)' },

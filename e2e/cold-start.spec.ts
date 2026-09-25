@@ -1,8 +1,23 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
-import type { Project } from '../src/shared/project'
+import {
+  createProject,
+  projectFileName,
+  writeProjectFile,
+  type Project,
+  type StoredProject
+} from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
 import { startFixture, type Fixture } from './fixture'
 import { closeApp, launchApp, runCli, Sandbox, type LaunchedApp } from './harness'
@@ -30,6 +45,14 @@ async function state(): Promise<StateSnapshot> {
 function projectFiles(): string[] {
   const directory = join(sandbox.userDataDir, 'projects')
   return existsSync(directory) ? readdirSync(directory) : []
+}
+
+function saveProject(project: StoredProject): string {
+  const directory = join(sandbox.userDataDir, 'projects')
+  mkdirSync(directory, { recursive: true })
+  const file = join(directory, projectFileName(project.repoPath))
+  writeFileSync(file, `${JSON.stringify(writeProjectFile(project), null, 2)}\n`)
+  return file
 }
 
 async function paneUrls(page: Page, project: Project): Promise<string[]> {
@@ -114,6 +137,30 @@ test('`breakpoint open <url>` with nothing open opens the same project, and quit
   await closeApp(launched)
   launched = await launchApp(sandbox)
   expect((await state()).project).toBeNull()
+})
+
+test('a typed URL never matches a stored project that points at the same place', async () => {
+  const repo = join(repos, 'matching-url')
+  mkdirSync(repo, { recursive: true })
+  const stored: StoredProject = {
+    ...createProject(realpathSync.native(repo)),
+    startUrl: `${fixture.a}/same`,
+    allowedOrigins: [fixture.a]
+  }
+  const storedFile = saveProject(stored)
+  const before = readFileSync(storedFile, 'utf8')
+
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const address = page.getByTestId('project-url')
+  await address.fill(stored.startUrl)
+  await address.press('Enter')
+
+  const { project } = await state()
+  expect(project).toMatchObject({ repoPath: null, startUrl: stored.startUrl })
+  await expectPanesAt(page, project!, stored.startUrl)
+  expect(projectFiles()).toEqual([projectFileName(stored.repoPath)])
+  expect(readFileSync(storedFile, 'utf8')).toBe(before)
 })
 
 test('opening a repo replaces an unsaved project, and names the checkout it came from', async () => {
