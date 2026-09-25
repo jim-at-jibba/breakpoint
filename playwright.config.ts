@@ -13,6 +13,8 @@ export default defineConfig({
   workers: 1,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  timeout: 60_000,
+  // Scaled by the same factor as the harness's own deadlines (e2e/harness.ts PATIENCE).
+  // Without this the per-test timeout fires first and the scaling buys nothing.
+  timeout: process.env.CI ? 180_000 : 60_000,
   reporter: process.env.CI ? 'github' : 'list'
 })

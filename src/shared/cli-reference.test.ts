@@ -174,17 +174,25 @@ function docsPages(directory: string): string[] {
   })
 }
 
-describe("the Docs' examples", () => {
-  const pages = docsPages(DOCS)
+/**
+ * The README is the GitHub front door and carries its own `breakpoint` examples, so it is
+ * held to the same parser as the Docs. Nothing else at the repo root is: CONTRIBUTING.md
+ * and AGENTS.md talk *about* the CLI rather than demonstrating it.
+ */
+const README = fileURLToPath(new URL('../../README.md', import.meta.url))
 
-  it('are read from every page, the reference and the quickstart among them', () => {
-    expect(pages).toEqual(expect.arrayContaining([CLI_REFERENCE, join(DOCS, 'docs/quickstart.md')]))
+describe("the Docs' examples", () => {
+  const pages = [...docsPages(DOCS), README]
+
+  it('are read from every page, the reference, the quickstart and the README among them', () => {
+    expect(pages).toEqual(
+      expect.arrayContaining([CLI_REFERENCE, join(DOCS, 'docs/quickstart.md'), README])
+    )
   })
 
-  it.each(pages.map((path) => [path.slice(DOCS.length), path]))(
-    'in %s all run against the CLI as it stands',
-    (_page, path) => {
-      expect(brokenExamples(readFileSync(path, 'utf8'))).toEqual([])
-    }
-  )
+  it.each(
+    pages.map((path) => [path.startsWith(DOCS) ? path.slice(DOCS.length) : 'README.md', path])
+  )('in %s all run against the CLI as it stands', (_page, path) => {
+    expect(brokenExamples(readFileSync(path, 'utf8'))).toEqual([])
+  })
 })

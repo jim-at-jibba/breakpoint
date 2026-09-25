@@ -43,9 +43,28 @@ export class Sandbox {
 
   dispose(): void {
     // A just-quit app is still flushing its caches into here, so removal races it.
-    rmSync(this.userDataDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })
+    rmSync(this.userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 20 * PATIENCE,
+      retryDelay: 100
+    })
   }
 }
+
+/**
+ * How much longer than a developer machine this run is allowed to take.
+ *
+ * Every deadline in this harness waits on an Electron launch, quit or cache flush, and a
+ * GitHub runner is slower and more contended than the machine the constants were tuned on
+ * — the same suite takes 8.2 minutes there against 3m43s here. Scaling them together
+ * keeps local runs tight, so a real regression still surfaces as a failure rather than
+ * hiding inside a deadline generous enough for the worst case.
+ *
+ * `playwright.config.ts` scales the per-test timeout by the same factor. It has to: a
+ * scaled wait inside a test that is killed at 60s would never get to time out on its own.
+ */
+export const PATIENCE = process.env.CI ? 3 : 1
 
 export interface LaunchedApp {
   app: ElectronApplication
@@ -105,7 +124,7 @@ export function isRunning(sandbox: Sandbox): boolean {
 }
 
 /** Resolves when the app's process is gone, whatever quit it. */
-export function waitForExit(launched: LaunchedApp, timeoutMs = 15_000): Promise<void> {
+export function waitForExit(launched: LaunchedApp, timeoutMs = 15_000 * PATIENCE): Promise<void> {
   const child = launched.app.process()
   if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
 
@@ -187,7 +206,7 @@ export function requestLine(route: string, params?: unknown): string {
 export async function waitFor(
   condition: () => boolean | Promise<boolean>,
   what: string,
-  timeoutMs = 20_000
+  timeoutMs = 20_000 * PATIENCE
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {

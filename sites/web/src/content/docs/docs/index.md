@@ -13,15 +13,16 @@ console output and real layout at every breakpoint, in the window you are alread
 watching.
 
 :::caution[Pre-release]
-Breakpoint is in active development and there is no packaged build yet. These docs
-describe what currently exists, not the finished product. Sections for features that
+Breakpoint v0.1.0 is **Phase 1 of 7**. Panes, emulation, presets, layouts, projects and the
+CLI foundations are built; the console, sync, screenshots and layout checks are not. These
+docs describe what currently exists, not the finished product. Sections for features that
 have not been built are absent rather than aspirational.
 :::
 
 ## Where to start
 
-- **[Install](/docs/install/)** — building from source, which is currently the only way
-  to run it.
+- **[Install](/docs/install/)** — download it, get past Gatekeeper, and put the CLI on
+  your `PATH`.
 - **[Quickstart](/docs/quickstart/)** — open a project and get panes on screen.
 - **[CLI reference](/docs/cli/)** — the commands that exist today.
 
