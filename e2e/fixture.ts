@@ -24,6 +24,8 @@ import type { AddressInfo } from 'node:net'
  * - a swatch, `#scheme`, pinned top-right: `SCHEME_SWATCH.light` unless the page is told
  *   it prefers dark, then `SCHEME_SWATCH.dark`, for reading the scheme off the raster.
  *
+ * `/console` is a different page, for console capture: see `consolePage`.
+ *
  * Every request either origin answers is recorded with its headers, which is what a
  * server doing device detection would see.
  *
@@ -139,6 +141,41 @@ function page(origin: string, other: string): string {
 `
 }
 
+/**
+ * The page console capture is proved against, at `/console`. Its first script logs at
+ * every level before anything else on the page has run; `/console.js` then throws, rejects,
+ * and asks the other origin for something it will not share, which the browser reports as
+ * a CORS failure of its own.
+ */
+function consolePage(other: string): string {
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>console</title>
+<script>
+  console.log('first %s', 'words', 42, { id: 7, name: 'Ada' }, [1, 2]);
+  console.debug('at debug');
+  console.info('at info');
+  console.warn('at warn');
+  console.error('at error');
+</script>
+<script src="/console.js" data-other="${other}"></script>
+</head>
+<body><p>console</p></body>
+</html>
+`
+}
+
+const CONSOLE_SCRIPT = `const other = document.currentScript.dataset.other;
+function explode() {
+  throw new TypeError('thrown at every width');
+}
+setTimeout(explode, 0);
+Promise.reject(new Error('nobody caught this'));
+fetch(other + '/not-shared').catch(() => {});
+`
+
 function asset(scale: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><text y="12">${scale}</text></svg>`
 }
@@ -159,6 +196,15 @@ function respond(
     if (target.pathname === '/asset') {
       response.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' })
       response.end(asset(target.searchParams.get('x') ?? '?'))
+      return
+    }
+    if (target.pathname === '/console' || target.pathname === '/console.js') {
+      const script = target.pathname === '/console.js'
+      response.writeHead(200, {
+        'content-type': script ? 'text/javascript' : 'text/html; charset=utf-8',
+        'cache-control': 'no-store'
+      })
+      response.end(script ? CONSOLE_SCRIPT : consolePage(other()))
       return
     }
     if (target.pathname === '/redirect') {

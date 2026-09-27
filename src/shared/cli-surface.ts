@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { focusedPaneOf } from './canvas'
 import { describeCertificateTrustReason, type CertificateState } from './certificates'
-import { isCursorPosition, type Entry, type LogRead } from './event-log'
+import { isCursorPosition, type Entry, type LogRead, type SourceLocation } from './event-log'
 import { formatDpr } from './pane-header'
 import { describeDegradation, type LoadState } from './panes'
 import { looksLikePath } from './paths'
@@ -319,7 +319,23 @@ function describeEntry(entry: Entry): string {
       return `${entry.capability} emulated again`
     case 'pane.destroyed':
       return 'destroyed'
+    case 'console.message': {
+      const source = entry.source === 'console' ? '' : ` [${entry.source}]`
+      const about = entry.url ? ` (${entry.url})` : ''
+      return `${entry.level}${source} ${indented(entry.text)}${about}${describeLocation(entry.location)}`
+    }
+    case 'console.exception':
+      return `error ${indented(entry.text)}${describeLocation(entry.location)}`
   }
+}
+
+/** Continuation lines are indented, so every line that starts at the margin is a cursor. */
+function indented(text: string): string {
+  return text.replace(/\n/g, '\n    ')
+}
+
+function describeLocation(location: SourceLocation | null): string {
+  return location ? ` at ${location.url}:${location.line}:${location.column}` : ''
 }
 
 export interface CliOptions {

@@ -685,3 +685,36 @@ describe('counting a pane’s errors', () => {
     expect(panes.statuses()[mobile.id].errors).toBe(0)
   })
 })
+
+describe("hearing a pane's console", () => {
+  const message = {
+    type: 'console.message',
+    level: 'error',
+    source: 'console',
+    text: 'boom',
+    args: ['boom'],
+    url: null,
+    location: null,
+    stack: []
+  } as const
+
+  it('records what the page said against the pane', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.console(mobile.id, message)
+
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({ ...message, pane: mobile.id })
+    ])
+  })
+
+  it('says nothing for a pane the open project no longer has', async () => {
+    await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.console('gone', message)
+
+    expect(log.read({ since: cursor }).entries).toEqual([])
+  })
+})

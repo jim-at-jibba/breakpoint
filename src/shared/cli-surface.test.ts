@@ -398,6 +398,72 @@ describe('the log as a terminal reads it', () => {
     ])
   })
 
+  it("prints a page's console, its exceptions and the browser's messages against their pane", () => {
+    const app = 'http://localhost:3000/src/App.tsx'
+    const at = { url: app, line: 4, column: 11, resolution: 'failed' } as const
+    const text = render({
+      entries: [
+        {
+          cursor: 10,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.message',
+          level: 'warn',
+          source: 'console',
+          text: 'slow render',
+          args: ['slow render'],
+          url: null,
+          location: at,
+          stack: [{ ...at, function: 'render' }]
+        },
+        {
+          cursor: 11,
+          time: 0,
+          pane: 'p-2',
+          type: 'console.message',
+          level: 'error',
+          source: 'network',
+          text: 'Failed to load resource: net::ERR_FAILED',
+          args: [],
+          url: 'http://127.0.0.1:4000/data.json',
+          location: null,
+          stack: []
+        },
+        {
+          cursor: 12,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.exception',
+          rejection: false,
+          text: 'Uncaught TypeError: nope\n  second line',
+          error: 'TypeError: nope\n  second line',
+          location: at,
+          stack: []
+        },
+        {
+          cursor: 13,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.exception',
+          rejection: true,
+          text: 'Uncaught (in promise) no session',
+          error: 'no session',
+          location: null,
+          stack: []
+        }
+      ],
+      cursor: 13
+    })
+    expect(text.split('\n')).toEqual([
+      `10  p-1  warn slow render at ${app}:4:11`,
+      '11  p-2  error [network] Failed to load resource: net::ERR_FAILED (http://127.0.0.1:4000/data.json)',
+      // A multi-line message stays under its own cursor.
+      '12  p-1  error Uncaught TypeError: nope',
+      `      second line at ${app}:4:11`,
+      '13  p-1  error Uncaught (in promise) no session'
+    ])
+  })
+
   it('says what was evicted before what it is about to print', () => {
     const text = render({
       entries: [

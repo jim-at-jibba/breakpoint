@@ -1,4 +1,5 @@
 import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
+import { CONSOLE_DOMAINS, ConsoleCapture } from '../shared/console'
 import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
@@ -14,6 +15,9 @@ import type { StateFeed } from './state-feed'
  * Pane content has no IPC channel: everything the app learns about a page arrives over
  * the attachment, which the page cannot see or spoof. What the host observes it reports
  * to the pane service by pane id.
+ *
+ * Console capture is the attachment's other job: `Runtime` and `Log` are enabled on it, and
+ * nothing else ([ADR-0019]), and every message it hears goes to the pane service.
  *
  * Emulation travels over the attachment too, and is applied on attach, on every
  * main-frame navigation, and when a pane's declared values change — never on a renderer
@@ -308,7 +312,20 @@ export class PaneHost {
     }
     this.attachments.add(guest)
     guest.debugger.once('detach', () => this.attachments.delete(guest))
+    // Listening before any override is sent, so a refused one cannot cost the pane its
+    // console (#4, ADR-0019): a degraded pane that renders is visible, and one that
+    // silently reports nothing is not.
+    const capture = new ConsoleCapture()
+    guest.debugger.on('message', (_event, method: string, params: unknown) => {
+      const body = capture.hear(method, params)
+      if (body && this.isCurrent(pane, guest)) this.panes.console(pane, body)
+    })
     this.panes.attached(pane, attempt)
+    // On either attempt: `Runtime.enable` replays what the page logged before it, and on
+    // the retry that is everything since the page's own scripts started.
+    for (const method of CONSOLE_DOMAINS) {
+      void guest.debugger.sendCommand(method).catch(() => undefined)
+    }
     await this.emulate(pane, guest)
   }
 

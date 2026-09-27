@@ -306,7 +306,8 @@ shortened fields, such as `"truncated": ["path", "message"]`. Human output inclu
 is separate from `droppedBefore`, which reports evicted entries, and the entry's cursor
 still lets a reader continue past it.
 
-What the log carries today is the app's own changes and failures, and pane lifecycle.
+What the log carries today is the app's own changes and failures, pane lifecycle, and what
+each pane's page says.
 The app's own entries carry `"pane": null`:
 
 | `type` | Fields | When |
@@ -336,8 +337,39 @@ Pane entries are tagged with the pane's `id`:
 | `pane.destroyed` | none | The pane's page went away: the pane was removed, or another project opened |
 
 `url` is shortened like `path` and `message` when it is long, and named in `truncated`.
-Every other producer — navigation, emulation, the console, network — arrives with the
-feature that observes it, in this same payload and on this same cursor.
+
+Each pane's page is heard too. Its console calls, its uncaught exceptions and unhandled
+rejections, and the browser's own messages about it — CORS, CSP, mixed content, failed
+requests, deprecations — arrive tagged with the pane, including anything logged before the
+page's own scripts ran:
+
+| `type` | Fields | When |
+| --- | --- | --- |
+| `console.message` | `level`, `source`, `text`, `args`, `url`, `location`, `stack` | The page called `console.*`, or the browser said something about the page |
+| `console.exception` | `rejection`, `text`, `error`, `location`, `stack` | Something was thrown and not caught, or a promise was rejected with no handler (`rejection: true`) |
+
+`level` is one of `debug`, `log`, `info`, `warn` and `error`. `source` is `console` for the
+page's own calls; for the browser's messages it says what kind of message it is, such as
+`network`, `security`, `javascript` or `deprecation`, and `url` names what the message is
+about, such as the request that failed. `text` is the message as a console prints it, and
+`args` holds one preview per argument as the page passed them. A preview is text, taken
+when the message arrived, so it still reads the same after the page has gone. `error` is a
+preview of what was thrown.
+
+`location` is where it happened, or `null`, and `stack` is up to 32 frames, innermost
+first. Both have `url`, `line` and `column`, counted from 1, and each frame also has
+`function`. `resolution` is `"failed"` on every one of them today: the location is exactly
+as the page reported it, and not yet mapped to a file in your repo.
+
+A pane whose attachment failed hears nothing, and is degraded because of that. It is not
+reported as a quiet pane.
+
+`text`, `error`, `args`, `location` and `stack` are shortened on reads like `message` and
+named in `truncated`. A list is shortened as a whole: `args` and `stack` keep as many
+leading items as fit.
+
+Every other producer, such as network, arrives with the feature that observes it, in this
+same payload and on this same cursor.
 
 ### `breakpoint quit`
 
