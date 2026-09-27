@@ -24,7 +24,8 @@ import type { AddressInfo } from 'node:net'
  * - a swatch, `#scheme`, pinned top-right: `SCHEME_SWATCH.light` unless the page is told
  *   it prefers dark, then `SCHEME_SWATCH.dark`, for reading the scheme off the raster.
  *
- * `/console` is a different page, for console capture: see `consolePage`.
+ * `/console` is a different page, for console capture: see `consolePage`. `/resolution` is
+ * another, for resolving what it logs to paths in a repo: see `RESOLUTION_SCRIPTS`.
  *
  * Every request either origin answers is recorded with its headers, which is what a
  * server doing device detection would see.
@@ -176,6 +177,40 @@ Promise.reject(new Error('nobody caught this'));
 fetch(other + '/not-shared').catch(() => {});
 `
 
+/**
+ * What `/resolution` loads, by path. `/src/widget.js` is shaped like a dev server's answer:
+ * a test whose repo holds this file at `src/widget.js` expects it to resolve. The bundle is
+ * deliberately unresolvable — no repo holds `assets/bundle-3f9a.js` — and it is what calls
+ * into the widget, so one stack holds frames of both.
+ */
+export const RESOLUTION_SCRIPTS = {
+  '/src/widget.js': `function inner() {
+  throw new RangeError('thrown from the repo');
+}
+function outer() {
+  inner();
+}
+window.fromTheRepo = outer;
+console.warn('warned from the repo');
+`,
+  '/assets/bundle-3f9a.js': `console.info('logged from a bundle');
+setTimeout(function bundled() { window.fromTheRepo(); }, 0);
+`
+} as const
+
+const RESOLUTION_PAGE = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>resolution</title>
+${Object.keys(RESOLUTION_SCRIPTS)
+  .map((path) => `<script src="${path}"></script>`)
+  .join('\n')}
+</head>
+<body><p>resolution</p></body>
+</html>
+`
+
 function asset(scale: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><text y="12">${scale}</text></svg>`
 }
@@ -205,6 +240,19 @@ function respond(
         'cache-control': 'no-store'
       })
       response.end(script ? CONSOLE_SCRIPT : consolePage(other()))
+      return
+    }
+    if (target.pathname === '/resolution') {
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store'
+      })
+      response.end(RESOLUTION_PAGE)
+      return
+    }
+    if (Object.hasOwn(RESOLUTION_SCRIPTS, target.pathname)) {
+      response.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' })
+      response.end(RESOLUTION_SCRIPTS[target.pathname as keyof typeof RESOLUTION_SCRIPTS])
       return
     }
     if (target.pathname === '/redirect') {

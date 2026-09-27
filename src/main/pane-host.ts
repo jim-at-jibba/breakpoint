@@ -317,7 +317,7 @@ export class PaneHost {
     const capture = new ConsoleCapture()
     const onMessage = (_event: Electron.Event, method: string, params: unknown): void => {
       const body = capture.hear(method, params)
-      if (body && this.isCurrent(pane, guest)) this.panes.console(pane, body)
+      if (body && this.isCurrent(pane, guest)) void this.panes.console(pane, body, guest.getURL())
     }
     guest.debugger.on('message', onMessage)
     guest.debugger.once('detach', (_event, reason) => {

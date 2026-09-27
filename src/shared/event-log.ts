@@ -234,19 +234,32 @@ export const LOG_SOURCES = [
 export type ConsoleSource = 'console' | (typeof LOG_SOURCES)[number]
 
 /**
- * Where in a script something happened, as the page reported it: one-based, the way an
- * editor counts. `resolution` says whether this was turned into a path inside the repo
- * ([ADR-0020]). Until resolution is built it always failed, which is an ordinary outcome
- * rather than an error — a repo-less project never resolves anything.
+ * Where in a script something happened: one-based, the way an editor counts. `resolution`
+ * says whether it was turned into a path inside the repo before the entry was appended
+ * ([ADR-0020]), so a reader tells unresolved from "resolved to here" from the entry alone.
+ *
+ * Resolved, `path` is repo-relative and `line` and `column` are in that file; `url` is the
+ * script it ran as. Failed, `path` is `null` and the rest is exactly as the page reported
+ * it. Failing is an ordinary outcome rather than an error — a repo-less project never
+ * resolves anything.
  */
-export interface SourceLocation {
-  readonly url: string
-  readonly line: number
-  readonly column: number
-  readonly resolution: 'failed'
-}
+export type SourceLocation =
+  | {
+      readonly url: string
+      readonly line: number
+      readonly column: number
+      readonly resolution: 'resolved'
+      readonly path: string
+    }
+  | {
+      readonly url: string
+      readonly line: number
+      readonly column: number
+      readonly resolution: 'failed'
+      readonly path: null
+    }
 
-export interface StackFrame extends SourceLocation {
+export type StackFrame = SourceLocation & {
   /** Empty for top-level code, as CDP reports it. */
   readonly function: string
 }
@@ -503,17 +516,20 @@ function copyBody(body: EntryBody): EntryBody {
 }
 
 function copyLocation(location: SourceLocation | null): SourceLocation | null {
-  if (!location) return null
-  const { url, line, column, resolution } = location
-  return Object.freeze({ url, line, column, resolution })
+  return location ? Object.freeze(locationFields(location)) : null
 }
 
 function copyStack(stack: readonly StackFrame[]): readonly StackFrame[] {
   return Object.freeze(
-    stack.map(({ function: name, url, line, column, resolution }) =>
-      Object.freeze({ function: name, url, line, column, resolution })
-    )
+    stack.map((frame) => Object.freeze({ function: frame.function, ...locationFields(frame) }))
   )
+}
+
+function locationFields(location: SourceLocation): SourceLocation {
+  const { url, line, column } = location
+  return location.resolution === 'resolved'
+    ? { url, line, column, resolution: 'resolved', path: location.path }
+    : { url, line, column, resolution: 'failed', path: null }
 }
 
 /**
@@ -562,14 +578,29 @@ function truncateArgs(args: readonly string[]): readonly string[] {
   return Object.freeze(kept)
 }
 
-/** Its line and column always survive; only the URL is shortened. */
+/** Its line, column and resolution always survive; only its URL and path are shortened. */
 function truncateLocation(location: SourceLocation | null): SourceLocation | null {
   if (!location || jsonByteLength(location) <= MAX_ENTRY_TEXT_BYTES) return location
-  const rest = jsonByteLength({ ...location, url: '' })
-  return Object.freeze({
-    ...location,
-    url: truncateText(location.url, MAX_ENTRY_TEXT_BYTES - rest)
-  })
+  return Object.freeze(shortenTextFields(location, MAX_ENTRY_TEXT_BYTES))
+}
+
+/**
+ * A location or frame within `limit`, its text fields sharing what is left once the rest
+ * of it is counted. The field names fix the order they are cut in, not a priority.
+ */
+function shortenTextFields<T extends SourceLocation & { function?: string }>(
+  value: T,
+  limit: number
+): T {
+  const names = (['function', 'url', 'path'] as const).filter(
+    (name) => typeof value[name] === 'string'
+  )
+  const rest = jsonByteLength({ ...value, ...Object.fromEntries(names.map((name) => [name, ''])) })
+  const budget = Math.floor((limit - rest) / names.length)
+  const short = Object.fromEntries(
+    names.map((name) => [name, truncateText(value[name] as string, budget)])
+  )
+  return { ...value, ...short }
 }
 
 /**
@@ -588,17 +619,8 @@ function truncateStack(stack: readonly StackFrame[]): readonly StackFrame[] {
       bytes += separator + frameBytes
       continue
     }
-    if (kept.length === 0) {
-      const rest = jsonByteLength({ ...frame, url: '', function: '' })
-      const budget = (MAX_ENTRY_TEXT_BYTES - bytes - rest) / 2
-      kept.push(
-        Object.freeze({
-          ...frame,
-          function: truncateText(frame.function, Math.floor(budget)),
-          url: truncateText(frame.url, Math.floor(budget))
-        })
-      )
-    }
+    if (kept.length === 0)
+      kept.push(Object.freeze(shortenTextFields(frame, MAX_ENTRY_TEXT_BYTES - bytes)))
     break
   }
   return Object.freeze(kept)

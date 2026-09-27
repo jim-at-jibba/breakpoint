@@ -56,8 +56,10 @@ describe('a console call', () => {
       args: ['ready', '3'],
       url: null,
       // One-based, the way an editor counts, and not yet resolved.
-      location: { url: APP, line: 10, column: 5, resolution: 'failed' },
-      stack: [{ function: 'render', url: APP, line: 10, column: 5, resolution: 'failed' }]
+      location: { url: APP, line: 10, column: 5, resolution: 'failed', path: null },
+      stack: [
+        { function: 'render', url: APP, line: 10, column: 5, resolution: 'failed', path: null }
+      ]
     })
   })
 
@@ -270,10 +272,10 @@ describe('an exception', () => {
       rejection: false,
       text: "Uncaught TypeError: Cannot read properties of undefined (reading 'map')",
       error: "TypeError: Cannot read properties of undefined (reading 'map')",
-      location: { url: APP, line: 4, column: 11, resolution: 'failed' },
+      location: { url: APP, line: 4, column: 11, resolution: 'failed', path: null },
       stack: [
-        { function: 'render', url: APP, line: 4, column: 11, resolution: 'failed' },
-        { function: '', url: APP, line: 21, column: 1, resolution: 'failed' }
+        { function: 'render', url: APP, line: 4, column: 11, resolution: 'failed', path: null },
+        { function: '', url: APP, line: 21, column: 1, resolution: 'failed', path: null }
       ]
     })
   })

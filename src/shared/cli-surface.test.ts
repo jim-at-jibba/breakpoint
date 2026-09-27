@@ -416,7 +416,8 @@ describe('the log as a terminal reads it', () => {
 
   it("prints a page's console, its exceptions and the browser's messages against their pane", () => {
     const app = 'http://localhost:3000/src/App.tsx'
-    const at = { url: app, line: 4, column: 11, resolution: 'failed' } as const
+    const at = { url: app, line: 4, column: 11, resolution: 'failed', path: null } as const
+    const resolved = { ...at, resolution: 'resolved', path: 'src/App.tsx' } as const
     const text = render({
       entries: [
         {
@@ -453,7 +454,7 @@ describe('the log as a terminal reads it', () => {
           rejection: false,
           text: 'Uncaught TypeError: nope\n  second line',
           error: 'TypeError: nope\n  second line',
-          location: at,
+          location: resolved,
           stack: []
         },
         {
@@ -475,7 +476,8 @@ describe('the log as a terminal reads it', () => {
       '11  p-2  error [network] Failed to load resource: net::ERR_FAILED (http://127.0.0.1:4000/data.json)',
       // A multi-line message stays under its own cursor.
       '12  p-1  error Uncaught TypeError: nope',
-      `      second line at ${app}:4:11`,
+      // Resolved, a location reads as the file in the repo to open.
+      '      second line at src/App.tsx:4:11',
       '13  p-1  error Uncaught (in promise) no session'
     ])
   })
@@ -497,7 +499,8 @@ describe('the log as a terminal reads it', () => {
             url: 'http://localhost/source\u009b2J',
             line: 1,
             column: 2,
-            resolution: 'failed'
+            resolution: 'failed',
+            path: null
           },
           stack: []
         }

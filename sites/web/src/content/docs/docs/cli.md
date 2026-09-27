@@ -361,9 +361,25 @@ replayed when the attachment is made, and a replayed object keeps only its name,
 `Object` or `Array(2)`, not its properties.
 
 `location` is where it happened, or `null`, and `stack` is up to 32 frames, innermost
-first. Both have `url`, `line` and `column`, counted from 1, and each frame also has
-`function`. `resolution` is `"failed"` on every one of them today: the location is exactly
-as the page reported it, and not yet mapped to a file in your repo.
+first. Both have `url`, a `line` and `column` counted from 1, `resolution` and `path`, and
+each frame also has `function`.
+
+Each one is resolved to a file in your repo before the entry is written, so it stays as
+true as it was when it arrived, even after your dev server has rebuilt:
+
+| `resolution` | `path` | `line` and `column` |
+| --- | --- | --- |
+| `"resolved"` | The file, relative to the repo, such as `src/App.tsx` | In that file. `url` is the script it ran as |
+| `"failed"` | `null` | Exactly as the page reported them, in the script at `url` |
+
+A location resolves when its script came from the same origin as the pane's page, and the
+script's path names a file in your repo. That is what a dev server does when it serves
+`/src/App.tsx`. A bundled script, one from another origin, and every location in a project
+with no repo path stay `"failed"`. That is an ordinary outcome, not an error. An entry
+never waits more than half a second on resolution, and whatever has not resolved by then
+is written as reported. Entries keep the order they were heard in either way, and `time` is
+when an entry was written, so it can trail the page by up to that half second.
+`breakpoint logs` prints a resolved location as its path.
 
 A pane whose attachment failed hears nothing, and so does one whose console could not be
 captured (`pane.consoleFailed`). Both are degraded, so neither reads as a quiet pane.

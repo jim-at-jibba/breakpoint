@@ -241,15 +241,19 @@ function stackOf(trace: unknown): StackFrame[] {
       url: typeof frame.url === 'string' ? frame.url : '',
       line: oneBased(frame.lineNumber),
       column: oneBased(frame.columnNumber),
-      resolution: 'failed'
+      resolution: 'failed',
+      path: null
     }))
 }
 
-/** Where the stack says it happened: its innermost frame, less the function name. */
+/**
+ * Where the stack says it happened: its innermost frame, less the function name. Every
+ * location starts unresolved; resolution happens before the append ([ADR-0020]).
+ */
 function innermost(stack: readonly StackFrame[]): SourceLocation | null {
   if (!stack[0]) return null
-  const { url, line, column, resolution } = stack[0]
-  return { url, line, column, resolution }
+  const { url, line, column } = stack[0]
+  return { url, line, column, resolution: 'failed', path: null }
 }
 
 /** Where a message with no stack says it came from, if it says. */
@@ -260,7 +264,8 @@ function reportedLocation(fields: Record<string, unknown>): SourceLocation | nul
     url: fields.url,
     line: oneBased(fields.lineNumber),
     column: oneBased(fields.columnNumber),
-    resolution: 'failed'
+    resolution: 'failed',
+    path: null
   }
 }
 
