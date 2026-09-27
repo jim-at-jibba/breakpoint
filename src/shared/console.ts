@@ -133,6 +133,15 @@ export function consoleEntryFor(method: string, params: unknown): ConsoleEntryBo
   }
 }
 
+/**
+ * Whether what a pane heard is something wrong with its page, which is what its error
+ * count counts ([ADR-0022]): anything thrown and not caught, and anything said at error
+ * level, by the page or by the browser about it. A warning is not.
+ */
+export function isConsoleError(body: ConsoleEntryBody): boolean {
+  return body.type === 'console.exception' || body.level === 'error'
+}
+
 function consoleCall(params: Record<string, unknown>): ConsoleEntryBody | null {
   if (typeof params.type !== 'string' || !Array.isArray(params.args)) return null
   const args = params.args.filter(isRecord) as RemoteObject[]

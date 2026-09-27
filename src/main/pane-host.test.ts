@@ -139,7 +139,10 @@ describe("a pane's console", () => {
 
   function hostFor(guest: WebContents): {
     pane: string
-    panes: Record<'emulated' | 'console' | 'consoleFailed' | 'detached', ReturnType<typeof vi.fn>>
+    panes: Record<
+      'emulated' | 'console' | 'consoleFailed' | 'detached' | 'navigating',
+      ReturnType<typeof vi.fn>
+    >
   } {
     const project = createProject('/repos/shop')
     const [pane] = project.panes
@@ -155,7 +158,8 @@ describe("a pane's console", () => {
       guestDestroyed: vi.fn(),
       console: vi.fn(),
       consoleFailed: vi.fn(),
-      detached: vi.fn()
+      detached: vi.fn(),
+      navigating: vi.fn()
     }
     const host = new PaneHost(panes as unknown as PaneService, feed)
     feed.publish({ type: 'project.opened', project })
@@ -279,5 +283,26 @@ describe("a pane's console", () => {
     first.attachment.emit('message', {}, 'Runtime.consoleAPICalled', call)
 
     expect(panes.console).not.toHaveBeenCalled()
+  })
+
+  it('says the pane is navigating only when its page is being replaced by a web page', async () => {
+    const { guest } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    const start = (details: Record<string, unknown>): void => {
+      guest.emit('did-start-navigation', {
+        url: 'http://localhost:3000/next',
+        isMainFrame: true,
+        isSameDocument: false,
+        ...details
+      })
+    }
+
+    start({ isMainFrame: false })
+    start({ isSameDocument: true })
+    start({ url: 'mailto:someone@example.com' })
+    expect(panes.navigating).not.toHaveBeenCalled()
+
+    start({})
+    expect(panes.navigating).toHaveBeenCalledExactlyOnceWith(pane)
   })
 })

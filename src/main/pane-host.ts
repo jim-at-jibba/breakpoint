@@ -263,6 +263,13 @@ export class PaneHost {
       failed = true
       if (current()) this.panes.loadFailed({ pane, url, code, message: description })
     })
+    // Not on `did-start-loading`, which a frame inside the page loading fires too. Before
+    // the page is replaced, so nothing its successor says can land ahead of the reset, and
+    // before `did-fail-load`, so a failed load is the one error of the page after it. A
+    // URL `will-navigate` refuses leaves the pane where it is.
+    guest.on('did-start-navigation', ({ url, isMainFrame, isSameDocument }) => {
+      if (isMainFrame && !isSameDocument && isWebUrl(url) && current()) this.panes.navigating(pane)
+    })
     guest.on('did-navigate', () => {
       if (current() && isWebUrl(guest.getURL())) void this.emulate(pane, guest)
     })

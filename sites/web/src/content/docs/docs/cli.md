@@ -623,9 +623,12 @@ page, capability by capability — `viewport`, `userAgent`, `touch` and `colorSc
 `pending`, `applied` or `failed` — as opposed to what the pane declares. `degraded` holds
 one `{ "cause", "message" }` per reason the pane is degraded, with `cause` `attachment`,
 `geometry`, or the name of an emulation capability, and is empty for a healthy pane.
-`errors` counts what has gone wrong with the page in this pane since its guest was
-created. `panes.list` returns the same statuses joined to the stored panes, as
-`{ "panes": [ { "id": …, "name": …, …, "status": { … } } ] }`.
+`errors` counts what has gone wrong with the page in this pane: loads that failed,
+uncaught exceptions, unhandled rejections, and anything the page or the browser logged at
+`error` level. A warning does not count. It starts again when that pane navigates — sent
+somewhere, following a link or reloading — and on nothing else, so resizing or zooming
+never makes a pane look clean. `panes.list` returns the same statuses joined to the
+stored panes, as `{ "panes": [ { "id": …, "name": …, …, "status": { … } } ] }`.
 
 `--wait` resolves on `load` and `geometry` alone: a pane can be `loaded`, `ok` and
 degraded at the same time, and that pane is ready and says why it is degraded.

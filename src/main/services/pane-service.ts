@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises'
+import { isConsoleError } from '../../shared/console'
 import { affectedCapabilities, type EmulationResult } from '../../shared/emulation'
 import type { ConsoleEntryBody, EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
@@ -230,6 +231,14 @@ export class PaneService {
     this.observe(pane, { type: 'loading' })
   }
 
+  /**
+   * The pane has set off for another page, so its error count starts again, and only
+   * this ([ADR-0022]). No entry, for the same reason `loading` writes none.
+   */
+  navigating(pane: string): void {
+    this.observe(pane, { type: 'navigating' })
+  }
+
   loaded(pane: string, url: string): void {
     this.record(pane, { type: 'pane.loaded', url })
     this.observe(pane, { type: 'loaded' })
@@ -330,10 +339,13 @@ export class PaneService {
    * Its locations are resolved against the repo before it is appended, within the
    * resolution timeout ([ADR-0020]), fetching a bundle and its map through `fetchText`.
    * Whether it is the project's is decided now, when it was heard, so what a pane said
-   * just before it went is kept, ahead of its going. Settles once appended.
+   * just before it went is kept, ahead of its going. An error is counted now too: counted
+   * once resolved, one heard just before a load would land on the page after it.
+   * Settles once appended.
    */
   console(pane: string, body: ConsoleEntryBody, page: string, fetchText: FetchText): Promise<void> {
     if (!this.has(pane)) return Promise.resolve()
+    if (isConsoleError(body)) this.observe(pane, { type: 'erred' })
     const context = { repoPath: this.project?.repoPath ?? null, page }
     return this.record(pane, resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText }))
   }

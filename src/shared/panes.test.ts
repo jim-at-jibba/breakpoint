@@ -9,6 +9,7 @@ import {
   PANE_DIMENSION_RANGE,
   PANE_PREFERENCE,
   paneIdFromPreferences,
+  type PaneObservation,
   paneWebPreferences,
   reconcilePaneStatuses,
   rotateSize
@@ -66,6 +67,42 @@ describe('a pane status', () => {
     })
     expect(failed.errors).toBe(2)
     expect(failed.degraded).toEqual([])
+  })
+
+  it('counts what went wrong on the page alongside the loads that failed', () => {
+    const erred = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' }), {
+      type: 'erred'
+    })
+    expect(erred.errors).toBe(2)
+    expect(erred.degraded).toEqual([])
+  })
+
+  it('starts the count again when the pane navigates to another page', () => {
+    const erred = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'erred' }), {
+      type: 'erred'
+    })
+    const moved = foldPaneStatus(erred, { type: 'navigating' })
+    expect(moved.errors).toBe(0)
+    // A navigation that goes on to fail is the one error of the page the pane is on now.
+    expect(foldPaneStatus(moved, { type: 'loadFailed' }).errors).toBe(1)
+  })
+
+  it('keeps the count through everything else observed of the same page', () => {
+    const erred = foldPaneStatus(initialPaneStatus(), { type: 'erred' })
+    const observations: PaneObservation[] = [
+      { type: 'attached' },
+      { type: 'attachFailed', message: 'refused' },
+      { type: 'consoleFailed', message: 'refused' },
+      { type: 'geometryChecked', result: mismatch },
+      // A frame inside the page loading is the pane loading, and not another page.
+      { type: 'loading' },
+      { type: 'loaded' },
+      { type: 'emulationPending', capabilities: ['viewport'] },
+      { type: 'emulated', results: [{ capability: 'viewport', ok: true }] }
+    ]
+    for (const observation of observations) {
+      expect(foldPaneStatus(erred, observation).errors).toBe(1)
+    }
   })
 
   it('forgets the errors of a guest that has been replaced', () => {

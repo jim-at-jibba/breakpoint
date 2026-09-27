@@ -115,9 +115,10 @@ export interface PaneStatus {
   /** Empty when the pane is healthy. A degraded pane still renders ([CONTEXT.md]). */
   degraded: PaneDegradation[]
   /**
-   * Errors observed of the page in this pane since its guest was created, which is what
-   * the pane header counts. Load failures are the only producer in Phase 1; the console's
-   * exceptions join them in Phase 2 without the header having to learn anything new.
+   * What has gone wrong with the page in this pane since the pane went to it, which is
+   * what the pane header counts: loads that failed, and everything the console heard that
+   * `isConsoleError` counts. It starts again when the pane navigates and on nothing else
+   * ([ADR-0022]), so no view of it, in any window, can make a pane look clean.
    */
   errors: number
 }
@@ -167,12 +168,22 @@ export type PaneObservation =
   /** The attachment was made but refused to carry the console ([ADR-0019]). */
   | { type: 'consoleFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
-  /** A load started, which a navigation is. Whatever was loaded before is not this one. */
+  /**
+   * A load started: a navigation, or a frame inside the page. Whatever was loaded before
+   * is not this one.
+   */
   | { type: 'loading' }
+  /**
+   * The pane set off for another page — sent there, following a link, or reloading. What
+   * went wrong with the page it was on is not the next one's.
+   */
+  | { type: 'navigating' }
   /** The page in the pane finished loading. */
   | { type: 'loaded' }
   /** The page in the pane failed to load. One error, counted; the pane still renders. */
   | { type: 'loadFailed' }
+  /** Something went wrong with the page: one error, counted. */
+  | { type: 'erred' }
   | { type: 'emulationPending'; capabilities: readonly EmulationCapability[] }
   | { type: 'emulated'; results: readonly EmulationResult[] }
   | { type: 'guestDestroyed' }
@@ -204,10 +215,14 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
       // drawn at, and nothing would re-measure it if this threw the last check away —
       // the window reports on resize and on attach, so `--wait` would hang for ever.
       return { ...status, load: 'pending' }
+    case 'navigating':
+      return { ...status, errors: 0 }
     case 'loaded':
       return { ...status, load: 'loaded' }
     case 'loadFailed':
       return { ...status, load: 'failed', errors: status.errors + 1 }
+    case 'erred':
+      return { ...status, errors: status.errors + 1 }
     case 'attachFailed':
       return {
         ...status,

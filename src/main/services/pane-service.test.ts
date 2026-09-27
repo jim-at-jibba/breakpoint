@@ -947,6 +947,84 @@ describe("hearing a pane's console", () => {
     ])
   })
 
+  it('counts an exception, a rejection and anything said at error level against the pane', async () => {
+    const [mobile, tablet] = await openShop()
+    const warning = { ...message, level: 'warn' } as const
+    const browser = { ...message, source: 'network', url: `${ORIGIN}/data.json` } as const
+    const rejected: ConsoleEntryBody = {
+      type: 'console.exception',
+      rejection: true,
+      text: 'Uncaught (in promise) Error: nobody caught this',
+      error: 'Error: nobody caught this',
+      location: null,
+      stack: []
+    }
+
+    await panes.console(mobile.id, thrownFrom(`${ORIGIN}/x.js`), PAGE, offline)
+    await panes.console(mobile.id, rejected, PAGE, offline)
+    await panes.console(mobile.id, message, PAGE, offline)
+    await panes.console(mobile.id, browser, PAGE, offline)
+    await panes.console(mobile.id, warning, PAGE, offline)
+
+    expect(panes.statuses()[mobile.id].errors).toBe(4)
+    // An error in one pane is that pane's alone.
+    expect(panes.statuses()[tablet.id].errors).toBe(0)
+    expect(patches.map(({ patch }) => patch)).toEqual(
+      [1, 2, 3, 4].map((errors) =>
+        expect.objectContaining({
+          type: 'pane.status',
+          pane: mobile.id,
+          status: expect.objectContaining({ errors })
+        })
+      )
+    )
+  })
+
+  it('counts an error when it is heard, not when its location has been resolved', async () => {
+    const [mobile] = await openShop()
+    const slow = gate()
+    isFile = () => slow.wait.then(() => true)
+
+    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE, offline)
+    expect(panes.statuses()[mobile.id].errors).toBe(1)
+    // The page it was heard on is gone before its entry is written, and so is its error.
+    panes.navigating(mobile.id)
+    slow.open()
+    await heard
+
+    expect(panes.statuses()[mobile.id].errors).toBe(0)
+  })
+
+  it('starts one pane’s count again when it navigates, and leaves every other pane’s alone', async () => {
+    const [mobile, tablet] = await openShop()
+    await panes.console(mobile.id, message, PAGE, offline)
+    await panes.console(tablet.id, message, PAGE, offline)
+
+    panes.navigating(mobile.id)
+
+    expect(panes.statuses()[mobile.id].errors).toBe(0)
+    expect(panes.statuses()[tablet.id].errors).toBe(1)
+  })
+
+  it('keeps the count through everything that is not the pane navigating', async () => {
+    const [mobile] = await openShop()
+    await panes.console(mobile.id, message, PAGE, offline)
+
+    await panes.resize({ pane: mobile.id, width: 400, height: 800 })
+    await panes.rotate(mobile.id)
+    await panes.setEmulation({ pane: mobile.id, colorScheme: 'dark' })
+    panes.reportGeometry({
+      pane: mobile.id,
+      expected: { width: 800, height: 400 },
+      measured: { width: 800, height: 150 }
+    })
+    // A frame inside the page loading, which is not the pane going anywhere.
+    panes.loading(mobile.id)
+    panes.loaded(mobile.id, PAGE)
+
+    expect(panes.statuses()[mobile.id].errors).toBe(1)
+  })
+
   it('says nothing for a pane the open project no longer has', async () => {
     await openShop()
     const { cursor } = projects.snapshot()
