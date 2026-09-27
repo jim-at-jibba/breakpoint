@@ -100,7 +100,8 @@ export type EmulationState = Record<EmulationCapability, CapabilityState>
  * capability is its own cause, since each is refused on its own.
  */
 export interface PaneDegradation {
-  cause: 'attachment' | 'geometry' | EmulationCapability
+  /** `console`: attached, but capture could not be enabled, so the pane hears nothing. */
+  cause: 'attachment' | 'console' | 'geometry' | EmulationCapability
   message: string
 }
 
@@ -163,6 +164,8 @@ export type PaneObservation =
   | { type: 'guestCreated' }
   | { type: 'attached' }
   | { type: 'attachFailed'; message: string }
+  /** The attachment was made but refused to carry the console ([ADR-0019]). */
+  | { type: 'consoleFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
   /** A load started, which a navigation is. Whatever was loaded before is not this one. */
   | { type: 'loading' }
@@ -210,6 +213,11 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
         ...status,
         attachment: 'failed',
         degraded: withCause(status, { cause: 'attachment', message: observation.message })
+      }
+    case 'consoleFailed':
+      return {
+        ...status,
+        degraded: withCause(status, { cause: 'console', message: observation.message })
       }
     case 'geometryChecked': {
       const { result } = observation

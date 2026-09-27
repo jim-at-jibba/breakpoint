@@ -135,6 +135,14 @@ export type PaneEntryBody =
       readonly retrying: boolean
       readonly message: string
     }
+  /** A live attachment ended while its pane remained. */
+  | { readonly type: 'pane.detached'; readonly reason: string }
+  /**
+   * The attachment was made but console capture could not be enabled on it, so the pane
+   * hears nothing. Degraded rather than quiet: a pane that silently reports nothing is the
+   * one outcome worse than a visible failure ([ADR-0019]).
+   */
+  | { readonly type: 'pane.consoleFailed'; readonly message: string }
   | { readonly type: 'pane.loaded'; readonly url: string }
   | {
       readonly type: 'pane.loadFailed'
@@ -165,10 +173,87 @@ export type PaneEntryBody =
     }
   | { readonly type: 'pane.emulationRecovered'; readonly capability: EmulationCapability }
   | { readonly type: 'pane.destroyed' }
+  | ConsoleEntryBody
 
-type TruncatedField = 'path' | 'message' | 'url'
+/**
+ * What a pane's page said, or what the browser said about it, over the attachment
+ * ([ADR-0019]). Two kinds because an exception has a stack and a thrown value where a
+ * message has arguments. Both carry only what stays true ([ADR-0021]): text, a preview
+ * per argument, a location and a trimmed stack, never a handle.
+ */
+export type ConsoleEntryBody =
+  | {
+      readonly type: 'console.message'
+      readonly level: ConsoleLevel
+      /** `console` for the page's own calls; otherwise the kind of browser message it is. */
+      readonly source: ConsoleSource
+      /** The message as a person reads it, format specifiers applied. */
+      readonly text: string
+      /** One static preview per argument, in order. Empty for a browser message. */
+      readonly args: readonly string[]
+      /** What a browser message is about, such as the resource that failed; else `null`. */
+      readonly url: string | null
+      readonly location: SourceLocation | null
+      readonly stack: readonly StackFrame[]
+    }
+  | {
+      readonly type: 'console.exception'
+      /** An unhandled promise rejection, rather than an exception thrown and not caught. */
+      readonly rejection: boolean
+      /** The headline, as DevTools prints it: `Uncaught TypeError: …`. */
+      readonly text: string
+      /** A preview of the value thrown, without its stack; `null` when there was none. */
+      readonly error: string | null
+      readonly location: SourceLocation | null
+      readonly stack: readonly StackFrame[]
+    }
 
-const TEXT_FIELDS: readonly TruncatedField[] = ['path', 'url', 'message']
+/** Console calls by method name; the browser's own levels map onto the same five. */
+export const CONSOLE_LEVELS = ['debug', 'log', 'info', 'warn', 'error'] as const
+
+export type ConsoleLevel = (typeof CONSOLE_LEVELS)[number]
+
+/** What kind of browser message CDP's `Log` domain says one is. */
+export const LOG_SOURCES = [
+  'xml',
+  'javascript',
+  'network',
+  'storage',
+  'appcache',
+  'rendering',
+  'security',
+  'deprecation',
+  'worker',
+  'violation',
+  'intervention',
+  'recommendation',
+  'other'
+] as const
+
+/** `console` for the page's own calls, or the kind of browser message it is. */
+export type ConsoleSource = 'console' | (typeof LOG_SOURCES)[number]
+
+/**
+ * Where in a script something happened, as the page reported it: one-based, the way an
+ * editor counts. `resolution` says whether this was turned into a path inside the repo
+ * ([ADR-0020]). Until resolution is built it always failed, which is an ordinary outcome
+ * rather than an error — a repo-less project never resolves anything.
+ */
+export interface SourceLocation {
+  readonly url: string
+  readonly line: number
+  readonly column: number
+  readonly resolution: 'failed'
+}
+
+export interface StackFrame extends SourceLocation {
+  /** Empty for top-level code, as CDP reports it. */
+  readonly function: string
+}
+
+type TruncatedField = 'path' | 'message' | 'url' | 'text' | 'error' | 'args' | 'location' | 'stack'
+
+const TEXT_FIELDS = ['path', 'url', 'message', 'text', 'error'] as const
 
 /**
  * One record in the log. `pane` is the pane it came from, or `null` when the app itself
@@ -371,6 +456,10 @@ function copyBody(body: EntryBody): EntryBody {
         retrying: body.retrying,
         message: body.message
       }
+    case 'pane.detached':
+      return { type: body.type, reason: body.reason }
+    case 'pane.consoleFailed':
+      return { type: body.type, message: body.message }
     case 'pane.loadFailed':
       return { type: body.type, url: body.url, code: body.code, message: body.message }
     case 'pane.geometryMismatch':
@@ -390,32 +479,138 @@ function copyBody(body: EntryBody): EntryBody {
     case 'pane.removed':
     case 'pane.destroyed':
       return { type: body.type }
+    case 'console.message':
+      return {
+        type: body.type,
+        level: body.level,
+        source: body.source,
+        text: body.text,
+        args: Object.freeze([...body.args]),
+        url: body.url,
+        location: copyLocation(body.location),
+        stack: copyStack(body.stack)
+      }
+    case 'console.exception':
+      return {
+        type: body.type,
+        rejection: body.rejection,
+        text: body.text,
+        error: body.error,
+        location: copyLocation(body.location),
+        stack: copyStack(body.stack)
+      }
   }
 }
 
+function copyLocation(location: SourceLocation | null): SourceLocation | null {
+  if (!location) return null
+  const { url, line, column, resolution } = location
+  return Object.freeze({ url, line, column, resolution })
+}
+
+function copyStack(stack: readonly StackFrame[]): readonly StackFrame[] {
+  return Object.freeze(
+    stack.map(({ function: name, url, line, column, resolution }) =>
+      Object.freeze({ function: name, url, line, column, resolution })
+    )
+  )
+}
+
+/**
+ * The entry as a read carries it: every text field, and each of a console entry's
+ * structured fields as a whole, within `MAX_ENTRY_TEXT_BYTES`. A list is one field with
+ * one budget, so a page logging a thousand arguments is bounded like one logging a
+ * megabyte in one.
+ */
 function entryForRead(entry: Entry): Entry {
-  const shortened: Partial<Record<TruncatedField, string>> = {}
+  const shortened: Partial<Record<TruncatedField, unknown>> = {}
   const truncated: TruncatedField[] = []
   const fields = entry as Partial<Record<TruncatedField, unknown>>
-  for (const field of TEXT_FIELDS) {
-    const text = fields[field]
-    if (typeof text !== 'string') continue
-    const short = truncateText(text)
-    if (short === text) continue
+  const shorten = <T>(field: TruncatedField, value: T, short: T): void => {
+    if (short === value) return
     shortened[field] = short
     truncated.push(field)
   }
+  for (const field of TEXT_FIELDS) {
+    const text = fields[field]
+    if (typeof text === 'string') shorten(field, text, truncateText(text))
+  }
+  if (entry.type === 'console.message') shorten('args', entry.args, truncateArgs(entry.args))
+  if (entry.type === 'console.message' || entry.type === 'console.exception') {
+    shorten('location', entry.location, truncateLocation(entry.location))
+    shorten('stack', entry.stack, truncateStack(entry.stack))
+  }
   if (truncated.length === 0) return entry
-  return Object.freeze({ ...entry, ...shortened, truncated: Object.freeze(truncated) })
+  // Each shortened value has its field's own type; the record indexing them cannot say so.
+  return Object.freeze({ ...entry, ...shortened, truncated: Object.freeze(truncated) }) as Entry
 }
 
-function truncateText(text: string): string {
-  if (jsonByteLength(text) <= MAX_ENTRY_TEXT_BYTES) return text
+function truncateArgs(args: readonly string[]): readonly string[] {
+  if (jsonByteLength(args) <= MAX_ENTRY_TEXT_BYTES) return args
+  const kept: string[] = []
+  // `[]`, then each preview and the comma before it.
+  let bytes = 2
+  for (const preview of args) {
+    const separator = kept.length > 0 ? 1 : 0
+    const budget = MAX_ENTRY_TEXT_BYTES - bytes - separator
+    if (budget < jsonByteLength('')) break
+    const short = truncateText(preview, budget)
+    kept.push(short)
+    bytes += separator + jsonByteLength(short)
+    if (short !== preview) break
+  }
+  return Object.freeze(kept)
+}
+
+/** Its line and column always survive; only the URL is shortened. */
+function truncateLocation(location: SourceLocation | null): SourceLocation | null {
+  if (!location || jsonByteLength(location) <= MAX_ENTRY_TEXT_BYTES) return location
+  const rest = jsonByteLength({ ...location, url: '' })
+  return Object.freeze({
+    ...location,
+    url: truncateText(location.url, MAX_ENTRY_TEXT_BYTES - rest)
+  })
+}
+
+/**
+ * The innermost frames that fit, in order. The first is never dropped — it is where the
+ * thing happened — so one with an enormous URL is shortened instead.
+ */
+function truncateStack(stack: readonly StackFrame[]): readonly StackFrame[] {
+  if (jsonByteLength(stack) <= MAX_ENTRY_TEXT_BYTES) return stack
+  const kept: StackFrame[] = []
+  let bytes = 2
+  for (const frame of stack) {
+    const separator = kept.length > 0 ? 1 : 0
+    const frameBytes = jsonByteLength(frame)
+    if (bytes + separator + frameBytes <= MAX_ENTRY_TEXT_BYTES) {
+      kept.push(frame)
+      bytes += separator + frameBytes
+      continue
+    }
+    if (kept.length === 0) {
+      const rest = jsonByteLength({ ...frame, url: '', function: '' })
+      const budget = (MAX_ENTRY_TEXT_BYTES - bytes - rest) / 2
+      kept.push(
+        Object.freeze({
+          ...frame,
+          function: truncateText(frame.function, Math.floor(budget)),
+          url: truncateText(frame.url, Math.floor(budget))
+        })
+      )
+    }
+    break
+  }
+  return Object.freeze(kept)
+}
+
+function truncateText(text: string, limit = MAX_ENTRY_TEXT_BYTES): string {
+  if (jsonByteLength(text) <= limit) return text
   let start = 0
-  let end = Math.min(text.length, MAX_ENTRY_TEXT_BYTES)
+  let end = Math.min(text.length, limit)
   while (start < end) {
     const middle = Math.ceil((start + end) / 2)
-    if (jsonByteLength(text.slice(0, middle)) <= MAX_ENTRY_TEXT_BYTES) start = middle
+    if (jsonByteLength(text.slice(0, middle)) <= limit) start = middle
     else end = middle - 1
   }
   // Do not split a supplementary Unicode character at the truncation boundary.

@@ -306,7 +306,8 @@ shortened fields, such as `"truncated": ["path", "message"]`. Human output inclu
 is separate from `droppedBefore`, which reports evicted entries, and the entry's cursor
 still lets a reader continue past it.
 
-What the log carries today is the app's own changes and failures, and pane lifecycle.
+What the log carries today is the app's own changes and failures, pane lifecycle, and what
+each pane's page says.
 The app's own entries carry `"pane": null`:
 
 | `type` | Fields | When |
@@ -329,6 +330,8 @@ Pane entries are tagged with the pane's `id`:
 | `pane.created` | `url` | The pane's page was created, loading `url` |
 | `pane.attached` | `attempt` | The app made its debugging connection to the pane |
 | `pane.attachFailed` | `attempt`, `retrying`, `message` | It could not. `retrying` says whether one more attempt follows the next load; the second failure is final |
+| `pane.detached` | `reason` | A connection that had attached ended while its pane remained. The pane is degraded with cause `attachment` |
+| `pane.consoleFailed` | `message` | The pane is attached, but its console could not be captured, so it hears nothing. The pane is degraded with cause `console` |
 | `pane.loaded` | `url` | The pane finished loading `url` |
 | `pane.loadFailed` | `url`, `code`, `message` | The pane could not load `url`. `code` is Chromium's net error, such as `-102` |
 | `pane.geometryMismatch` | `expected`, `measured`, `message` | The pane's element is not drawn at its declared size times the zoom. Both sizes are `{ "width", "height" }` in screen pixels |
@@ -336,8 +339,41 @@ Pane entries are tagged with the pane's `id`:
 | `pane.destroyed` | none | The pane's page went away: the pane was removed, or another project opened |
 
 `url` is shortened like `path` and `message` when it is long, and named in `truncated`.
-Every other producer — navigation, emulation, the console, network — arrives with the
-feature that observes it, in this same payload and on this same cursor.
+
+Each pane's page is heard too. Its console calls, its uncaught exceptions and unhandled
+rejections, and the browser's own messages about it — CORS, CSP, mixed content, failed
+requests, deprecations — arrive tagged with the pane, including anything logged before the
+page's own scripts ran:
+
+| `type` | Fields | When |
+| --- | --- | --- |
+| `console.message` | `level`, `source`, `text`, `args`, `url`, `location`, `stack` | The page called `console.*`, or the browser said something about the page |
+| `console.exception` | `rejection`, `text`, `error`, `location`, `stack` | Something was thrown and not caught, or a promise was rejected with no handler (`rejection: true`) |
+
+`level` is one of `debug`, `log`, `info`, `warn` and `error`. `source` is `console` for the
+page's own calls; for the browser's messages it says what kind of message it is, such as
+`network`, `security`, `javascript` or `deprecation`, and `url` names what the message is
+about, such as the request that failed. `text` is the message as a console prints it, and
+`args` holds one preview per argument as the page passed them. A preview is text, taken
+when the message arrived, so it still reads the same after the page has gone. `error` is a
+preview of what was thrown. Anything logged before the app's attachment existed is
+replayed when the attachment is made, and a replayed object keeps only its name, such as
+`Object` or `Array(2)`, not its properties.
+
+`location` is where it happened, or `null`, and `stack` is up to 32 frames, innermost
+first. Both have `url`, `line` and `column`, counted from 1, and each frame also has
+`function`. `resolution` is `"failed"` on every one of them today: the location is exactly
+as the page reported it, and not yet mapped to a file in your repo.
+
+A pane whose attachment failed hears nothing, and so does one whose console could not be
+captured (`pane.consoleFailed`). Both are degraded, so neither reads as a quiet pane.
+
+`text`, `error`, `args`, `location` and `stack` are shortened on reads like `message` and
+named in `truncated`. A list is shortened as a whole: `args` and `stack` keep as many
+leading items as fit.
+
+Every other producer, such as network, arrives with the feature that observes it, in this
+same payload and on this same cursor.
 
 ### `breakpoint quit`
 

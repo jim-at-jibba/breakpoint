@@ -94,6 +94,20 @@ describe('a pane status', () => {
     expect(foldPaneStatus(loaded, { type: 'guestDestroyed' }).load).toBe('pending')
   })
 
+  it('is degraded, still attached, when its attachment will not carry the console', () => {
+    const attached = foldPaneStatus(initialPaneStatus(), { type: 'attached' })
+    const deaf = foldPaneStatus(attached, {
+      type: 'consoleFailed',
+      message: 'Runtime.enable: Runtime.enable refused'
+    })
+    expect(deaf).toEqual({
+      ...attached,
+      degraded: [{ cause: 'console', message: 'Runtime.enable: Runtime.enable refused' }]
+    })
+    // A new guest is a new attachment, and says nothing about the old one's console.
+    expect(foldPaneStatus(deaf, { type: 'guestCreated' }).degraded).toEqual([])
+  })
+
   it('is degraded with the reason when its attachment fails, and still has geometry of its own', () => {
     const failed = foldPaneStatus(initialPaneStatus(), {
       type: 'attachFailed',

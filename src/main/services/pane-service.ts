@@ -1,5 +1,5 @@
 import { affectedCapabilities, type EmulationResult } from '../../shared/emulation'
-import type { EventLog, PaneEntryBody } from '../../shared/event-log'
+import type { ConsoleEntryBody, EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
   compareGeometry,
   foldPaneStatus,
@@ -172,6 +172,19 @@ export class PaneService {
     this.observe(pane, { type: 'attachFailed', message })
   }
 
+  /** A connection that had attached ended while its pane remained. */
+  detached(pane: string, reason: string): void {
+    const message = `debugger detached: ${reason}`
+    this.record(pane, { type: 'pane.detached', reason })
+    this.observe(pane, { type: 'attachFailed', message })
+  }
+
+  /** The attachment stands, but its console could not be enabled: degraded, with why. */
+  consoleFailed(pane: string, message: string): void {
+    this.record(pane, { type: 'pane.consoleFailed', message })
+    this.observe(pane, { type: 'consoleFailed', message })
+  }
+
   /**
    * A load has started, which a navigation is. No entry: the log records where a pane
    * got to, and "it set off" is said by the navigation entry that caused it.
@@ -270,6 +283,15 @@ export class PaneService {
       }
     }
     this.observe(pane, { type: 'emulated', results })
+  }
+
+  /**
+   * What a pane's page said, or what the browser said about it, as the pane host heard it
+   * over the attachment. Only for a pane of the open project: a page the project has let
+   * go of is not the developer's to hear from.
+   */
+  console(pane: string, body: ConsoleEntryBody): void {
+    if (this.has(pane)) this.record(pane, body)
   }
 
   private record(pane: string, body: PaneEntryBody): void {

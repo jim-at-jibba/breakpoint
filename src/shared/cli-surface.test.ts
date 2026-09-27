@@ -349,18 +349,34 @@ describe('the log as a terminal reads it', () => {
           cursor: 5,
           time: 0,
           pane: 'p-1',
+          type: 'pane.detached',
+          reason: 'replaced with devtools'
+        },
+        {
+          cursor: 6,
+          time: 0,
+          pane: 'p-1',
+          type: 'pane.consoleFailed',
+          message: 'Runtime.enable: refused'
+        },
+        {
+          cursor: 7,
+          time: 0,
+          pane: 'p-1',
           type: 'pane.geometryMismatch',
           expected: { width: 390, height: 844 },
           measured: { width: 390, height: 150 },
           message: 'drawn 390×150, declared 390×844 at this zoom'
         }
       ],
-      cursor: 5
+      cursor: 7
     })
     expect(text.split('\n')).toEqual([
       '3  p-1  created, loading http://127.0.0.1:5173/',
       '4  p-1  attachment failed (attempt 1, retrying after load): Debugger is already attached to the target',
-      '5  p-1  degraded: drawn 390×150, declared 390×844 at this zoom'
+      '5  p-1  degraded: attachment detached: replaced with devtools',
+      '6  p-1  degraded: console not captured: Runtime.enable: refused',
+      '7  p-1  degraded: drawn 390×150, declared 390×844 at this zoom'
     ])
   })
 
@@ -396,6 +412,106 @@ describe('the log as a terminal reads it', () => {
       '8  p-3  added at 1024×768',
       '9  p-3  removed from the project'
     ])
+  })
+
+  it("prints a page's console, its exceptions and the browser's messages against their pane", () => {
+    const app = 'http://localhost:3000/src/App.tsx'
+    const at = { url: app, line: 4, column: 11, resolution: 'failed' } as const
+    const text = render({
+      entries: [
+        {
+          cursor: 10,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.message',
+          level: 'warn',
+          source: 'console',
+          text: 'slow render',
+          args: ['slow render'],
+          url: null,
+          location: at,
+          stack: [{ ...at, function: 'render' }]
+        },
+        {
+          cursor: 11,
+          time: 0,
+          pane: 'p-2',
+          type: 'console.message',
+          level: 'error',
+          source: 'network',
+          text: 'Failed to load resource: net::ERR_FAILED',
+          args: [],
+          url: 'http://127.0.0.1:4000/data.json',
+          location: null,
+          stack: []
+        },
+        {
+          cursor: 12,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.exception',
+          rejection: false,
+          text: 'Uncaught TypeError: nope\n  second line',
+          error: 'TypeError: nope\n  second line',
+          location: at,
+          stack: []
+        },
+        {
+          cursor: 13,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.exception',
+          rejection: true,
+          text: 'Uncaught (in promise) no session',
+          error: 'no session',
+          location: null,
+          stack: []
+        }
+      ],
+      cursor: 13
+    })
+    expect(text.split('\n')).toEqual([
+      `10  p-1  warn slow render at ${app}:4:11`,
+      '11  p-2  error [network] Failed to load resource: net::ERR_FAILED (http://127.0.0.1:4000/data.json)',
+      // A multi-line message stays under its own cursor.
+      '12  p-1  error Uncaught TypeError: nope',
+      `      second line at ${app}:4:11`,
+      '13  p-1  error Uncaught (in promise) no session'
+    ])
+  })
+
+  it('prints page-controlled text without interpreting terminal controls', () => {
+    const text = render({
+      entries: [
+        {
+          cursor: 14,
+          time: 0,
+          pane: 'p-1',
+          type: 'console.message',
+          level: 'log',
+          source: 'network',
+          text: 'before\u001b]52;c;copied\u0007\rspoof\t\u202ereversed\nafter',
+          args: [],
+          url: 'http://localhost/resource\u001b[2J',
+          location: {
+            url: 'http://localhost/source\u009b2J',
+            line: 1,
+            column: 2,
+            resolution: 'failed'
+          },
+          stack: []
+        }
+      ],
+      cursor: 14
+    })
+
+    expect(text).toBe(
+      '14  p-1  log [network] before\\u001b]52;c;copied\\u0007\\u000dspoof\\u0009\\u202ereversed\n' +
+        '    after (http://localhost/resource\\u001b[2J) at http://localhost/source\\u009b2J:1:2'
+    )
+    for (const control of ['\u001b', '\u0007', '\r', '\t', '\u009b', '\u202e']) {
+      expect(text).not.toContain(control)
+    }
   })
 
   it('says what was evicted before what it is about to print', () => {

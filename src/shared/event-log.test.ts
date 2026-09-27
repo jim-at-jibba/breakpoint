@@ -3,9 +3,11 @@ import {
   ENTRIES_PER_READ,
   EventLog,
   MAX_ENTRY_TEXT_BYTES,
+  type ConsoleEntryBody,
   type Entry,
   type EntryOf,
-  type ProjectEntryBody
+  type ProjectEntryBody,
+  type StackFrame
 } from './event-log'
 import { encodeLine, LineBuffer, MAX_FRAME_BYTES, MAX_REQUEST_ID_BYTES, success } from './protocol'
 
@@ -374,5 +376,113 @@ describe('pane lifecycle entries', () => {
       message: 'drawn 390×150, declared 390×844 at this zoom'
     })
     expect(entry.type === 'pane.geometryMismatch' && Object.isFrozen(entry.measured)).toBe(true)
+  })
+})
+
+describe('console entries', () => {
+  const huge = 'x'.repeat(600_000)
+
+  function frame(url: string, line = 1): StackFrame {
+    return { function: 'render', url, line, column: 7, resolution: 'failed' }
+  }
+
+  function message(changes: Partial<EntryOf<'console.message'>> = {}): ConsoleEntryBody {
+    return {
+      type: 'console.message',
+      level: 'log',
+      source: 'console',
+      text: 'hello',
+      args: ['hello'],
+      url: null,
+      location: { url: 'http://localhost:3000/app.js', line: 1, column: 7, resolution: 'failed' },
+      stack: [frame('http://localhost:3000/app.js')],
+      ...changes
+    }
+  }
+
+  function withinLimit(value: unknown): boolean {
+    return Buffer.byteLength(JSON.stringify(value)) <= MAX_ENTRY_TEXT_BYTES
+  }
+
+  it('are frozen down to their frames, and copied off what the caller passed', () => {
+    const log = new EventLog()
+    const args = ['hello']
+    const entry = log.append('pane-1', message({ args }))
+    args.push('later')
+    if (entry.type !== 'console.message') throw new Error(entry.type)
+    expect(entry.args).toEqual(['hello'])
+    expect(Object.isFrozen(entry.args)).toBe(true)
+    expect(Object.isFrozen(entry.location)).toBe(true)
+    expect(Object.isFrozen(entry.stack)).toBe(true)
+    expect(Object.isFrozen(entry.stack[0])).toBe(true)
+  })
+
+  it('shorten their text and every preview on read, and say which fields', () => {
+    const log = new EventLog()
+    log.append('pane-1', message({ text: huge, args: [huge, 'second'] }))
+    const [entry] = log.read().entries
+    if (entry.type !== 'console.message') throw new Error(entry.type)
+    expect(entry.truncated).toEqual(['text', 'args'])
+    expect(withinLimit(entry.text)).toBe(true)
+    // One budget for the whole list, so a page logging a thousand arguments cannot break a read.
+    expect(withinLimit(entry.args)).toBe(true)
+    expect(entry.args).toHaveLength(1)
+    expect(huge.startsWith(entry.args[0])).toBe(true)
+  })
+
+  it('bound the number of previews as well as their length', () => {
+    const log = new EventLog()
+    log.append('pane-1', message({ args: Array.from({ length: 100_000 }, () => 'ab') }))
+    const [entry] = log.read().entries
+    if (entry.type !== 'console.message') throw new Error(entry.type)
+    expect(entry.truncated).toEqual(['args'])
+    expect(withinLimit(entry.args)).toBe(true)
+    expect(entry.args.length).toBeGreaterThan(1)
+  })
+
+  it('shorten a stack by frames, and a location by its URL', () => {
+    const log = new EventLog()
+    const url = `http://localhost:3000/${huge}`
+    log.append('pane-1', {
+      type: 'console.exception',
+      rejection: false,
+      text: `Uncaught Error: ${huge}`,
+      error: `Error: ${huge}`,
+      location: { url, line: 3, column: 1, resolution: 'failed' },
+      stack: [frame(url, 3), frame('http://localhost:3000/a.js', 9)]
+    })
+    const [entry] = log.read().entries
+    if (entry.type !== 'console.exception') throw new Error(entry.type)
+    expect(entry.truncated).toEqual(['text', 'error', 'location', 'stack'])
+    for (const field of [entry.text, entry.error, entry.location, entry.stack]) {
+      expect(withinLimit(field)).toBe(true)
+    }
+    // A location keeps its line and column, and the first frame is never dropped.
+    expect(entry.location).toMatchObject({ line: 3, column: 1, resolution: 'failed' })
+    expect(entry.stack).toHaveLength(1)
+    expect(entry.stack[0]).toMatchObject({ line: 3, function: 'render' })
+    expect(url.startsWith(entry.stack[0].url)).toBe(true)
+  })
+
+  it('keep a long stack of short frames to as many frames as fit', () => {
+    const log = new EventLog()
+    const url = `http://localhost:3000/${'x'.repeat(2_000)}.js`
+    log.append(
+      'pane-1',
+      message({ stack: Array.from({ length: 32 }, (_, line) => frame(url, line)) })
+    )
+    const [entry] = log.read().entries
+    if (entry.type !== 'console.message') throw new Error(entry.type)
+    expect(entry.truncated).toEqual(['stack'])
+    expect(withinLimit(entry.stack)).toBe(true)
+    expect(entry.stack.map((each) => each.line)).toEqual(
+      Array.from({ length: entry.stack.length }, (_, line) => line)
+    )
+  })
+
+  it('leave an entry that fits exactly as it was stored', () => {
+    const log = new EventLog()
+    const stored = log.append('pane-1', message())
+    expect(log.read().entries[0]).toBe(stored)
   })
 })
