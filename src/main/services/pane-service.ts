@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises'
 import { affectedCapabilities, type EmulationResult } from '../../shared/emulation'
 import type { ConsoleEntryBody, EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
@@ -7,6 +8,7 @@ import {
   type PaneStatus
 } from '../../shared/panes'
 import type { Pane, PaneChanges, Project } from '../../shared/project'
+import { resolveEntry, type IsFile } from '../../shared/resolution'
 import type {
   EmulationSetting,
   GeometryReport,
@@ -35,6 +37,14 @@ interface LoadFailure {
 interface GuestDestruction {
   pane: string
   current: boolean
+}
+
+/** What resolution asks the disk: whether a path is a file, and a failed look is a no. */
+export function isFileOnDisk(absolute: string): Promise<boolean> {
+  return stat(absolute).then(
+    (found) => found.isFile(),
+    () => false
+  )
 }
 
 /** A pane after a change, and which of the asked-for values were actually different. */
@@ -73,11 +83,16 @@ export interface PaneProjects {
 export class PaneService {
   private project: Project | null = null
   private current: Record<string, PaneStatus> = {}
+  /** The last entry queued behind a resolving one, settling once it is appended. */
+  private written: Promise<void> = Promise.resolve()
+  /** Entries queued and not yet appended. */
+  private waiting = 0
 
   constructor(
     private readonly feed: StateFeed,
     private readonly log: EventLog,
-    private readonly projects: PaneProjects
+    private readonly projects: PaneProjects,
+    private readonly isFile: IsFile = isFileOnDisk
   ) {}
 
   /**
@@ -287,15 +302,41 @@ export class PaneService {
 
   /**
    * What a pane's page said, or what the browser said about it, as the pane host heard it
-   * over the attachment. Only for a pane of the open project: a page the project has let
-   * go of is not the developer's to hear from.
+   * over the attachment while showing `page`. Only for a pane of the open project: a page
+   * the project has let go of is not the developer's to hear from.
+   *
+   * Its locations are resolved against the repo before it is appended, within the
+   * resolution timeout ([ADR-0020]). Whether it is the project's is decided now, when it
+   * was heard, so what a pane said just before it went is kept, ahead of its going.
+   * Settles once appended.
    */
-  console(pane: string, body: ConsoleEntryBody): void {
-    if (this.has(pane)) this.record(pane, body)
+  console(pane: string, body: ConsoleEntryBody, page: string): Promise<void> {
+    if (!this.has(pane)) return Promise.resolve()
+    const context = { repoPath: this.project?.repoPath ?? null, page }
+    return this.record(pane, resolveEntry(body, context, this.isFile))
   }
 
-  private record(pane: string, body: PaneEntryBody): void {
-    this.log.append(pane, body)
+  /**
+   * Appends in the order things were observed. Only a console entry waits on anything, so
+   * the log is written at once while none is resolving, and behind it while one is: a
+   * page's error heard before it navigated never lands after the navigation.
+   */
+  private record(pane: string, body: PaneEntryBody | Promise<PaneEntryBody>): Promise<void> {
+    if (this.waiting === 0 && !(body instanceof Promise)) {
+      this.log.append(pane, body)
+      return Promise.resolve()
+    }
+    this.waiting += 1
+    const appended = this.written.then(async () => {
+      try {
+        this.log.append(pane, await body)
+      } finally {
+        this.waiting -= 1
+      }
+    })
+    // One entry that could not be appended must not hold up everything observed after it.
+    this.written = appended.catch(() => {})
+    return appended
   }
 
   /** Statuses change only for panes of the open project, and are announced only on change. */

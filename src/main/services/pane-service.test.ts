@@ -1,15 +1,16 @@
-import { mkdir, mkdtemp, realpath, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EmulationChanges, EmulationResult } from '../../shared/emulation'
-import { EventLog } from '../../shared/event-log'
+import { EventLog, type ConsoleEntryBody } from '../../shared/event-log'
 import { initialPaneStatus } from '../../shared/panes'
 import { createProject, type Pane, type StoredProject } from '../../shared/project'
 import { applyPatch, type RevisionedPatch } from '../../shared/state'
+import type { IsFile } from '../../shared/resolution'
 import type { PaneListing } from '../../shared/routes'
 import { StateFeed } from '../state-feed'
-import { PaneService } from './pane-service'
+import { isFileOnDisk, PaneService } from './pane-service'
 import { PresetService } from './preset-service'
 import { PresetStore } from './preset-store'
 import { ProjectService } from './project-service'
@@ -24,6 +25,8 @@ let panes: PaneService
 let projects: ProjectService
 let presetStore: PresetStore
 let presetService: PresetService
+/** What the pane service asks the disk: the real one, unless a test holds it. */
+let isFile: IsFile
 
 /** A listing back as the pane it describes, so it can be compared with a stored one. */
 function paneOf(listing: PaneListing): Pane {
@@ -45,12 +48,18 @@ beforeEach(async () => {
     patches.push(patch)
   })
   log = new EventLog()
-  panes = new PaneService(feed, log, {
-    updatePane: (pane, changes) => projects.updatePane(pane, changes),
-    addPane: (creation) => projects.addPane(creation),
-    removePane: (pane) => projects.removePane(pane),
-    rotatePane: (pane) => projects.rotatePane(pane)
-  })
+  isFile = isFileOnDisk
+  panes = new PaneService(
+    feed,
+    log,
+    {
+      updatePane: (pane, changes) => projects.updatePane(pane, changes),
+      addPane: (creation) => projects.addPane(creation),
+      removePane: (pane) => projects.removePane(pane),
+      rotatePane: (pane) => projects.rotatePane(pane)
+    },
+    (absolute) => isFile(absolute)
+  )
   projects = new ProjectService(
     store,
     feed,
@@ -687,6 +696,36 @@ describe('counting a pane’s errors', () => {
 })
 
 describe("hearing a pane's console", () => {
+  const ORIGIN = 'http://localhost:5173'
+  const PAGE = `${ORIGIN}/checkout`
+
+  function thrownFrom(...urls: string[]): ConsoleEntryBody {
+    const stack = urls.map((url) => ({
+      function: 'render',
+      url,
+      line: 4,
+      column: 11,
+      resolution: 'failed' as const,
+      path: null
+    }))
+    return {
+      type: 'console.exception',
+      rejection: false,
+      text: 'Uncaught TypeError: nope',
+      error: 'TypeError: nope',
+      location: { url: urls[0], line: 4, column: 11, resolution: 'failed', path: null },
+      stack
+    }
+  }
+
+  function gate(): { wait: Promise<void>; open(): void } {
+    let open = (): void => {}
+    const wait = new Promise<void>((resolve) => {
+      open = resolve
+    })
+    return { wait, open }
+  }
+
   const message = {
     type: 'console.message',
     level: 'error',
@@ -702,11 +741,113 @@ describe("hearing a pane's console", () => {
     const [mobile] = await openShop()
     const { cursor } = projects.snapshot()
 
-    panes.console(mobile.id, message)
+    await panes.console(mobile.id, message, PAGE)
 
     expect(log.read({ since: cursor }).entries).toEqual([
       expect.objectContaining({ ...message, pane: mobile.id })
     ])
+  })
+
+  it('resolves a script the dev server served from the repo before it appends', async () => {
+    const [mobile] = await openShop()
+    await mkdir(join(shop, 'src'))
+    await writeFile(join(shop, 'src', 'App.tsx'), 'export {}\n')
+    const { cursor } = projects.snapshot()
+
+    await panes.console(
+      mobile.id,
+      thrownFrom(`${ORIGIN}/src/App.tsx?t=1`, 'http://localhost:1/x.js'),
+      PAGE
+    )
+
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({
+        location: expect.objectContaining({ resolution: 'resolved', path: 'src/App.tsx' }),
+        stack: [
+          expect.objectContaining({ resolution: 'resolved', path: 'src/App.tsx', line: 4 }),
+          expect.objectContaining({
+            resolution: 'failed',
+            path: null,
+            url: 'http://localhost:1/x.js'
+          })
+        ]
+      })
+    ])
+  })
+
+  it('appends as reported, and flagged, where the path names no file in the repo', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+    const body = thrownFrom(`${ORIGIN}/src/App.tsx`)
+
+    await panes.console(mobile.id, body, PAGE)
+
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({ ...body, pane: mobile.id })
+    ])
+  })
+
+  it('appends in the order it heard, however long each took to resolve', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+    const slow = gate()
+    isFile = (absolute) =>
+      absolute.endsWith('slow.ts') ? slow.wait.then(() => true) : Promise.resolve(true)
+
+    const first = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/slow.ts`), PAGE)
+    const second = panes.console(mobile.id, message, PAGE)
+    // Well inside the timeout: the second had nothing to resolve, and still waits.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(log.read({ since: cursor }).entries).toEqual([])
+    slow.open()
+    await Promise.all([first, second])
+
+    expect(log.read({ since: cursor }).entries.map((entry) => entry.type)).toEqual([
+      'console.exception',
+      'console.message'
+    ])
+  })
+
+  it('keeps what a pane said just before it went, ahead of its going', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+    const slow = gate()
+    isFile = () => slow.wait.then(() => true)
+
+    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE)
+    await panes.remove(mobile.id)
+    slow.open()
+    await heard
+    await vi.waitFor(() => expect(log.read({ since: cursor }).entries).toHaveLength(2))
+
+    expect(log.read({ since: cursor }).entries.map((entry) => entry.type)).toEqual([
+      'console.exception',
+      'pane.removed'
+    ])
+  })
+
+  it('never lets what happened to a pane overtake what its page said first', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+    const slow = gate()
+    isFile = () => slow.wait.then(() => true)
+
+    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE)
+    panes.detached(mobile.id, 'target closed')
+    // The pane's status does not wait on the log: only the order entries are written in does.
+    expect(panes.statuses()[mobile.id].attachment).toBe('failed')
+    expect(log.read({ since: cursor }).entries).toEqual([])
+    slow.open()
+    await heard
+    await vi.waitFor(() => expect(log.read({ since: cursor }).entries).toHaveLength(2))
+
+    expect(log.read({ since: cursor }).entries.map((entry) => entry.type)).toEqual([
+      'console.exception',
+      'pane.detached'
+    ])
+    // Once nothing is resolving, the log is written at once again.
+    panes.consoleFailed(mobile.id, 'Log.enable: refused')
+    expect(log.read({ since: cursor }).entries).toHaveLength(3)
   })
 
   it('records and degrades a pane whose attachment will not carry its console', async () => {
@@ -750,7 +891,7 @@ describe("hearing a pane's console", () => {
     await openShop()
     const { cursor } = projects.snapshot()
 
-    panes.console('gone', message)
+    await panes.console('gone', message, PAGE)
 
     expect(log.read({ since: cursor }).entries).toEqual([])
   })

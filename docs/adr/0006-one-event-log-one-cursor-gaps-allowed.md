@@ -52,5 +52,7 @@ one retained in the log.
 logs, so every field it can make large is shortened on read under the same 16 KiB budget:
 `text` and `error` like `message`, and `args`, `location` and `stack` each as a whole. A
 list keeps as many leading items as fit, so a thousand small arguments are bounded like
-one enormous one. A location keeps its line and column and loses URL instead, and a stack
-never loses its innermost frame. `truncated` names each shortened field, as before.
+one enormous one. A location keeps its line, column and resolution and loses URL instead,
+and a stack never loses its innermost frame. `truncated` names each shortened field, as
+before. A resolved location's `path` is shortened along with its URL (#51), and stays
+marked resolved, so a shortened path names a file only together with `truncated`.

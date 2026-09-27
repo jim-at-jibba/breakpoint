@@ -341,8 +341,11 @@ function indented(text: string): string {
     .join('\n    ')
 }
 
+/** Resolved, the file in the repo to open; otherwise the script, as the page reported it. */
 function describeLocation(location: SourceLocation | null): string {
-  return location ? ` at ${printable(location.url)}:${location.line}:${location.column}` : ''
+  if (!location) return ''
+  const where = location.resolution === 'resolved' ? location.path : location.url
+  return ` at ${printable(where)}:${location.line}:${location.column}`
 }
 
 /** Page text may be printed, but never interpreted as terminal control. */

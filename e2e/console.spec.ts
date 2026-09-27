@@ -10,7 +10,7 @@ import {
   type StoredProject
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
-import { startFixture, type Fixture } from './fixture'
+import { RESOLUTION_SCRIPTS, startFixture, type Fixture } from './fixture'
 import { closeApp, launchApp, runCli, Sandbox, type LaunchedApp } from './harness'
 
 /**
@@ -38,12 +38,12 @@ test.afterEach(async () => {
   await fixture.close()
 })
 
-function makeRepo(name: string): StoredProject {
+function makeRepo(name: string, page = '/console'): StoredProject {
   const path = join(repos, name)
   mkdirSync(path, { recursive: true })
   const project: StoredProject = {
     ...createProject(realpathSync.native(path)),
-    startUrl: `${fixture.a}/console`
+    startUrl: `${fixture.a}${page}`
   }
   const projects = join(sandbox.userDataDir, 'projects')
   mkdirSync(projects, { recursive: true })
@@ -325,5 +325,115 @@ test('a pane whose attachment failed is degraded and reports nothing', async () 
       { cause: 'attachment', message: 'Debugger is already attached to the target' }
     ])
     expect(entries.filter((entry) => entry.type.startsWith('console.'))).toEqual([])
+  }
+})
+
+/** What each pane's page says by the time `/resolution` has said everything it says. */
+async function resolutionSaid(panes: readonly string[]): Promise<Entry[]> {
+  let entries: Entry[] = []
+  await expect
+    .poll(
+      async () => {
+        entries = await logs()
+        return panes.every(
+          (pane) =>
+            exceptions(entries, pane).length === 1 &&
+            messages(entries, pane).filter((entry) => entry.source === 'console').length === 2
+        )
+      },
+      { timeout: 20_000 }
+    )
+    .toBe(true)
+  return entries
+}
+
+test('a dev server script resolves to its path in the repo, and a bundle says it did not', async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop', '/resolution')
+  mkdirSync(join(shop.repoPath, 'src'))
+  writeFileSync(join(shop.repoPath, 'src', 'widget.js'), RESOLUTION_SCRIPTS['/src/widget.js'])
+  await open(shop)
+  const entries = await resolutionSaid(shop.panes.map((pane) => pane.id))
+  const widget = `${fixture.a}/src/widget.js`
+  const bundle = `${fixture.a}/assets/bundle-3f9a.js`
+
+  for (const pane of shop.panes) {
+    const [thrown] = exceptions(entries, pane.id)
+    expect(thrown.location).toEqual({
+      url: widget,
+      line: 2,
+      column: expect.any(Number),
+      resolution: 'resolved',
+      path: 'src/widget.js'
+    })
+    // Every frame on its own: the repo's resolve, and the bundle's keep what they came with.
+    expect(thrown.stack).toEqual([
+      expect.objectContaining({
+        function: 'inner',
+        line: 2,
+        resolution: 'resolved',
+        path: 'src/widget.js'
+      }),
+      expect.objectContaining({
+        function: 'outer',
+        line: 5,
+        resolution: 'resolved',
+        path: 'src/widget.js'
+      }),
+      expect.objectContaining({
+        function: 'bundled',
+        url: bundle,
+        line: 2,
+        resolution: 'failed',
+        path: null
+      })
+    ])
+
+    const said = messages(entries, pane.id).filter((entry) => entry.source === 'console')
+    expect(said).toEqual([
+      expect.objectContaining({
+        text: 'warned from the repo',
+        location: expect.objectContaining({
+          line: 8,
+          resolution: 'resolved',
+          path: 'src/widget.js'
+        })
+      }),
+      expect.objectContaining({
+        text: 'logged from a bundle',
+        location: { url: bundle, line: 1, column: 9, resolution: 'failed', path: null }
+      })
+    ])
+  }
+
+  // Resolution happened before the append: nothing arrived twice, nothing was rewritten.
+  const cursors = entries.map((entry) => entry.cursor)
+  expect(new Set(cursors).size).toBe(cursors.length)
+
+  const text = await runCli(sandbox, ['logs'])
+  const [first] = shop.panes
+  expect(text.stdout).toContain(
+    `  ${first.id}  error Uncaught RangeError: thrown from the repo at src/widget.js:2:`
+  )
+  expect(text.stdout).toContain(`  ${first.id}  info logged from a bundle at ${bundle}:1:9`)
+})
+
+test('a project with no repo path keeps logging, with every location unresolved', async () => {
+  launched = await launchApp(sandbox)
+  const run = await runCli(sandbox, ['open', `${fixture.a}/resolution`, '--json'])
+  expect(run.stderr).toBe('')
+  expect(run.code).toBe(0)
+  const { project } = await state()
+  expect(project?.repoPath).toBeNull()
+
+  const entries = await resolutionSaid(project!.panes.map((pane) => pane.id))
+  const locations = entries.flatMap((entry) =>
+    entry.type === 'console.message' || entry.type === 'console.exception'
+      ? [entry.location, ...entry.stack]
+      : []
+  )
+  expect(locations.length).toBeGreaterThan(0)
+  for (const location of locations) {
+    expect(location).toMatchObject({ resolution: 'failed', path: null })
   }
 })

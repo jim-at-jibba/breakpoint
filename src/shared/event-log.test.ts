@@ -383,7 +383,7 @@ describe('console entries', () => {
   const huge = 'x'.repeat(600_000)
 
   function frame(url: string, line = 1): StackFrame {
-    return { function: 'render', url, line, column: 7, resolution: 'failed' }
+    return { function: 'render', url, line, column: 7, resolution: 'failed', path: null }
   }
 
   function message(changes: Partial<EntryOf<'console.message'>> = {}): ConsoleEntryBody {
@@ -394,7 +394,13 @@ describe('console entries', () => {
       text: 'hello',
       args: ['hello'],
       url: null,
-      location: { url: 'http://localhost:3000/app.js', line: 1, column: 7, resolution: 'failed' },
+      location: {
+        url: 'http://localhost:3000/app.js',
+        line: 1,
+        column: 7,
+        resolution: 'failed',
+        path: null
+      },
       stack: [frame('http://localhost:3000/app.js')],
       ...changes
     }
@@ -448,7 +454,7 @@ describe('console entries', () => {
       rejection: false,
       text: `Uncaught Error: ${huge}`,
       error: `Error: ${huge}`,
-      location: { url, line: 3, column: 1, resolution: 'failed' },
+      location: { url, line: 3, column: 1, resolution: 'failed', path: null },
       stack: [frame(url, 3), frame('http://localhost:3000/a.js', 9)]
     })
     const [entry] = log.read().entries
@@ -458,10 +464,27 @@ describe('console entries', () => {
       expect(withinLimit(field)).toBe(true)
     }
     // A location keeps its line and column, and the first frame is never dropped.
-    expect(entry.location).toMatchObject({ line: 3, column: 1, resolution: 'failed' })
+    expect(entry.location).toMatchObject({ line: 3, column: 1, resolution: 'failed', path: null })
     expect(entry.stack).toHaveLength(1)
     expect(entry.stack[0]).toMatchObject({ line: 3, function: 'render' })
     expect(url.startsWith(entry.stack[0].url)).toBe(true)
+  })
+
+  it('keep a resolved location resolved, shortening its path along with its URL', () => {
+    const log = new EventLog()
+    const path = `src/${huge}.ts`
+    const url = `http://localhost:5173/${path}`
+    const resolved = { url, line: 3, column: 1, resolution: 'resolved', path } as const
+    log.append('pane-1', message({ location: resolved, stack: [{ ...resolved, function: 'f' }] }))
+    const [entry] = log.read().entries
+    if (entry.type !== 'console.message') throw new Error(entry.type)
+    expect(entry.truncated).toEqual(['location', 'stack'])
+    expect(withinLimit(entry.location)).toBe(true)
+    expect(withinLimit(entry.stack)).toBe(true)
+    expect(entry.location).toMatchObject({ line: 3, column: 1, resolution: 'resolved' })
+    expect(path.startsWith(entry.location?.path ?? '-')).toBe(true)
+    expect(entry.stack[0]).toMatchObject({ line: 3, resolution: 'resolved', function: 'f' })
+    expect(path.startsWith(entry.stack[0].path ?? '-')).toBe(true)
   })
 
   it('keep a long stack of short frames to as many frames as fit', () => {

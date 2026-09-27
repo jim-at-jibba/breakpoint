@@ -197,7 +197,9 @@ describe("a pane's console", () => {
     expect(panes.console).toHaveBeenCalledTimes(1)
     expect(panes.console).toHaveBeenCalledWith(
       pane,
-      expect.objectContaining({ type: 'console.message', text: 'hello' })
+      expect.objectContaining({ type: 'console.message', text: 'hello' }),
+      // The page it was heard on, whose origin is the dev server resolution reads.
+      'http://localhost:3000/'
     )
   })
 
