@@ -157,10 +157,11 @@ function exception(details: Record<string, unknown>): ConsoleEntryBody {
   const headline = typeof details.text === 'string' ? details.text : 'Uncaught'
   const thrown = isRecord(details.exception) ? preview(details.exception as RemoteObject) : null
   const stack = stackOf(details.stackTrace)
+  const alreadySaid = thrown !== null && (headline === thrown || headline.endsWith(` ${thrown}`))
   return {
     type: 'console.exception',
     rejection: headline.startsWith('Uncaught (in promise)'),
-    text: thrown === null || headline.includes(thrown) ? headline : `${headline} ${thrown}`,
+    text: thrown === null || alreadySaid ? headline : `${headline} ${thrown}`,
     error: thrown,
     location: innermost(stack) ?? reportedLocation(details),
     stack

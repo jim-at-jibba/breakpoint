@@ -310,6 +310,15 @@ describe('an exception', () => {
     })
   })
 
+  it('keeps a thrown primitive that is only a substring of the headline', () => {
+    expect(
+      consoleEntryFor(
+        'Runtime.exceptionThrown',
+        details({ text: 'Uncaught', exception: text('caught') })
+      )
+    ).toMatchObject({ text: 'Uncaught caught', error: 'caught' })
+  })
+
   it('with nothing thrown to preview keeps its headline alone', () => {
     expect(
       consoleEntryFor('Runtime.exceptionThrown', details({ exception: undefined }))

@@ -135,6 +135,8 @@ export type PaneEntryBody =
       readonly retrying: boolean
       readonly message: string
     }
+  /** A live attachment ended while its pane remained. */
+  | { readonly type: 'pane.detached'; readonly reason: string }
   /**
    * The attachment was made but console capture could not be enabled on it, so the pane
    * hears nothing. Degraded rather than quiet: a pane that silently reports nothing is the
@@ -454,6 +456,8 @@ function copyBody(body: EntryBody): EntryBody {
         retrying: body.retrying,
         message: body.message
       }
+    case 'pane.detached':
+      return { type: body.type, reason: body.reason }
     case 'pane.consoleFailed':
       return { type: body.type, message: body.message }
     case 'pane.loadFailed':

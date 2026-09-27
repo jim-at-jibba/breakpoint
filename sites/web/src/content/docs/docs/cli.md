@@ -330,6 +330,7 @@ Pane entries are tagged with the pane's `id`:
 | `pane.created` | `url` | The pane's page was created, loading `url` |
 | `pane.attached` | `attempt` | The app made its debugging connection to the pane |
 | `pane.attachFailed` | `attempt`, `retrying`, `message` | It could not. `retrying` says whether one more attempt follows the next load; the second failure is final |
+| `pane.detached` | `reason` | A connection that had attached ended while its pane remained. The pane is degraded with cause `attachment` |
 | `pane.consoleFailed` | `message` | The pane is attached, but its console could not be captured, so it hears nothing. The pane is degraded with cause `console` |
 | `pane.loaded` | `url` | The pane finished loading `url` |
 | `pane.loadFailed` | `url`, `code`, `message` | The pane could not load `url`. `code` is Chromium's net error, such as `-102` |

@@ -311,14 +311,21 @@ export class PaneHost {
       return
     }
     this.attachments.add(guest)
-    guest.debugger.once('detach', () => this.attachments.delete(guest))
     // Listening before any override is sent, so a refused one cannot cost the pane its
     // console (#4, ADR-0019): a degraded pane that renders is visible, and one that
     // silently reports nothing is not.
     const capture = new ConsoleCapture()
-    guest.debugger.on('message', (_event, method: string, params: unknown) => {
+    const onMessage = (_event: Electron.Event, method: string, params: unknown): void => {
       const body = capture.hear(method, params)
       if (body && this.isCurrent(pane, guest)) this.panes.console(pane, body)
+    }
+    guest.debugger.on('message', onMessage)
+    guest.debugger.once('detach', (_event, reason) => {
+      this.attachments.delete(guest)
+      guest.debugger.removeListener('message', onMessage)
+      if (this.isCurrent(pane, guest) && !guest.isDestroyed()) {
+        this.panes.detached(pane, reason)
+      }
     })
     this.panes.attached(pane, attempt)
     // On either attempt: `Runtime.enable` replays what the page logged before it, and on
@@ -326,7 +333,9 @@ export class PaneHost {
     for (const method of CONSOLE_ENABLE_COMMANDS) {
       void guest.debugger.sendCommand(method).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error)
-        if (this.isCurrent(pane, guest)) this.panes.consoleFailed(pane, `${method}: ${message}`)
+        if (this.isCurrent(pane, guest) && this.attachments.has(guest)) {
+          this.panes.consoleFailed(pane, `${method}: ${message}`)
+        }
       })
     }
     await this.emulate(pane, guest)
@@ -346,7 +355,11 @@ export class PaneHost {
       emulationFor(declared, process.versions.chrome, currentHostIdentity()),
       ({ method, params }) => guest.debugger.sendCommand(method, params)
     )
-    if (this.passes.get(guest) === pass && this.isCurrent(pane, guest)) {
+    if (
+      this.passes.get(guest) === pass &&
+      this.isCurrent(pane, guest) &&
+      this.attachments.has(guest)
+    ) {
       this.panes.emulated(pane, results)
     }
   }

@@ -301,6 +301,8 @@ function describeEntry(entry: Entry): string {
       return `attached (attempt ${entry.attempt})`
     case 'pane.attachFailed':
       return `attachment failed (attempt ${entry.attempt}, ${entry.retrying ? 'retrying after load' : 'not retrying'}): ${entry.message}`
+    case 'pane.detached':
+      return `degraded: attachment detached: ${entry.reason}`
     case 'pane.consoleFailed':
       return `degraded: console not captured: ${entry.message}`
     case 'pane.loaded':
@@ -323,7 +325,7 @@ function describeEntry(entry: Entry): string {
       return 'destroyed'
     case 'console.message': {
       const source = entry.source === 'console' ? '' : ` [${entry.source}]`
-      const about = entry.url ? ` (${entry.url})` : ''
+      const about = entry.url ? ` (${printable(entry.url)})` : ''
       return `${entry.level}${source} ${indented(entry.text)}${about}${describeLocation(entry.location)}`
     }
     case 'console.exception':
@@ -333,11 +335,36 @@ function describeEntry(entry: Entry): string {
 
 /** Continuation lines are indented, so every line that starts at the margin is a cursor. */
 function indented(text: string): string {
-  return text.replace(/\n/g, '\n    ')
+  return text
+    .split('\n')
+    .map((line) => printable(line))
+    .join('\n    ')
 }
 
 function describeLocation(location: SourceLocation | null): string {
-  return location ? ` at ${location.url}:${location.line}:${location.column}` : ''
+  return location ? ` at ${printable(location.url)}:${location.line}:${location.column}` : ''
+}
+
+/** Page text may be printed, but never interpreted as terminal control. */
+function printable(text: string): string {
+  let result = ''
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0
+    result += isTerminalControl(code) ? `\\u${code.toString(16).padStart(4, '0')}` : character
+  }
+  return result
+}
+
+function isTerminalControl(code: number): boolean {
+  return (
+    code <= 0x1f ||
+    (code >= 0x7f && code <= 0x9f) ||
+    code === 0x061c ||
+    code === 0x200e ||
+    code === 0x200f ||
+    (code >= 0x202a && code <= 0x202e) ||
+    (code >= 0x2066 && code <= 0x2069)
+  )
 }
 
 export interface CliOptions {

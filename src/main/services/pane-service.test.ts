@@ -727,6 +727,25 @@ describe("hearing a pane's console", () => {
     ])
   })
 
+  it('records and degrades a pane whose live attachment ended', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.detached(mobile.id, 'replaced with devtools')
+
+    expect(panes.statuses()[mobile.id]).toMatchObject({
+      attachment: 'failed',
+      degraded: [{ cause: 'attachment', message: 'debugger detached: replaced with devtools' }]
+    })
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({
+        pane: mobile.id,
+        type: 'pane.detached',
+        reason: 'replaced with devtools'
+      })
+    ])
+  })
+
   it('says nothing for a pane the open project no longer has', async () => {
     await openShop()
     const { cursor } = projects.snapshot()

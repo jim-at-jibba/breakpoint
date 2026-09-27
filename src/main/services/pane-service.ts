@@ -172,6 +172,13 @@ export class PaneService {
     this.observe(pane, { type: 'attachFailed', message })
   }
 
+  /** A connection that had attached ended while its pane remained. */
+  detached(pane: string, reason: string): void {
+    const message = `debugger detached: ${reason}`
+    this.record(pane, { type: 'pane.detached', reason })
+    this.observe(pane, { type: 'attachFailed', message })
+  }
+
   /** The attachment stands, but its console could not be enabled: degraded, with why. */
   consoleFailed(pane: string, message: string): void {
     this.record(pane, { type: 'pane.consoleFailed', message })

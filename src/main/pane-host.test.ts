@@ -102,15 +102,21 @@ describe("a pane's console", () => {
     guest: WebContents
     attachment: EventEmitter
     calls: string[]
+    markDestroyed(): void
   }
 
   /** A guest whose attachment records what was asked of it, in order, and can be spoken over. */
-  function attachedGuest(refuse: (method: string) => boolean = () => false): AttachedGuest {
+  function attachedGuest(
+    refuse: (method: string) => boolean = () => false,
+    beforeAnswer: (method: string) => Promise<void> = async () => undefined
+  ): AttachedGuest {
     const calls: string[] = []
+    let destroyed = false
     const attachment = Object.assign(new EventEmitter(), {
       attach: vi.fn(),
       sendCommand: vi.fn(async (method: string) => {
         calls.push(method)
+        await beforeAnswer(method)
         if (refuse(method)) throw new Error(`${method} refused`)
         return {}
       })
@@ -123,15 +129,15 @@ describe("a pane's console", () => {
     const guest = Object.assign(new EventEmitter(), {
       debugger: attachment,
       getURL: () => 'http://localhost:3000/',
-      isDestroyed: () => false,
+      isDestroyed: () => destroyed,
       loadURL: vi.fn().mockResolvedValue(undefined)
     }) as unknown as WebContents
-    return { guest, attachment, calls }
+    return { guest, attachment, calls, markDestroyed: () => (destroyed = true) }
   }
 
   function hostFor(guest: WebContents): {
     pane: string
-    panes: Record<'emulated' | 'console' | 'consoleFailed', ReturnType<typeof vi.fn>>
+    panes: Record<'emulated' | 'console' | 'consoleFailed' | 'detached', ReturnType<typeof vi.fn>>
   } {
     const project = createProject('/repos/shop')
     const [pane] = project.panes
@@ -146,7 +152,8 @@ describe("a pane's console", () => {
       emulated: vi.fn(),
       guestDestroyed: vi.fn(),
       console: vi.fn(),
-      consoleFailed: vi.fn()
+      consoleFailed: vi.fn(),
+      detached: vi.fn()
     }
     const host = new PaneHost(panes as unknown as PaneService, feed)
     feed.publish({ type: 'project.opened', project })
@@ -201,6 +208,52 @@ describe("a pane's console", () => {
 
     expect(panes.consoleFailed).toHaveBeenCalledTimes(1)
     expect(panes.consoleFailed).toHaveBeenCalledWith(pane, 'Log.enable: Log.enable refused')
+  })
+
+  it('stops listening and degrades a live pane when its attachment ends', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    attachment.emit('detach', {}, 'target closed')
+    attachment.emit('message', {}, 'Runtime.consoleAPICalled', call)
+
+    expect(attachment.listenerCount('message')).toBe(0)
+    expect(panes.console).not.toHaveBeenCalled()
+    expect(panes.detached).toHaveBeenCalledWith(pane, 'target closed')
+  })
+
+  it('cleans up without degrading when the target closed', async () => {
+    const { guest, attachment, markDestroyed } = attachedGuest()
+    const { panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    markDestroyed()
+    attachment.emit('detach', {}, 'target closed')
+
+    expect(attachment.listenerCount('message')).toBe(0)
+    expect(panes.detached).not.toHaveBeenCalled()
+  })
+
+  it('drops an emulation result that completes after detachment', async () => {
+    let releaseOverrides = (): void => undefined
+    const overridesReleased = new Promise<void>((resolve) => {
+      releaseOverrides = resolve
+    })
+    const { guest, attachment, calls } = attachedGuest(
+      () => false,
+      (method) => (method.startsWith('Emulation.') ? overridesReleased : Promise.resolve())
+    )
+    const { panes } = hostFor(guest)
+    await vi.waitFor(() =>
+      expect(calls.filter((method) => method.startsWith('Emulation.'))).toHaveLength(4)
+    )
+
+    attachment.emit('detach', {}, 'target closed')
+    releaseOverrides()
+    await new Promise<void>((resolve) => setImmediate(resolve))
+
+    expect(panes.emulated).not.toHaveBeenCalled()
   })
 
   it('stops reporting for a guest the pane has replaced', async () => {
