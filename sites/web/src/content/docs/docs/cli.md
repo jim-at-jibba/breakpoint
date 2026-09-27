@@ -374,8 +374,12 @@ true as it was when it arrived, even after your dev server has rebuilt:
 
 A location resolves when its script came from the same origin as the pane's page, and the
 script's path names a file in your repo. That is what a dev server does when it serves
-`/src/App.tsx`. A bundled script, one from another origin, and every location in a project
-with no repo path stay `"failed"`. That is an ordinary outcome, not an error. An entry
+`/src/App.tsx`. Where the path names no file, as with a production build's
+`/assets/index-4f2a.js`, Breakpoint fetches the script, follows its source map (a
+`SourceMap` header, or its `sourceMappingURL` comment) and resolves to the source file and
+position the map names, if that file is in your repo. A script with no map, a map that
+cannot be fetched or read, a source outside your repo, and every location in a project with
+no repo path stay `"failed"`. That is an ordinary outcome, not an error. An entry
 never waits more than half a second on resolution, and whatever has not resolved by then
 is written as reported. Entries keep the order they were heard in either way, and `time` is
 when an entry was written, so it can trail the page by up to that half second.

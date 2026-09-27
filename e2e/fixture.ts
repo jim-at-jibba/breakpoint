@@ -1,6 +1,7 @@
 import { createServer, type RequestListener, type Server } from 'node:http'
 import { createServer as createSecureServer } from 'node:https'
 import type { AddressInfo } from 'node:net'
+import { bundle, BUNDLE_PATH } from './bundle'
 
 /**
  * The page the panes load in tests. Written for Phase 1 and deliberately not lifted
@@ -26,6 +27,7 @@ import type { AddressInfo } from 'node:net'
  *
  * `/console` is a different page, for console capture: see `consolePage`. `/resolution` is
  * another, for resolving what it logs to paths in a repo: see `RESOLUTION_SCRIPTS`.
+ * `/bundled` loads a production-style bundle, served with its map beneath it: see `bundle`.
  *
  * Every request either origin answers is recorded with its headers, which is what a
  * server doing device detection would see.
@@ -180,8 +182,8 @@ fetch(other + '/not-shared').catch(() => {});
 /**
  * What `/resolution` loads, by path. `/src/widget.js` is shaped like a dev server's answer:
  * a test whose repo holds this file at `src/widget.js` expects it to resolve. The bundle is
- * deliberately unresolvable — no repo holds `assets/bundle-3f9a.js` — and it is what calls
- * into the widget, so one stack holds frames of both.
+ * deliberately unresolvable — no repo holds `assets/bundle-3f9a.js`, and it names no source
+ * map — and it is what calls into the widget, so one stack holds frames of both.
  */
 export const RESOLUTION_SCRIPTS = {
   '/src/widget.js': `function inner() {
@@ -210,6 +212,19 @@ ${Object.keys(RESOLUTION_SCRIPTS)
 <body><p>resolution</p></body>
 </html>
 `
+
+function bundledPage(entry: string): string {
+  return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>bundled</title>
+<script type="module" src="${entry}"></script>
+</head>
+<body><p>bundled</p></body>
+</html>
+`
+}
 
 function asset(scale: string): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><text y="12">${scale}</text></svg>`
@@ -253,6 +268,31 @@ function respond(
     if (Object.hasOwn(RESOLUTION_SCRIPTS, target.pathname)) {
       response.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' })
       response.end(RESOLUTION_SCRIPTS[target.pathname as keyof typeof RESOLUTION_SCRIPTS])
+      return
+    }
+    if (target.pathname === BUNDLE_PATH || target.pathname.startsWith(`${BUNDLE_PATH}/`)) {
+      // Built on first asking, so a test that never loads it never waits on a bundler.
+      void bundle().then(
+        ({ entry, files }) => {
+          const file = files.get(target.pathname)
+          if (target.pathname === BUNDLE_PATH) {
+            response.writeHead(200, {
+              'content-type': 'text/html; charset=utf-8',
+              'cache-control': 'no-store'
+            })
+            response.end(bundledPage(entry))
+          } else if (file === undefined) {
+            response.writeHead(404).end()
+          } else {
+            const type = target.pathname.endsWith('.map') ? 'application/json' : 'text/javascript'
+            response.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' })
+            response.end(file)
+          }
+        },
+        (error: unknown) => {
+          response.writeHead(500, { 'content-type': 'text/plain' }).end(String(error))
+        }
+      )
       return
     }
     if (target.pathname === '/redirect') {

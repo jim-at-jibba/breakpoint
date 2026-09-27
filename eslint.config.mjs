@@ -36,11 +36,12 @@ export default defineConfig(
       'react/no-unknown-property': ['error', { ignore: ['partition', 'webpreferences'] }]
     }
   },
-  // Plain-JS tooling: this config, the Astro config, the icon generator. There is no
-  // type checker over them, so a return-type annotation would be decoration rather than
-  // a check, and the rule only asks for syntax TypeScript files do not have here.
+  // Plain JS: this config, the Astro config, the icon generator, and the sources the e2e
+  // fixture bundles. There is no type checker over them, so a return-type annotation would
+  // be decoration rather than a check, and the rule only asks for syntax TypeScript files
+  // do not have here.
   {
-    files: ['**/*.mjs'],
+    files: ['**/*.mjs', 'e2e/bundled/**/*.js'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'
     }

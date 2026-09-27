@@ -1,6 +1,15 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { transformWithEsbuild } from 'vite'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { ConsoleEntryBody, SourceLocation, StackFrame } from './event-log'
-import { RESOLUTION_TIMEOUT_MS, repoPathFor, resolveEntry, type IsFile } from './resolution'
+import {
+  RESOLUTION_TIMEOUT_MS,
+  repoPathFor,
+  resolveEntry,
+  type FetchText,
+  type Fetched,
+  type IsFile,
+  type ResolutionIO
+} from './resolution'
 
 const PAGE = 'http://localhost:5173/checkout'
 const REPO = '/Users/ada/shop'
@@ -30,6 +39,14 @@ function exception(stack: StackFrame[]): ConsoleEntryBody {
 /** A repo holding exactly these files. */
 function files(...paths: string[]): IsFile {
   return (absolute) => Promise.resolve(paths.some((path) => `${REPO}/${path}` === absolute))
+}
+
+/** A network that answers nothing, as if every script were a dev server's own. */
+const offline: FetchText = () => Promise.resolve(null)
+
+/** A repo holding exactly these files, on a network that answers nothing. */
+function repo(...paths: string[]): ResolutionIO {
+  return { isFile: files(...paths), fetch: offline }
 }
 
 describe('repoPathFor', () => {
@@ -68,7 +85,7 @@ describe('resolveEntry', () => {
 
   it('resolves the location and every frame that names a file in the repo', async () => {
     const body = exception([frame('render', APP, 12), frame('', BUNDLE, 1)])
-    const resolved = await resolveEntry(body, { repoPath: REPO, page: PAGE }, files('src/App.tsx'))
+    const resolved = await resolveEntry(body, { repoPath: REPO, page: PAGE }, repo('src/App.tsx'))
     expect(resolved).toMatchObject({
       location: { url: APP, line: 12, column: 3, resolution: 'resolved', path: 'src/App.tsx' },
       stack: [
@@ -84,7 +101,7 @@ describe('resolveEntry', () => {
     await resolveEntry(
       exception([frame('a', APP, 1), frame('b', APP, 2), frame('c', APP, 3)]),
       { repoPath: REPO, page: PAGE },
-      isFile
+      { isFile, fetch: offline }
     )
     expect(isFile).toHaveBeenCalledTimes(1)
     expect(isFile).toHaveBeenCalledWith(`${REPO}/src/App.tsx`)
@@ -93,15 +110,24 @@ describe('resolveEntry', () => {
   it('leaves everything unresolved for a project with no repo path, and asks nothing', async () => {
     const isFile = vi.fn(files('src/App.tsx'))
     const body = exception([frame('render', APP, 12)])
-    const resolved = await resolveEntry(body, { repoPath: null, page: PAGE }, isFile)
+    const resolved = await resolveEntry(
+      body,
+      { repoPath: null, page: PAGE },
+      { isFile, fetch: offline }
+    )
     expect(resolved).toEqual(body)
     expect(isFile).not.toHaveBeenCalled()
   })
 
   it('treats a disk that throws as a script it cannot find', async () => {
     const body = exception([frame('render', APP, 12)])
-    const resolved = await resolveEntry(body, { repoPath: REPO, page: PAGE }, () =>
-      Promise.reject(new Error('EACCES'))
+    const resolved = await resolveEntry(
+      body,
+      { repoPath: REPO, page: PAGE },
+      {
+        isFile: () => Promise.reject(new Error('EACCES')),
+        fetch: offline
+      }
     )
     expect(resolved).toEqual(body)
   })
@@ -114,7 +140,7 @@ describe('resolveEntry', () => {
     const pending = resolveEntry(
       exception([frame('slow', slow, 4), frame('render', APP, 12)]),
       { repoPath: REPO, page: PAGE },
-      isFile
+      { isFile, fetch: offline }
     )
     await vi.advanceTimersByTimeAsync(RESOLUTION_TIMEOUT_MS)
     const resolved = await pending
@@ -126,7 +152,7 @@ describe('resolveEntry', () => {
     const resolved = await resolveEntry(
       exception([frame('render', APP, 12)]),
       { repoPath: `${REPO}/`, page: PAGE },
-      files('src/App.tsx')
+      repo('src/App.tsx')
     )
     expect(resolved.location?.path).toBe('src/App.tsx')
   })
@@ -143,7 +169,7 @@ describe('resolveEntry', () => {
       stack: []
     }
     const context = { repoPath: REPO, page: PAGE }
-    expect((await resolveEntry(message, context, files('src/App.tsx'))).location).toEqual({
+    expect((await resolveEntry(message, context, repo('src/App.tsx'))).location).toEqual({
       url: APP,
       line: 7,
       column: 1,
@@ -151,6 +177,274 @@ describe('resolveEntry', () => {
       path: 'src/App.tsx'
     })
     const nowhere = { ...message, location: null }
-    expect(await resolveEntry(nowhere, context, files('src/App.tsx'))).toEqual(nowhere)
+    expect(await resolveEntry(nowhere, context, repo('src/App.tsx'))).toEqual(nowhere)
+  })
+})
+
+describe('resolveEntry through a source map', () => {
+  const SOURCE = `export function total(items) {
+  if (items.length === 0) {
+    throw new TypeError('empty')
+  }
+  return items.length
+}
+`
+  const MAP_URL = `${BUNDLE}.map`
+  /** The minified bundle, all on line 1, and its map as the bundler wrote it. */
+  let code: string
+  let generated: { sources: string[] } & Record<string, unknown>
+  /** Where in the bundle the `throw` on line 3, column 5, of the source ended up. */
+  let thrownAt: number
+
+  beforeAll(async () => {
+    const built = await transformWithEsbuild(SOURCE, 'src/checkout.js', {
+      minify: true,
+      sourcemap: true,
+      format: 'iife'
+    })
+    code = built.code
+    generated = built.map as unknown as typeof generated
+    expect(code.trimEnd()).not.toContain('\n')
+    thrownAt = code.indexOf('throw') + 1
+  })
+
+  /** The map, naming its one source the way a particular bundler would. */
+  function mapNaming(source: string): string {
+    return JSON.stringify({ ...generated, sources: [source] })
+  }
+
+  function served(text: string, headers: Record<string, string> = {}): Fetched {
+    return { text, header: (name) => headers[name.toLowerCase()] ?? null }
+  }
+
+  /** A network serving exactly these responses, and nothing for any other URL. */
+  function network(routes: Record<string, Fetched>): FetchText & ReturnType<typeof vi.fn> {
+    return vi.fn<FetchText>((url) => Promise.resolve(routes[url] ?? null))
+  }
+
+  /** The production-style bundle and its map, the way a build serves them. */
+  function bundled(source = '../../src/checkout.js'): Record<string, Fetched> {
+    return {
+      [BUNDLE]: served(`${code}//# sourceMappingURL=index-4f2a.js.map\n`),
+      [MAP_URL]: served(mapNaming(source))
+    }
+  }
+
+  const context = { repoPath: REPO, page: PAGE }
+
+  it('follows the map of a script no repo file answers to the file and position it came from', async () => {
+    const fetch = network(bundled())
+    const body = exception([frame('r', BUNDLE, 1), frame('', BUNDLE, 1)])
+    const thrown = { ...body, stack: [{ ...body.stack[0], column: thrownAt }, body.stack[1]] }
+    const resolved = await resolveEntry({ ...thrown, location: at(BUNDLE, 1, thrownAt) }, context, {
+      isFile: files('src/checkout.js'),
+      fetch
+    })
+    const there = {
+      url: BUNDLE,
+      line: 3,
+      column: 5,
+      resolution: 'resolved',
+      path: 'src/checkout.js'
+    }
+    expect(resolved.location).toEqual(there)
+    expect(resolved.stack).toEqual([
+      { function: 'r', ...there },
+      // Column 3 is the bundle's own wrapper, which the map says nothing about.
+      { function: '', url: BUNDLE, line: 1, column: 3, resolution: 'failed', path: null }
+    ])
+    // The script and its map, once each, however many locations are in it.
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([BUNDLE, MAP_URL])
+  })
+
+  it('fetches nothing for a script the arithmetic already found', async () => {
+    const fetch = network(bundled())
+    await resolveEntry(exception([frame('render', APP, 12)]), context, {
+      isFile: files('src/App.tsx'),
+      fetch
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('fetches nothing for a project with no repo path', async () => {
+    const fetch = network(bundled())
+    const body = exception([frame('r', BUNDLE, 1)])
+    expect(
+      await resolveEntry(body, { repoPath: null, page: PAGE }, { isFile: files(), fetch })
+    ).toEqual(body)
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('follows a map named by a header, or carried inline', async () => {
+    const byHeader = network({
+      [BUNDLE]: served(code, { sourcemap: '/maps/index.map' }),
+      'http://localhost:5173/maps/index.map': served(mapNaming('../src/checkout.js'))
+    })
+    const inline = `data:application/json;base64,${btoa(mapNaming('../src/checkout.js'))}`
+    const carried = network({ [BUNDLE]: served(`${code}//# sourceMappingURL=${inline}\n`) })
+
+    for (const fetch of [byHeader, carried]) {
+      const thrown = await resolveEntry(
+        { ...exception([]), location: at(BUNDLE, 1, thrownAt) },
+        context,
+        { isFile: files('src/checkout.js'), fetch }
+      )
+      expect(thrown.location).toMatchObject({ line: 3, path: 'src/checkout.js' })
+    }
+  })
+
+  it('reads a source however the bundler wrote it', async () => {
+    for (const source of [
+      '../../src/checkout.js',
+      'webpack://shop/./src/checkout.js',
+      'webpack:///./src/checkout.js',
+      `${REPO}/src/checkout.js`,
+      `file://${REPO}/src/checkout.js`,
+      'src/checkout.js'
+    ]) {
+      const resolved = await resolveEntry(
+        { ...exception([]), location: at(BUNDLE, 1, thrownAt) },
+        context,
+        { isFile: files('src/checkout.js'), fetch: network(bundled(source)) }
+      )
+      expect(resolved.location, source).toMatchObject({
+        resolution: 'resolved',
+        path: 'src/checkout.js',
+        line: 3
+      })
+    }
+  })
+
+  it('reads a source under the root the map names for its sources', async () => {
+    const fetch = network({
+      [BUNDLE]: bundled()[BUNDLE],
+      [MAP_URL]: served(
+        JSON.stringify({
+          ...generated,
+          sourceRoot: 'webpack://shop',
+          sources: ['./src/checkout.js']
+        })
+      )
+    })
+    const resolved = await resolveEntry(
+      { ...exception([]), location: at(BUNDLE, 1, thrownAt) },
+      context,
+      { isFile: files('src/checkout.js'), fetch }
+    )
+    expect(resolved.location).toMatchObject({ resolution: 'resolved', path: 'src/checkout.js' })
+  })
+
+  it('resolves no source that lives outside the repo, however its tail reads', async () => {
+    // A repo in which every file but the bundle exists: only a source read as outside it
+    // can fail.
+    const everything: IsFile = (absolute) => Promise.resolve(!absolute.endsWith('index-4f2a.js'))
+    for (const source of [
+      '/Users/ada/elsewhere/src/checkout.js',
+      'file:///Users/ada/elsewhere/src/checkout.js',
+      `${REPO}/../ui/src/checkout.js`,
+      'webpack://shop/../ui/src/checkout.js'
+    ]) {
+      const resolved = await resolveEntry(
+        { ...exception([]), location: at(BUNDLE, 1, thrownAt) },
+        context,
+        { isFile: everything, fetch: network(bundled(source)) }
+      )
+      expect(resolved.location, source).toMatchObject({ resolution: 'failed', path: null })
+    }
+  })
+
+  it('never asks the disk about a path outside the repo, whatever a map says', async () => {
+    const asked: string[] = []
+    const isFile: IsFile = (absolute) => {
+      asked.push(absolute)
+      return Promise.resolve(false)
+    }
+    for (const source of [
+      '/etc/passwd',
+      'file:///etc/passwd',
+      '../../../../../etc/passwd',
+      'webpack://x/../../../etc/passwd',
+      'src/../../../etc/passwd',
+      'src/%2e%2e/%2e%2e/etc/passwd',
+      `${REPO}/../elsewhere/secret.js`
+    ]) {
+      await resolveEntry({ ...exception([]), location: at(BUNDLE, 1, thrownAt) }, context, {
+        isFile,
+        fetch: network(bundled(source))
+      })
+    }
+    expect(asked.length).toBeGreaterThan(0)
+    for (const absolute of asked) {
+      expect(absolute.startsWith(`${REPO}/`), absolute).toBe(true)
+      expect(absolute.slice(REPO.length + 1).split('/'), absolute).not.toContain('..')
+    }
+  })
+
+  it('appends as reported, and flagged, when the map is missing, unreachable or malformed', async () => {
+    const body = { ...exception([frame('r', BUNDLE, 1)]), location: at(BUNDLE, 1, thrownAt) }
+    const withMap = (map: Fetched | undefined): FetchText =>
+      network({ [BUNDLE]: bundled()[BUNDLE], ...(map ? { [MAP_URL]: map } : {}) })
+    for (const [why, fetch] of [
+      ['names no map', network({ [BUNDLE]: served(code) })],
+      ['the script cannot be fetched', network({})],
+      ['the map is not there', withMap(undefined)],
+      ['the network fails', () => Promise.reject(new TypeError('fetch failed'))],
+      ['the map is not JSON', withMap(served('{"version":3,'))],
+      ['the map is not a map', withMap(served('[]'))],
+      ['the map names a file the repo lacks', withMap(served(mapNaming('../../src/gone.js')))],
+      [
+        'the map is not on the web',
+        network({ [BUNDLE]: served(`${code}//# sourceMappingURL=file:///tmp/index.map\n`) })
+      ],
+      [
+        'the inline map does not decode',
+        network({ [BUNDLE]: served(`${code}//# sourceMappingURL=data:;base64,%%%\n`) })
+      ]
+    ] as const) {
+      expect(
+        await resolveEntry(body, context, { isFile: files('src/checkout.js'), fetch }),
+        why
+      ).toEqual(body)
+    }
+  })
+
+  it('fetches only a script on the web', async () => {
+    const fetch = network({})
+    await resolveEntry(
+      exception([
+        frame('a', 'chrome-extension://abc/content.js', 1),
+        frame('b', 'data:text/javascript,1', 1),
+        frame('c', '', 1)
+      ]),
+      context,
+      { isFile: files(), fetch }
+    )
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not wait on a map that arrives after the timeout, and abandons it', async () => {
+    vi.useFakeTimers()
+    let signal: AbortSignal | undefined
+    const fetch: FetchText = (url, aborted) => {
+      if (url === BUNDLE) return Promise.resolve(bundled()[BUNDLE])
+      signal = aborted
+      return new Promise((resolve) =>
+        setTimeout(() => resolve(bundled()[MAP_URL]), RESOLUTION_TIMEOUT_MS * 2)
+      )
+    }
+    const body = { ...exception([]), location: at(BUNDLE, 1, thrownAt) }
+    let settled = false
+    const pending = resolveEntry(body, context, { isFile: files('src/checkout.js'), fetch }).then(
+      (resolved) => {
+        settled = true
+        return resolved
+      }
+    )
+    await vi.advanceTimersByTimeAsync(RESOLUTION_TIMEOUT_MS)
+    expect(settled).toBe(true)
+    expect(signal?.aborted).toBe(true)
+    const resolved = await pending
+    await vi.advanceTimersByTimeAsync(RESOLUTION_TIMEOUT_MS * 2)
+    expect(resolved).toEqual(body)
   })
 })

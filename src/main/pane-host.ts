@@ -3,7 +3,7 @@ import { CONSOLE_ENABLE_COMMANDS, ConsoleCapture } from '../shared/console'
 import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
-import type { PaneService } from './services/pane-service'
+import { fetchTextWith, type PaneService } from './services/pane-service'
 import type { StateFeed } from './state-feed'
 
 /**
@@ -315,9 +315,13 @@ export class PaneHost {
     // console (#4, ADR-0019): a degraded pane that renders is visible, and one that
     // silently reports nothing is not.
     const capture = new ConsoleCapture()
+    // A bundle and its map are fetched as the pane would fetch them: its cookies, its cache.
+    const fetchText = fetchTextWith((url, init) => guest.session.fetch(url, init))
     const onMessage = (_event: Electron.Event, method: string, params: unknown): void => {
       const body = capture.hear(method, params)
-      if (body && this.isCurrent(pane, guest)) void this.panes.console(pane, body, guest.getURL())
+      if (body && this.isCurrent(pane, guest)) {
+        void this.panes.console(pane, body, guest.getURL(), fetchText)
+      }
     }
     guest.debugger.on('message', onMessage)
     guest.debugger.once('detach', (_event, reason) => {
