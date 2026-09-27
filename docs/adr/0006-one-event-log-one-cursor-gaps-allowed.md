@@ -47,3 +47,10 @@ and passed by cursor. Text truncation does not change stored history or imply ev
 **Stored entries are immutable.** Appending freezes the record; reads expose readonly,
 frozen results. Read-time truncation creates a new frozen record instead of editing the
 one retained in the log.
+
+**Console entries are bounded the same way, field by field (#50).** A page decides what it
+logs, so every field it can make large is shortened on read under the same 16 KiB budget:
+`text` and `error` like `message`, and `args`, `location` and `stack` each as a whole. A
+list keeps as many leading items as fit, so a thousand small arguments are bounded like
+one enormous one. A location keeps its line and column and loses URL instead, and a stack
+never loses its innermost frame. `truncated` names each shortened field, as before.

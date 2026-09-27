@@ -135,6 +135,12 @@ export type PaneEntryBody =
       readonly retrying: boolean
       readonly message: string
     }
+  /**
+   * The attachment was made but console capture could not be enabled on it, so the pane
+   * hears nothing. Degraded rather than quiet: a pane that silently reports nothing is the
+   * one outcome worse than a visible failure ([ADR-0019]).
+   */
+  | { readonly type: 'pane.consoleFailed'; readonly message: string }
   | { readonly type: 'pane.loaded'; readonly url: string }
   | {
       readonly type: 'pane.loadFailed'
@@ -205,22 +211,25 @@ export const CONSOLE_LEVELS = ['debug', 'log', 'info', 'warn', 'error'] as const
 
 export type ConsoleLevel = (typeof CONSOLE_LEVELS)[number]
 
-/** `console`, or the `source` CDP's `Log` domain gives a browser message. */
-export type ConsoleSource =
-  | 'console'
-  | 'xml'
-  | 'javascript'
-  | 'network'
-  | 'storage'
-  | 'appcache'
-  | 'rendering'
-  | 'security'
-  | 'deprecation'
-  | 'worker'
-  | 'violation'
-  | 'intervention'
-  | 'recommendation'
-  | 'other'
+/** What kind of browser message CDP's `Log` domain says one is. */
+export const LOG_SOURCES = [
+  'xml',
+  'javascript',
+  'network',
+  'storage',
+  'appcache',
+  'rendering',
+  'security',
+  'deprecation',
+  'worker',
+  'violation',
+  'intervention',
+  'recommendation',
+  'other'
+] as const
+
+/** `console` for the page's own calls, or the kind of browser message it is. */
+export type ConsoleSource = 'console' | (typeof LOG_SOURCES)[number]
 
 /**
  * Where in a script something happened, as the page reported it: one-based, the way an
@@ -445,6 +454,8 @@ function copyBody(body: EntryBody): EntryBody {
         retrying: body.retrying,
         message: body.message
       }
+    case 'pane.consoleFailed':
+      return { type: body.type, message: body.message }
     case 'pane.loadFailed':
       return { type: body.type, url: body.url, code: body.code, message: body.message }
     case 'pane.geometryMismatch':
@@ -548,7 +559,7 @@ function truncateArgs(args: readonly string[]): readonly string[] {
 }
 
 /** Its line and column always survive; only the URL is shortened. */
-function truncateLocation<L extends SourceLocation>(location: L | null): L | null {
+function truncateLocation(location: SourceLocation | null): SourceLocation | null {
   if (!location || jsonByteLength(location) <= MAX_ENTRY_TEXT_BYTES) return location
   const rest = jsonByteLength({ ...location, url: '' })
   return Object.freeze({

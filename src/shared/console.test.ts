@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { CONSOLE_DOMAINS, ConsoleCapture, consoleEntryFor, MAX_STACK_FRAMES } from './console'
+import {
+  CONSOLE_ENABLE_COMMANDS,
+  ConsoleCapture,
+  consoleEntryFor,
+  MAX_STACK_FRAMES
+} from './console'
 
 /** Payloads shaped as Chromium sends them, trimmed to the fields that matter here. */
 
@@ -32,7 +37,7 @@ const text = (value: string): Record<string, unknown> => ({ type: 'string', valu
 
 describe('the domains the attachment enables', () => {
   it('are Runtime and Log, and nothing else (ADR-0019)', () => {
-    expect(CONSOLE_DOMAINS).toEqual(['Runtime.enable', 'Log.enable'])
+    expect(CONSOLE_ENABLE_COMMANDS).toEqual(['Runtime.enable', 'Log.enable'])
   })
 })
 

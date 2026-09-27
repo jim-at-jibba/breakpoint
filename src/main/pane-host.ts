@@ -1,5 +1,5 @@
 import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
-import { CONSOLE_DOMAINS, ConsoleCapture } from '../shared/console'
+import { CONSOLE_ENABLE_COMMANDS, ConsoleCapture } from '../shared/console'
 import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
@@ -323,8 +323,11 @@ export class PaneHost {
     this.panes.attached(pane, attempt)
     // On either attempt: `Runtime.enable` replays what the page logged before it, and on
     // the retry that is everything since the page's own scripts started.
-    for (const method of CONSOLE_DOMAINS) {
-      void guest.debugger.sendCommand(method).catch(() => undefined)
+    for (const method of CONSOLE_ENABLE_COMMANDS) {
+      void guest.debugger.sendCommand(method).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (this.isCurrent(pane, guest)) this.panes.consoleFailed(pane, `${method}: ${message}`)
+      })
     }
     await this.emulate(pane, guest)
   }

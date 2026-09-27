@@ -172,6 +172,12 @@ export class PaneService {
     this.observe(pane, { type: 'attachFailed', message })
   }
 
+  /** The attachment stands, but its console could not be enabled: degraded, with why. */
+  consoleFailed(pane: string, message: string): void {
+    this.record(pane, { type: 'pane.consoleFailed', message })
+    this.observe(pane, { type: 'consoleFailed', message })
+  }
+
   /**
    * A load has started, which a navigation is. No entry: the log records where a pane
    * got to, and "it set off" is said by the navigation entry that caused it.

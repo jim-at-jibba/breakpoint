@@ -113,24 +113,27 @@ async function everythingSaid(project: StoredProject): Promise<Entry[]> {
  */
 async function recordEnables(
   app: LaunchedApp['app'],
-  { refuseOverrides }: { refuseOverrides: boolean }
+  { refuseOverrides, refuse = [] }: { refuseOverrides: boolean; refuse?: string[] }
 ): Promise<void> {
-  await app.evaluate(({ app }, refuseOverrides) => {
-    const enabled: string[] = []
-    Reflect.set(globalThis, '__enabled', enabled)
-    app.on('web-contents-created', (_event, contents) => {
-      if (contents.getType() !== 'webview') return
-      const target = contents.debugger
-      const send = target.sendCommand.bind(target)
-      target.sendCommand = (method, params, sessionId) => {
-        if (method.endsWith('.enable')) enabled.push(method)
-        if (refuseOverrides && method.startsWith('Emulation.')) {
-          return Promise.reject(new Error(`${method} refused by the test`))
+  await app.evaluate(
+    ({ app }, [refuseOverrides, refuse]) => {
+      const enabled: string[] = []
+      Reflect.set(globalThis, '__enabled', enabled)
+      app.on('web-contents-created', (_event, contents) => {
+        if (contents.getType() !== 'webview') return
+        const target = contents.debugger
+        const send = target.sendCommand.bind(target)
+        target.sendCommand = (method, params, sessionId) => {
+          if (method.endsWith('.enable')) enabled.push(method)
+          if (refuse.includes(method) || (refuseOverrides && method.startsWith('Emulation.'))) {
+            return Promise.reject(new Error(`${method} refused by the test`))
+          }
+          return send(method, params, sessionId)
         }
-        return send(method, params, sessionId)
-      }
-    })
-  }, refuseOverrides)
+      })
+    },
+    [refuseOverrides, refuse] as const
+  )
 }
 
 function enabled(app: LaunchedApp['app']): Promise<string[]> {
@@ -225,6 +228,36 @@ test('a pane whose every override is refused still reports its console', async (
     expect(snapshot.panes[pane.id].degraded.map((degradation) => degradation.cause).sort()).toEqual(
       ['colorScheme', 'touch', 'userAgent', 'viewport']
     )
+  }
+})
+
+test('a pane whose console cannot be enabled is degraded rather than quiet', async () => {
+  launched = await launchApp(sandbox)
+  await recordEnables(launched.app, { refuseOverrides: false, refuse: ['Runtime.enable'] })
+  const shop = makeRepo('shop')
+  await open(shop)
+
+  await expect
+    .poll(
+      async () => {
+        const snapshot = await state()
+        return shop.panes.map((pane) => snapshot.panes[pane.id]?.degraded ?? [])
+      },
+      { timeout: 20_000 }
+    )
+    .toEqual(
+      shop.panes.map(() => [
+        { cause: 'console', message: 'Runtime.enable: Runtime.enable refused by the test' }
+      ])
+    )
+  const entries = await logs()
+  for (const pane of shop.panes) {
+    expect(entries).toContainEqual(
+      expect.objectContaining({ pane: pane.id, type: 'pane.consoleFailed' })
+    )
+    // The page's own calls and exceptions are Runtime's, and Runtime was refused.
+    expect(exceptions(entries, pane.id)).toEqual([])
+    expect(messages(entries, pane.id).filter((entry) => entry.source === 'console')).toEqual([])
   }
 })
 

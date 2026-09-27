@@ -301,6 +301,8 @@ function describeEntry(entry: Entry): string {
       return `attached (attempt ${entry.attempt})`
     case 'pane.attachFailed':
       return `attachment failed (attempt ${entry.attempt}, ${entry.retrying ? 'retrying after load' : 'not retrying'}): ${entry.message}`
+    case 'pane.consoleFailed':
+      return `degraded: console not captured: ${entry.message}`
     case 'pane.loaded':
       return `loaded ${entry.url}`
     case 'pane.loadFailed':

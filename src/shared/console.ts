@@ -1,9 +1,10 @@
-import type {
-  ConsoleEntryBody,
-  ConsoleLevel,
-  ConsoleSource,
-  SourceLocation,
-  StackFrame
+import {
+  LOG_SOURCES,
+  type ConsoleEntryBody,
+  type ConsoleLevel,
+  type ConsoleSource,
+  type SourceLocation,
+  type StackFrame
 } from './event-log'
 
 /**
@@ -17,7 +18,7 @@ import type {
  *
  * Pure: the pane host hands this every debugger message and appends what comes back.
  * Anything that is not console output comes back `null`. Only what stays true is kept
- * ([ADR-0021]): previews, never the remote objects they were made from.
+ * ([ADR-0021]): previews, never the handles they were made from.
  */
 
 /**
@@ -25,7 +26,7 @@ import type {
  * page logged before it was sent, which is the only way a message from before the page's
  * own scripts ran is captured — so it is sent on whichever attempt attaches.
  */
-export const CONSOLE_DOMAINS = ['Runtime.enable', 'Log.enable'] as const
+export const CONSOLE_ENABLE_COMMANDS = ['Runtime.enable', 'Log.enable'] as const
 
 /** Frames kept of a stack: enough to find the call site, bounded whatever the page does. */
 export const MAX_STACK_FRAMES = 32
@@ -143,7 +144,7 @@ function consoleCall(params: Record<string, unknown>): ConsoleEntryBody | null {
     text: formatArgs(args),
     args: args.map(preview),
     url: null,
-    location: stack[0] ? locationOf(stack[0]) : null,
+    location: innermost(stack),
     stack
   }
 }
@@ -161,7 +162,7 @@ function exception(details: Record<string, unknown>): ConsoleEntryBody {
     rejection: headline.startsWith('Uncaught (in promise)'),
     text: thrown === null || headline.includes(thrown) ? headline : `${headline} ${thrown}`,
     error: thrown,
-    location: stack[0] ? locationOf(stack[0]) : reportedLocation(details),
+    location: innermost(stack) ?? reportedLocation(details),
     stack
   }
 }
@@ -177,7 +178,7 @@ function browserMessage(entry: Record<string, unknown>): ConsoleEntryBody {
       ? (entry.args.filter(isRecord) as RemoteObject[]).map(preview)
       : [],
     url: typeof entry.url === 'string' && entry.url !== '' ? entry.url : null,
-    location: stack[0] ? locationOf(stack[0]) : reportedLocation(entry),
+    location: innermost(stack) ?? reportedLocation(entry),
     stack
   }
 }
@@ -215,25 +216,13 @@ function logLevel(level: unknown): ConsoleLevel {
   }
 }
 
-const LOG_SOURCES: ReadonlySet<string> = new Set<Exclude<ConsoleSource, 'console'>>([
-  'xml',
-  'javascript',
-  'network',
-  'storage',
-  'appcache',
-  'rendering',
-  'security',
-  'deprecation',
-  'worker',
-  'violation',
-  'intervention',
-  'recommendation',
-  'other'
-])
+const KNOWN_LOG_SOURCES: ReadonlySet<string> = new Set(LOG_SOURCES)
 
 /** A source a later Chromium adds is still a browser message, so it is kept as `other`. */
 function logSource(source: unknown): ConsoleSource {
-  return typeof source === 'string' && LOG_SOURCES.has(source) ? (source as ConsoleSource) : 'other'
+  return typeof source === 'string' && KNOWN_LOG_SOURCES.has(source)
+    ? (source as ConsoleSource)
+    : 'other'
 }
 
 // ---------------------------------------------------------------------------------------
@@ -255,7 +244,10 @@ function stackOf(trace: unknown): StackFrame[] {
     }))
 }
 
-function locationOf({ url, line, column, resolution }: StackFrame): SourceLocation {
+/** Where the stack says it happened: its innermost frame, less the function name. */
+function innermost(stack: readonly StackFrame[]): SourceLocation | null {
+  if (!stack[0]) return null
+  const { url, line, column, resolution } = stack[0]
   return { url, line, column, resolution }
 }
 

@@ -131,7 +131,7 @@ describe("a pane's console", () => {
 
   function hostFor(guest: WebContents): {
     pane: string
-    panes: Record<'emulated' | 'console', ReturnType<typeof vi.fn>>
+    panes: Record<'emulated' | 'console' | 'consoleFailed', ReturnType<typeof vi.fn>>
   } {
     const project = createProject('/repos/shop')
     const [pane] = project.panes
@@ -145,7 +145,8 @@ describe("a pane's console", () => {
       attachFailed: vi.fn(),
       emulated: vi.fn(),
       guestDestroyed: vi.fn(),
-      console: vi.fn()
+      console: vi.fn(),
+      consoleFailed: vi.fn()
     }
     const host = new PaneHost(panes as unknown as PaneService, feed)
     feed.publish({ type: 'project.opened', project })
@@ -191,6 +192,15 @@ describe("a pane's console", () => {
       pane,
       expect.objectContaining({ type: 'console.message', text: 'hello' })
     )
+  })
+
+  it('says so, rather than going quiet, when capture cannot be enabled', async () => {
+    const { guest } = attachedGuest((method) => method === 'Log.enable')
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.consoleFailed).toHaveBeenCalled())
+
+    expect(panes.consoleFailed).toHaveBeenCalledTimes(1)
+    expect(panes.consoleFailed).toHaveBeenCalledWith(pane, 'Log.enable: Log.enable refused')
   })
 
   it('stops reporting for a guest the pane has replaced', async () => {

@@ -349,18 +349,26 @@ describe('the log as a terminal reads it', () => {
           cursor: 5,
           time: 0,
           pane: 'p-1',
+          type: 'pane.consoleFailed',
+          message: 'Runtime.enable: refused'
+        },
+        {
+          cursor: 6,
+          time: 0,
+          pane: 'p-1',
           type: 'pane.geometryMismatch',
           expected: { width: 390, height: 844 },
           measured: { width: 390, height: 150 },
           message: 'drawn 390×150, declared 390×844 at this zoom'
         }
       ],
-      cursor: 5
+      cursor: 6
     })
     expect(text.split('\n')).toEqual([
       '3  p-1  created, loading http://127.0.0.1:5173/',
       '4  p-1  attachment failed (attempt 1, retrying after load): Debugger is already attached to the target',
-      '5  p-1  degraded: drawn 390×150, declared 390×844 at this zoom'
+      '5  p-1  degraded: console not captured: Runtime.enable: refused',
+      '6  p-1  degraded: drawn 390×150, declared 390×844 at this zoom'
     ])
   })
 

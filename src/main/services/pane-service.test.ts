@@ -709,6 +709,24 @@ describe("hearing a pane's console", () => {
     ])
   })
 
+  it('records and degrades a pane whose attachment will not carry its console', async () => {
+    const [mobile] = await openShop()
+    const { cursor } = projects.snapshot()
+
+    panes.consoleFailed(mobile.id, 'Log.enable: refused')
+
+    expect(panes.statuses()[mobile.id].degraded).toEqual([
+      { cause: 'console', message: 'Log.enable: refused' }
+    ])
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({
+        pane: mobile.id,
+        type: 'pane.consoleFailed',
+        message: 'Log.enable: refused'
+      })
+    ])
+  })
+
   it('says nothing for a pane the open project no longer has', async () => {
     await openShop()
     const { cursor } = projects.snapshot()
