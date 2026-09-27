@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import type { WebContents } from 'electron'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createProject } from '../shared/project'
+import type { FetchText } from '../shared/resolution'
 import { StateFeed } from './state-feed'
 import { PaneHost } from './pane-host'
 import type { PaneService } from './services/pane-service'
@@ -130,7 +131,8 @@ describe("a pane's console", () => {
       debugger: attachment,
       getURL: () => 'http://localhost:3000/',
       isDestroyed: () => destroyed,
-      loadURL: vi.fn().mockResolvedValue(undefined)
+      loadURL: vi.fn().mockResolvedValue(undefined),
+      session: { fetch: vi.fn(() => Promise.resolve(new Response('bundled()'))) }
     }) as unknown as WebContents
     return { guest, attachment, calls, markDestroyed: () => (destroyed = true) }
   }
@@ -199,8 +201,18 @@ describe("a pane's console", () => {
       pane,
       expect.objectContaining({ type: 'console.message', text: 'hello' }),
       // The page it was heard on, whose origin is the dev server resolution reads.
-      'http://localhost:3000/'
+      'http://localhost:3000/',
+      expect.any(Function)
     )
+    // A bundle is fetched through the pane's own session.
+    const fetch = panes.console.mock.calls[0][3] as FetchText
+    const signal = new AbortController().signal
+    expect(await fetch('http://localhost:3000/assets/app.js', signal)).toMatchObject({
+      text: 'bundled()'
+    })
+    expect(guest.session.fetch).toHaveBeenCalledWith('http://localhost:3000/assets/app.js', {
+      signal
+    })
   })
 
   it('says so, rather than going quiet, when capture cannot be enabled', async () => {

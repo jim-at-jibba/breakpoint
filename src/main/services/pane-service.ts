@@ -8,7 +8,7 @@ import {
   type PaneStatus
 } from '../../shared/panes'
 import type { Pane, PaneChanges, Project } from '../../shared/project'
-import { resolveEntry, type IsFile } from '../../shared/resolution'
+import { resolveEntry, type FetchText, type IsFile } from '../../shared/resolution'
 import type {
   EmulationSetting,
   GeometryReport,
@@ -45,6 +45,28 @@ export function isFileOnDisk(absolute: string): Promise<boolean> {
     (found) => found.isFile(),
     () => false
   )
+}
+
+/** The largest script or map resolution will read. A bigger one is not worth the wait. */
+export const MAX_FETCHED_BYTES = 64 * 1024 * 1024
+
+/**
+ * What resolution asks the network, through `request`: a successful response's text, and
+ * nothing for anything else, a body declared larger than `MAX_FETCHED_BYTES` included.
+ */
+export function fetchTextWith(
+  request: (url: string, init: RequestInit) => Promise<Response>
+): FetchText {
+  return async (url, signal) => {
+    const response = await request(url, { signal })
+    const length = Number(response.headers.get('content-length'))
+    if (!response.ok || length > MAX_FETCHED_BYTES) {
+      await response.body?.cancel().catch(() => {})
+      return null
+    }
+    const text = await response.text()
+    return { text, header: (name) => response.headers.get(name) }
+  }
 }
 
 /** A pane after a change, and which of the asked-for values were actually different. */
@@ -306,14 +328,14 @@ export class PaneService {
    * the project has let go of is not the developer's to hear from.
    *
    * Its locations are resolved against the repo before it is appended, within the
-   * resolution timeout ([ADR-0020]). Whether it is the project's is decided now, when it
-   * was heard, so what a pane said just before it went is kept, ahead of its going.
-   * Settles once appended.
+   * resolution timeout ([ADR-0020]), fetching a bundle and its map through `fetchText`.
+   * Whether it is the project's is decided now, when it was heard, so what a pane said
+   * just before it went is kept, ahead of its going. Settles once appended.
    */
-  console(pane: string, body: ConsoleEntryBody, page: string): Promise<void> {
+  console(pane: string, body: ConsoleEntryBody, page: string, fetchText: FetchText): Promise<void> {
     if (!this.has(pane)) return Promise.resolve()
     const context = { repoPath: this.project?.repoPath ?? null, page }
-    return this.record(pane, resolveEntry(body, context, this.isFile))
+    return this.record(pane, resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText }))
   }
 
   /**

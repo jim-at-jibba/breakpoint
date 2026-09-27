@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -10,6 +10,7 @@ import {
   type StoredProject
 } from '../src/shared/project'
 import type { StateSnapshot } from '../src/shared/state'
+import { bundle, BUNDLE_PATH, BUNDLED_SOURCES } from './bundle'
 import { RESOLUTION_SCRIPTS, startFixture, type Fixture } from './fixture'
 import { closeApp, launchApp, runCli, Sandbox, type LaunchedApp } from './harness'
 
@@ -328,8 +329,11 @@ test('a pane whose attachment failed is degraded and reports nothing', async () 
   }
 })
 
-/** What each pane's page says by the time `/resolution` has said everything it says. */
-async function resolutionSaid(panes: readonly string[]): Promise<Entry[]> {
+/**
+ * What each pane's page says by the time it has thrown once and logged `said` times:
+ * everything `/resolution` says by default.
+ */
+async function resolutionSaid(panes: readonly string[], said = 2): Promise<Entry[]> {
   let entries: Entry[] = []
   await expect
     .poll(
@@ -338,7 +342,7 @@ async function resolutionSaid(panes: readonly string[]): Promise<Entry[]> {
         return panes.every(
           (pane) =>
             exceptions(entries, pane).length === 1 &&
-            messages(entries, pane).filter((entry) => entry.source === 'console').length === 2
+            messages(entries, pane).filter((entry) => entry.source === 'console').length === said
         )
       },
       { timeout: 20_000 }
@@ -416,6 +420,51 @@ test('a dev server script resolves to its path in the repo, and a bundle says it
     `  ${first.id}  error Uncaught RangeError: thrown from the repo at src/widget.js:2:`
   )
   expect(text.stdout).toContain(`  ${first.id}  info logged from a bundle at ${bundle}:1:9`)
+})
+
+test('a production bundle resolves through its generated map to the files it was built from', async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop', BUNDLE_PATH)
+  cpSync(BUNDLED_SOURCES, join(shop.repoPath, 'src'), { recursive: true })
+  await open(shop)
+  const entries = await resolutionSaid(
+    shop.panes.map((pane) => pane.id),
+    1
+  )
+  // Minified onto one line: no URL arithmetic reaches the repo, only the map.
+  const script = `${fixture.a}${(await bundle()).entry}`
+
+  for (const pane of shop.panes) {
+    const [thrown] = exceptions(entries, pane.id)
+    expect(thrown.text).toContain('thrown from a bundle')
+    expect(thrown.location).toEqual({
+      url: script,
+      line: 3,
+      column: expect.any(Number),
+      resolution: 'resolved',
+      path: 'src/checkout.js'
+    })
+    expect(thrown.stack).toEqual([
+      expect.objectContaining({
+        url: script,
+        line: 3,
+        resolution: 'resolved',
+        path: 'src/checkout.js'
+      }),
+      expect.objectContaining({ url: script, line: 5, resolution: 'resolved', path: 'src/main.js' })
+    ])
+    const [said] = messages(entries, pane.id).filter((entry) => entry.source === 'console')
+    expect(said).toMatchObject({
+      text: 'logged from a bundle',
+      location: { url: script, line: 3, resolution: 'resolved', path: 'src/main.js' }
+    })
+  }
+
+  const text = await runCli(sandbox, ['logs'])
+  const [first] = shop.panes
+  expect(text.stdout).toContain(
+    `  ${first.id}  error Uncaught TypeError: thrown from a bundle at src/checkout.js:3:`
+  )
 })
 
 test('a project with no repo path keeps logging, with every location unresolved', async () => {

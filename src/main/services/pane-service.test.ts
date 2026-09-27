@@ -7,10 +7,10 @@ import { EventLog, type ConsoleEntryBody } from '../../shared/event-log'
 import { initialPaneStatus } from '../../shared/panes'
 import { createProject, type Pane, type StoredProject } from '../../shared/project'
 import { applyPatch, type RevisionedPatch } from '../../shared/state'
-import type { IsFile } from '../../shared/resolution'
+import type { FetchText, IsFile } from '../../shared/resolution'
 import type { PaneListing } from '../../shared/routes'
 import { StateFeed } from '../state-feed'
-import { isFileOnDisk, PaneService } from './pane-service'
+import { fetchTextWith, isFileOnDisk, MAX_FETCHED_BYTES, PaneService } from './pane-service'
 import { PresetService } from './preset-service'
 import { PresetStore } from './preset-store'
 import { ProjectService } from './project-service'
@@ -698,6 +698,8 @@ describe('counting a pane’s errors', () => {
 describe("hearing a pane's console", () => {
   const ORIGIN = 'http://localhost:5173'
   const PAGE = `${ORIGIN}/checkout`
+  /** A network that answers nothing: only the arithmetic can resolve anything. */
+  const offline: FetchText = () => Promise.resolve(null)
 
   function thrownFrom(...urls: string[]): ConsoleEntryBody {
     const stack = urls.map((url) => ({
@@ -741,7 +743,7 @@ describe("hearing a pane's console", () => {
     const [mobile] = await openShop()
     const { cursor } = projects.snapshot()
 
-    await panes.console(mobile.id, message, PAGE)
+    await panes.console(mobile.id, message, PAGE, offline)
 
     expect(log.read({ since: cursor }).entries).toEqual([
       expect.objectContaining({ ...message, pane: mobile.id })
@@ -757,7 +759,8 @@ describe("hearing a pane's console", () => {
     await panes.console(
       mobile.id,
       thrownFrom(`${ORIGIN}/src/App.tsx?t=1`, 'http://localhost:1/x.js'),
-      PAGE
+      PAGE,
+      offline
     )
 
     expect(log.read({ since: cursor }).entries).toEqual([
@@ -775,12 +778,69 @@ describe("hearing a pane's console", () => {
     ])
   })
 
+  it('resolves a bundle through its map, fetched the way it was given', async () => {
+    const [mobile] = await openShop()
+    await mkdir(join(shop, 'src'))
+    await writeFile(join(shop, 'src', 'checkout.js'), 'export {}\n')
+    const { cursor } = projects.snapshot()
+    const bundle = `${ORIGIN}/assets/index-4f2a.js`
+    const routes: Record<string, string> = {
+      [bundle]: 'x()\n//# sourceMappingURL=index-4f2a.js.map\n',
+      // Its one segment says line 1, column 1 of the bundle is line 1, column 1 of the source.
+      [`${bundle}.map`]: JSON.stringify({
+        version: 3,
+        sources: ['../src/checkout.js'],
+        names: [],
+        mappings: 'AAAA'
+      })
+    }
+    const fetch = vi.fn<FetchText>((url) =>
+      Promise.resolve(url in routes ? { text: routes[url], header: () => null } : null)
+    )
+
+    await panes.console(
+      mobile.id,
+      {
+        ...thrownFrom(bundle),
+        location: null,
+        stack: [
+          {
+            function: 'x',
+            url: bundle,
+            line: 1,
+            column: 1,
+            resolution: 'failed',
+            path: null
+          }
+        ]
+      },
+      PAGE,
+      fetch
+    )
+
+    expect(log.read({ since: cursor }).entries).toEqual([
+      expect.objectContaining({
+        stack: [
+          {
+            function: 'x',
+            url: bundle,
+            line: 1,
+            column: 1,
+            resolution: 'resolved',
+            path: 'src/checkout.js'
+          }
+        ]
+      })
+    ])
+    expect(fetch.mock.calls.map(([url]) => url)).toEqual([bundle, `${bundle}.map`])
+  })
+
   it('appends as reported, and flagged, where the path names no file in the repo', async () => {
     const [mobile] = await openShop()
     const { cursor } = projects.snapshot()
     const body = thrownFrom(`${ORIGIN}/src/App.tsx`)
 
-    await panes.console(mobile.id, body, PAGE)
+    await panes.console(mobile.id, body, PAGE, offline)
 
     expect(log.read({ since: cursor }).entries).toEqual([
       expect.objectContaining({ ...body, pane: mobile.id })
@@ -794,8 +854,8 @@ describe("hearing a pane's console", () => {
     isFile = (absolute) =>
       absolute.endsWith('slow.ts') ? slow.wait.then(() => true) : Promise.resolve(true)
 
-    const first = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/slow.ts`), PAGE)
-    const second = panes.console(mobile.id, message, PAGE)
+    const first = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/slow.ts`), PAGE, offline)
+    const second = panes.console(mobile.id, message, PAGE, offline)
     // Well inside the timeout: the second had nothing to resolve, and still waits.
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(log.read({ since: cursor }).entries).toEqual([])
@@ -814,7 +874,7 @@ describe("hearing a pane's console", () => {
     const slow = gate()
     isFile = () => slow.wait.then(() => true)
 
-    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE)
+    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE, offline)
     await panes.remove(mobile.id)
     slow.open()
     await heard
@@ -832,7 +892,7 @@ describe("hearing a pane's console", () => {
     const slow = gate()
     isFile = () => slow.wait.then(() => true)
 
-    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE)
+    const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE, offline)
     panes.detached(mobile.id, 'target closed')
     // The pane's status does not wait on the log: only the order entries are written in does.
     expect(panes.statuses()[mobile.id].attachment).toBe('failed')
@@ -891,8 +951,34 @@ describe("hearing a pane's console", () => {
     await openShop()
     const { cursor } = projects.snapshot()
 
-    await panes.console('gone', message, PAGE)
+    await panes.console('gone', message, PAGE, offline)
 
     expect(log.read({ since: cursor }).entries).toEqual([])
+  })
+})
+
+describe('fetchTextWith', () => {
+  const signal = new AbortController().signal
+
+  it('answers a successful response with its text and its headers', async () => {
+    const fetch = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() =>
+      Promise.resolve(new Response('x()', { headers: { SourceMap: '/x.map' } }))
+    )
+    const fetched = await fetchTextWith(fetch)('http://localhost:5173/x.js', signal)
+    expect(fetched?.text).toBe('x()')
+    expect(fetched?.header('sourcemap')).toBe('/x.map')
+    expect(fetched?.header('x-sourcemap')).toBeNull()
+    expect(fetch).toHaveBeenCalledWith('http://localhost:5173/x.js', { signal })
+  })
+
+  it('answers nothing for a failed response or one too large to wait on', async () => {
+    const missing = fetchTextWith(() => Promise.resolve(new Response('gone', { status: 404 })))
+    expect(await missing('http://localhost:5173/x.js.map', signal)).toBeNull()
+    const huge = fetchTextWith(() =>
+      Promise.resolve(
+        new Response('{}', { headers: { 'content-length': String(MAX_FETCHED_BYTES + 1) } })
+      )
+    )
+    expect(await huge('http://localhost:5173/x.js.map', signal)).toBeNull()
   })
 })
