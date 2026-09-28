@@ -224,19 +224,20 @@ export class PaneService {
   }
 
   /**
-   * A load has started, which a navigation is. No entry: the log records where a pane
-   * got to, and "it set off" is said by the navigation entry that caused it.
+   * A load has started: a navigation, or a frame inside the page. No entry: the log
+   * records where a pane got to, and "it set off" is said by the navigation entry that
+   * caused it.
    */
   loading(pane: string): void {
     this.observe(pane, { type: 'loading' })
   }
 
   /**
-   * The pane has set off for another page, so its error count starts again, and only
-   * this ([ADR-0022]). No entry, for the same reason `loading` writes none.
+   * The page in the pane has been replaced by another, so its error count starts again,
+   * and only this does ([ADR-0022]). No entry, for the same reason `loading` writes none.
    */
-  navigating(pane: string): void {
-    this.observe(pane, { type: 'navigating' })
+  pageReplaced(pane: string): void {
+    this.observe(pane, { type: 'pageReplaced' })
   }
 
   loaded(pane: string, url: string): void {
@@ -345,7 +346,7 @@ export class PaneService {
    */
   console(pane: string, body: ConsoleEntryBody, page: string, fetchText: FetchText): Promise<void> {
     if (!this.has(pane)) return Promise.resolve()
-    if (isConsoleError(body)) this.observe(pane, { type: 'erred' })
+    if (isConsoleError(body)) this.observe(pane, { type: 'errorHeard' })
     const context = { repoPath: this.project?.repoPath ?? null, page }
     return this.record(pane, resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText }))
   }

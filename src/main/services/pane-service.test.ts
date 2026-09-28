@@ -687,8 +687,7 @@ describe('counting a pane’s errors', () => {
     const [mobile] = await openShop()
 
     panes.loadFailed({ pane: mobile.id, url: 'http://x/', code: -102, message: 'refused' })
-    panes.loadFailed({ pane: mobile.id, url: 'http://x/', code: -102, message: 'refused' })
-    expect(panes.statuses()[mobile.id].errors).toBe(2)
+    expect(panes.statuses()[mobile.id].errors).toBe(1)
 
     panes.guestCreated(mobile.id, 'http://x/')
     expect(panes.statuses()[mobile.id].errors).toBe(0)
@@ -988,25 +987,25 @@ describe("hearing a pane's console", () => {
     const heard = panes.console(mobile.id, thrownFrom(`${ORIGIN}/src/App.tsx`), PAGE, offline)
     expect(panes.statuses()[mobile.id].errors).toBe(1)
     // The page it was heard on is gone before its entry is written, and so is its error.
-    panes.navigating(mobile.id)
+    panes.pageReplaced(mobile.id)
     slow.open()
     await heard
 
     expect(panes.statuses()[mobile.id].errors).toBe(0)
   })
 
-  it('starts one pane’s count again when it navigates, and leaves every other pane’s alone', async () => {
+  it('starts one pane’s count again when its page is replaced, and leaves every other pane’s alone', async () => {
     const [mobile, tablet] = await openShop()
     await panes.console(mobile.id, message, PAGE, offline)
     await panes.console(tablet.id, message, PAGE, offline)
 
-    panes.navigating(mobile.id)
+    panes.pageReplaced(mobile.id)
 
     expect(panes.statuses()[mobile.id].errors).toBe(0)
     expect(panes.statuses()[tablet.id].errors).toBe(1)
   })
 
-  it('keeps the count through everything that is not the pane navigating', async () => {
+  it('keeps the count through everything that does not replace the page', async () => {
     const [mobile] = await openShop()
     await panes.console(mobile.id, message, PAGE, offline)
 

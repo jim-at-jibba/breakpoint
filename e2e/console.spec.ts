@@ -554,7 +554,7 @@ test('a pane’s error count is everything that went wrong on its page, and only
   await inGuest(launched.app, id, `console.error('after the move'); 0`)
   await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([1, ...counts.slice(1)])
 
-  // A frame loading inside the page is not the pane navigating, and resets nothing.
+  // A frame loading inside the page does not replace the page, and resets nothing.
   await inGuest(
     launched.app,
     id,
@@ -566,4 +566,20 @@ test('a pane’s error count is everything that went wrong on its page, and only
     })`
   )
   expect(await errorCounts(shop)).toEqual([1, ...counts.slice(1)])
+
+  // Nor does a navigation that never arrives: a 204 leaves the page, and its error, on
+  // screen. Once it has been answered, the next error is the page's second.
+  const noContent = (): number =>
+    fixture.requests().filter((request) => request.url === '/favicon.ico').length
+  const answered = noContent()
+  await inGuest(launched.app, id, `location.href = '/favicon.ico'; 0`)
+  await expect.poll(noContent).toBeGreaterThan(answered)
+  await inGuest(launched.app, id, `console.error('still here'); 0`)
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([2, ...counts.slice(1)])
+  expect(await inGuest<string>(launched.app, id, 'location.href')).toBe(`${fixture.a}/`)
+
+  // A load that fails replaces the page with Chromium's error page, whose one error is that.
+  await inGuest(launched.app, id, `location.href = 'http://127.0.0.1:1/'; 0`)
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([1, ...counts.slice(1)])
+  await expect.poll(async () => (await state()).panes[mobile.id]?.load).toBe('failed')
 })

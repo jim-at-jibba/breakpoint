@@ -28,6 +28,13 @@ import {
  */
 export const CONSOLE_ENABLE_COMMANDS = ['Runtime.enable', 'Log.enable'] as const
 
+/**
+ * What the attachment hears when the page's document has been replaced by another, which
+ * is what starts a pane's error count again ([ADR-0022]). Chromium sends it on both sides
+ * of the commit, and never for a navigation that left the page where it was.
+ */
+export const PAGE_REPLACED = 'Runtime.executionContextsCleared'
+
 /** Frames kept of a stack: enough to find the call site, bounded whatever the page does. */
 export const MAX_STACK_FRAMES = 32
 
@@ -99,7 +106,7 @@ export class ConsoleCapture {
           this.foreign.delete(params.executionContextId)
         }
         return null
-      case 'Runtime.executionContextsCleared':
+      case PAGE_REPLACED:
         this.foreign.clear()
         return null
       case 'Runtime.consoleAPICalled':

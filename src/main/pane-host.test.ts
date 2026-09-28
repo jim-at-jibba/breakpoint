@@ -140,7 +140,7 @@ describe("a pane's console", () => {
   function hostFor(guest: WebContents): {
     pane: string
     panes: Record<
-      'emulated' | 'console' | 'consoleFailed' | 'detached' | 'navigating',
+      'emulated' | 'console' | 'consoleFailed' | 'detached' | 'pageReplaced',
       ReturnType<typeof vi.fn>
     >
   } {
@@ -159,7 +159,7 @@ describe("a pane's console", () => {
       console: vi.fn(),
       consoleFailed: vi.fn(),
       detached: vi.fn(),
-      navigating: vi.fn()
+      pageReplaced: vi.fn()
     }
     const host = new PaneHost(panes as unknown as PaneService, feed)
     feed.publish({ type: 'project.opened', project })
@@ -285,24 +285,31 @@ describe("a pane's console", () => {
     expect(panes.console).not.toHaveBeenCalled()
   })
 
-  it('says the pane is navigating only when its page is being replaced by a web page', async () => {
-    const { guest } = attachedGuest()
+  it('says the page was replaced only when the attachment hears its contexts cleared', async () => {
+    const { guest, attachment } = attachedGuest()
     const { pane, panes } = hostFor(guest)
-    const start = (details: Record<string, unknown>): void => {
-      guest.emit('did-start-navigation', {
-        url: 'http://localhost:3000/next',
-        isMainFrame: true,
-        isSameDocument: false,
-        ...details
-      })
-    }
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
 
-    start({ isMainFrame: false })
-    start({ isSameDocument: true })
-    start({ url: 'mailto:someone@example.com' })
-    expect(panes.navigating).not.toHaveBeenCalled()
+    // A navigation that starts is not one that arrived: a 204 leaves the page on screen.
+    guest.emit('did-start-navigation', {
+      url: 'http://localhost:3000/nothing',
+      isMainFrame: true,
+      isSameDocument: false
+    })
+    expect(panes.pageReplaced).not.toHaveBeenCalled()
 
-    start({})
-    expect(panes.navigating).toHaveBeenCalledExactlyOnceWith(pane)
+    attachment.emit('message', {}, 'Runtime.executionContextsCleared', {})
+    expect(panes.pageReplaced).toHaveBeenCalledExactlyOnceWith(pane)
+  })
+
+  it('says nothing of a page replaced in a guest the pane has replaced', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    guest.emit('destroyed')
+    attachment.emit('message', {}, 'Runtime.executionContextsCleared', {})
+
+    expect(panes.pageReplaced).not.toHaveBeenCalled()
   })
 })
