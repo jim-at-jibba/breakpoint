@@ -38,6 +38,8 @@ with no marker is quiet, empty with one is not. The marker is narrowed only wher
 provably safe. Reading one pane consults that pane's ring alone, and reading a window
 consults only evictions from inside it — a ring remembers when its newest eviction was
 appended. A level narrows nothing: what was evicted is gone, level and all.
+The change filter (#55) is the same: an evicted entry cannot be asked whether it was a
+change, so `changes: true` narrows the marker no further than the read's other filters do.
 
 **The log reaches the route table as a store, not behind a service.** PRD 8.1's service list
 does not name one, and ADR-0005 asks that adapters hold no behaviour — not that every route

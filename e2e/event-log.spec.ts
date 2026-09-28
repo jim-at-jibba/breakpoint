@@ -240,6 +240,28 @@ test('a read is filtered by the app, from the terminal and over the socket alike
   expect(overSocket.ok === false && overSocket.error.code).toBe('INVALID_PARAMS')
 })
 
+test("changes are the route's filter, read alike from the terminal and over the socket", async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop')
+  writeUnreadableProject(shop)
+  expect((await runCli(sandbox, ['.', '--json'], shop)).code).toBe(1)
+
+  const run = await runCli(sandbox, ['changes', '--since', '0', '--json'])
+  expect(run.stderr).toBe('')
+  expect(run.code).toBe(0)
+  const changes = JSON.parse(run.stdout) as LogRead
+  expect(changes.entries.map((entry) => entry.type)).toEqual(['project.openFailed'])
+
+  const overSocket = await sendRaw(
+    sandbox.socketPath,
+    requestLine('log.read', { since: 0, changes: true })
+  )
+  expect(overSocket.ok && overSocket.data).toEqual(changes)
+
+  const usage = await runCli(sandbox, ['changes', '--errors'])
+  expect(usage.code).toBe(2)
+})
+
 test('a missing cursor preserves JSON error output and never launches the app', async () => {
   const run = await runCli(sandbox, ['logs', '--since', '--json', '--no-launch'])
   expect(run.code).toBe(2)

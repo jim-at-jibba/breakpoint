@@ -88,7 +88,7 @@ function expectPath(raw: unknown): ParamsOk<'project.open'> | ParamsBad {
   return { ok: true, params: { path } }
 }
 
-const LOG_READ_FIELDS = ['since', 'within', 'pane', 'level', 'errors'] as const
+const LOG_READ_FIELDS = ['since', 'within', 'pane', 'level', 'errors', 'changes'] as const
 const LOG_READ_SHAPE = `this route takes { ${LOG_READ_FIELDS.join(', ')} }, each optional`
 
 /**
@@ -102,7 +102,7 @@ function expectLogRead(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   const refused = rejectUnknown(given, LOG_READ_FIELDS, LOG_READ_SHAPE)
   if (refused) return refused
 
-  const { since, within, pane, level, errors } = given
+  const { since, within, pane, level, errors, changes } = given
   const params: RouteParams<'log.read'> = {}
   if (since !== undefined) {
     if (!isCursorPosition(since)) {
@@ -133,6 +133,10 @@ function expectLogRead(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
     // Two answers to one question would leave the reader guessing which one won.
     if (level !== undefined) return { ok: false, message: 'errors is level error: give one' }
     params.errors = true
+  }
+  if (changes !== undefined) {
+    if (changes !== true) return { ok: false, message: 'changes must be true, or left out' }
+    params.changes = true
   }
   return { ok: true, params }
 }

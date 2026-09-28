@@ -3,10 +3,12 @@ import {
   CONSOLE_LEVELS,
   ENTRIES_PER_READ,
   EventLog,
+  isChange,
   MAX_ENTRY_TEXT_BYTES,
   type ConsoleEntryBody,
   type ConsoleLevel,
   type Entry,
+  type EntryBody,
   type EntryOf,
   type ProjectEntryBody,
   type StackFrame
@@ -416,6 +418,110 @@ describe('a filtered read', () => {
     const log = new EventLog()
     log.append('pane-1', said('log'))
     expect(log.read({ pane: 'pane-9' })).toEqual({ entries: [], cursor: 1 })
+  })
+})
+
+describe('a read of changes', () => {
+  const origins = ['http://127.0.0.1:5173']
+  const CHANGES: readonly EntryBody[] = [
+    THROWN,
+    { ...THROWN, rejection: true, text: 'Uncaught (in promise) boom' },
+    said('error'),
+    {
+      type: 'console.message',
+      level: 'error',
+      source: 'network',
+      text: 'Failed to load resource: 500',
+      args: [],
+      url: '/api',
+      location: null,
+      stack: []
+    },
+    { type: 'pane.loadFailed', url: '/', code: -102, message: 'refused' },
+    { type: 'pane.attachFailed', attempt: 2, retrying: false, message: 'already attached' },
+    { type: 'pane.detached', reason: 'target closed' },
+    { type: 'pane.consoleFailed', message: 'Runtime.enable: refused' },
+    {
+      type: 'pane.geometryMismatch',
+      expected: { width: 390, height: 844 },
+      measured: { width: 390, height: 800 },
+      message: 'drawn 44px short'
+    },
+    { type: 'pane.geometryMatched' },
+    { type: 'pane.emulationFailed', capability: 'userAgent', message: 'refused' },
+    { type: 'pane.emulationRecovered', capability: 'userAgent' },
+    { type: 'pane.loaded', url: '/next' },
+    { type: 'project.navigated', url: '/next' },
+    { type: 'project.navigationRefused', url: 'https://example.com/' },
+    failure('/a'),
+    { type: 'certificate.prompted', host: 'h', fingerprint: 'f', error: 'e', url: '/' }
+  ]
+  const ACTIONS: readonly EntryBody[] = [
+    said('debug'),
+    said('log'),
+    said('info'),
+    said('warn'),
+    { type: 'pane.resized', width: 844, height: 390 },
+    { type: 'project.zoomChanged', zoom: 'fit' },
+    { type: 'project.layoutChanged', layout: 'focus', focusedPane: 'pane-1' },
+    { type: 'project.originsChanged', origins },
+    { type: 'pane.emulationChanged', changes: { colorScheme: 'dark' } },
+    { type: 'pane.added', width: 390, height: 844, preset: 'mobile' },
+    { type: 'pane.removed' },
+    { type: 'pane.created', url: '/' },
+    { type: 'pane.attached', attempt: 1 },
+    { type: 'pane.destroyed' },
+    { type: 'certificate.trusted', host: 'h', fingerprint: 'f', error: 'e', reason: 'developer' },
+    { type: 'certificate.refused', host: 'h', fingerprint: 'f', error: 'e' },
+    { type: 'certificate.forgotten', host: 'h', fingerprint: 'f' }
+  ]
+
+  it('reads what went wrong and where the page went, and nothing the developer did', () => {
+    const log = new EventLog()
+    // Interleaved, so a filter that passed a run of either would be caught.
+    const all = [...CHANGES, ...ACTIONS]
+    for (const [index, body] of all.entries()) log.append(index % 2 ? 'pane-1' : null, body)
+
+    expect(log.read({ changes: true }).entries.map((entry) => entry.type)).toEqual(
+      CHANGES.map((body) => body.type)
+    )
+  })
+
+  it('names each kind a change or not, one by one', () => {
+    for (const body of CHANGES) expect(isChange(body), body.type).toBe(true)
+    for (const body of ACTIONS) expect(isChange(body), body.type).toBe(false)
+  })
+
+  it('combines with the other filters and the cursor', () => {
+    const log = new EventLog()
+    log.append('pane-1', THROWN)
+    log.append('pane-2', THROWN)
+    log.append('pane-1', { type: 'pane.resized', width: 1, height: 1 })
+    log.append('pane-1', { type: 'pane.loaded', url: '/' })
+
+    expect(cursors(log.read({ changes: true, pane: 'pane-1' }).entries)).toEqual([1, 4])
+    expect(cursors(log.read({ changes: true, since: 1 }).entries)).toEqual([2, 4])
+    expect(cursors(log.read({ changes: true, errors: true }).entries)).toEqual([1, 2])
+  })
+
+  it('finds a change past a thousand actions, because it filters before the limit', () => {
+    const log = new EventLog()
+    for (let index = 0; index < ENTRIES_PER_READ * 2; index += 1) {
+      log.append('pane-1', { type: 'pane.resized', width: index + 1, height: 1 })
+    }
+    log.append('pane-1', THROWN)
+
+    expect(cursors(log.read({ changes: true }).entries)).toEqual([ENTRIES_PER_READ * 2 + 1])
+  })
+
+  it('reports dropped-before exactly as every other read does', () => {
+    const log = new EventLog({ limit: 2 })
+    log.append('pane-1', THROWN)
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+
+    expect(log.read({ changes: true })).toEqual({ entries: [], cursor: 3, droppedBefore: 2 })
+    expect(log.read({ changes: true, since: 2 })).toEqual({ entries: [], cursor: 3 })
   })
 })
 
