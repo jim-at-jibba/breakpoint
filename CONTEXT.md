@@ -147,6 +147,12 @@ before an entry is appended, so a location is as true later as it was on arrival
 fails, the entry says so and keeps the location it came with.
 _Avoid_: source-mapping, symbolication, mapping
 
+**Virtual module**:
+A module a bundler names after a file it is not: `Page.astro?astro&type=script&index=0&lang.ts`
+is the script extracted from the page, and its lines are the script's. Any query but a dev
+server's cache-busting makes one, and resolution never takes one for the file it is named after.
+_Avoid_: sub-module, fragment, part
+
 **Change**:
 An entry reporting that something went wrong or that the page moved — the subset an agent asks
 for after an edit. Never the developer's own actions: a resize is not a change.
