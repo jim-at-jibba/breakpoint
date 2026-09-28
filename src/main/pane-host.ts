@@ -1,9 +1,17 @@
 import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
-import { CONSOLE_ENABLE_COMMANDS, ConsoleCapture, PAGE_REPLACED } from '../shared/console'
+import {
+  CONSOLE_ENABLE_COMMANDS,
+  ConsoleCapture,
+  CONTEXT_DESTROYED,
+  EXPAND_COMMAND,
+  expandParams,
+  handlesIn,
+  PAGE_REPLACED
+} from '../shared/console'
 import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
-import { fetchTextWith, type PaneService } from './services/pane-service'
+import { fetchTextWith, type LiveHandles, type PaneService } from './services/pane-service'
 import type { StateFeed } from './state-feed'
 
 /**
@@ -330,14 +338,25 @@ export class PaneHost {
     const capture = new ConsoleCapture()
     // A bundle and its map are fetched as the pane would fetch them: its cookies, its cache.
     const fetchText = fetchTextWith((url, init) => guest.session.fetch(url, init))
+    // An object is asked about over the attachment that heard it, and nowhere else.
+    const properties = async (objectId: string): Promise<unknown> =>
+      guest.debugger.sendCommand(EXPAND_COMMAND, expandParams(objectId))
     const onMessage = (_event: Electron.Event, method: string, params: unknown): void => {
       // Heard in the same stream as the console, so no error of either page can be
       // counted against the other. Not a browser-side navigation event: those arrive
       // on their own channel, and fire for navigations that never replace the page.
       if (method === PAGE_REPLACED && this.isCurrent(pane, guest)) this.panes.pageReplaced(pane)
+      if (method === CONTEXT_DESTROYED && this.isCurrent(pane, guest)) {
+        const { executionContextId } = params as { executionContextId?: unknown }
+        if (typeof executionContextId === 'number') {
+          this.panes.contextDestroyed(pane, executionContextId)
+        }
+      }
       const body = capture.hear(method, params)
       if (body && this.isCurrent(pane, guest)) {
-        void this.panes.console(pane, body, guest.getURL(), fetchText)
+        const heard = handlesIn(method, params)
+        const objects: LiveHandles | null = heard && { ...heard, properties }
+        void this.panes.console(pane, body, guest.getURL(), fetchText, objects)
       }
     }
     guest.debugger.on('message', onMessage)

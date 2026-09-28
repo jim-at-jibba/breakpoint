@@ -4,9 +4,14 @@ import {
   ConsoleCapture,
   consoleEntryFor,
   isConsoleError,
-  MAX_STACK_FRAMES
+  MAX_EXPANDED_PROPERTIES,
+  MAX_PROPERTY_TEXT_BYTES,
+  MAX_STACK_FRAMES,
+  handlesIn,
+  propertiesOf
 } from './console'
 import type { ConsoleEntryBody } from './event-log'
+import { jsonByteLength } from './protocol'
 
 /** Payloads shaped as Chromium sends them, trimmed to the fields that matter here. */
 
@@ -501,5 +506,113 @@ describe('what counts against a pane', () => {
     )
   ])('%s is not', (_name, body) => {
     expect(isConsoleError(body)).toBe(false)
+  })
+})
+
+describe('the objects behind an entry', () => {
+  const order = { type: 'object', objectId: '{"injectedScriptId":3,"id":1}', preview: {} }
+  const fn = { type: 'function', objectId: '{"injectedScriptId":3,"id":2}' }
+
+  it('are one handle per argument, null where the argument was not an object', () => {
+    const call = consoleCall('log', [text('an order'), order, { type: 'number', value: 1 }, fn])
+
+    expect(handlesIn('Runtime.consoleAPICalled', call)).toEqual({
+      context: 1,
+      handles: [null, order.objectId, null, fn.objectId]
+    })
+  })
+
+  it('of an exception are the value it threw', () => {
+    const thrown = { type: 'object', subtype: 'error', objectId: 'thrown', description: 'E' }
+    const details = { text: 'Uncaught', executionContextId: 5, exception: thrown }
+
+    expect(handlesIn('Runtime.exceptionThrown', { exceptionDetails: details })).toEqual({
+      context: 5,
+      handles: ['thrown']
+    })
+  })
+
+  it('are nothing to hold when no argument was an object', () => {
+    const call = consoleCall('log', [text('words'), { type: 'object', subtype: 'null' }])
+
+    expect(handlesIn('Runtime.consoleAPICalled', call)).toBeNull()
+    expect(handlesIn('Runtime.exceptionThrown', { exceptionDetails: { text: 'x' } })).toBeNull()
+    expect(handlesIn('Runtime.executionContextsCleared', {})).toBeNull()
+  })
+})
+
+describe('an object expanded', () => {
+  const value = (remote: Record<string, unknown>, name: string): Record<string, unknown> => ({
+    name,
+    value: remote,
+    enumerable: true,
+    isOwn: true
+  })
+
+  it('reads as its properties, each previewed as the console prints a value inside one', () => {
+    const result = {
+      result: [
+        value({ type: 'number', value: 7, description: '7' }, 'id'),
+        value({ type: 'string', value: 'Ada' }, 'name'),
+        value(
+          {
+            type: 'object',
+            className: 'Object',
+            description: 'Object',
+            preview: {
+              type: 'object',
+              description: 'Object',
+              overflow: false,
+              properties: [{ name: 'deep', type: 'boolean', value: 'true' }]
+            }
+          },
+          'nested'
+        ),
+        { name: 'total', get: { type: 'function', description: 'get total() {}' }, isOwn: true },
+        value({ type: 'object', subtype: 'null', value: null }, 'gone')
+      ],
+      internalProperties: [
+        { name: '[[Prototype]]', value: { type: 'object', description: 'Object' } }
+      ]
+    }
+
+    expect(propertiesOf(result)).toEqual({
+      properties: [
+        { name: 'id', value: '7' },
+        { name: 'name', value: "'Ada'" },
+        { name: 'nested', value: '{deep: true}' },
+        { name: 'total', value: '(...)' },
+        { name: 'gone', value: 'null' },
+        { name: '[[Prototype]]', value: 'Object' }
+      ],
+      truncated: false
+    })
+  })
+
+  it(`keeps at most ${MAX_EXPANDED_PROPERTIES} properties, and says it kept fewer`, () => {
+    const many = Array.from({ length: MAX_EXPANDED_PROPERTIES + 5 }, (_, index) =>
+      value({ type: 'number', value: index, description: String(index) }, String(index))
+    )
+
+    const expanded = propertiesOf({ result: many })
+
+    expect(expanded.properties).toHaveLength(MAX_EXPANDED_PROPERTIES)
+    expect(expanded.truncated).toBe(true)
+  })
+
+  it(`shortens a name or value past ${MAX_PROPERTY_TEXT_BYTES} bytes, and says so`, () => {
+    const long = 'x'.repeat(MAX_PROPERTY_TEXT_BYTES * 4)
+
+    const expanded = propertiesOf({ result: [value({ type: 'string', value: long }, long)] })
+
+    const [property] = expanded.properties
+    expect(jsonByteLength(property.name)).toBeLessThanOrEqual(MAX_PROPERTY_TEXT_BYTES)
+    expect(jsonByteLength(property.value)).toBeLessThanOrEqual(MAX_PROPERTY_TEXT_BYTES)
+    expect(expanded.truncated).toBe(true)
+  })
+
+  it('of something that is not an answer has no properties', () => {
+    expect(propertiesOf(undefined)).toEqual({ properties: [], truncated: false })
+    expect(propertiesOf({ result: 'nope' })).toEqual({ properties: [], truncated: false })
   })
 })

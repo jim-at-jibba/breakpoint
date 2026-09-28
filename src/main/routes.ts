@@ -137,6 +137,26 @@ function expectLogRead(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   return { ok: true, params }
 }
 
+const EXPANSION_SHAPE = 'this route takes { cursor } and optionally { arg }'
+
+function expectExpansion(raw: unknown): ParamsOk<'panes.expand'> | ParamsBad {
+  const request = asParams(raw)
+  if (!request) return { ok: false, message: EXPANSION_SHAPE }
+  const unknown = unknownFields(request, ['cursor', 'arg'])
+  if (unknown.length > 0) {
+    return { ok: false, message: `${EXPANSION_SHAPE}, not ${unknown.join(', ')}` }
+  }
+  const { cursor, arg } = request
+  if (!isCursorPosition(cursor)) {
+    return { ok: false, message: 'cursor must be a cursor position: an integer of 0 or more' }
+  }
+  if (arg === undefined) return { ok: true, params: { cursor } }
+  if (typeof arg !== 'number' || !Number.isInteger(arg) || arg < 0) {
+    return { ok: false, message: 'arg must be the index of an argument: an integer of 0 or more' }
+  }
+  return { ok: true, params: { cursor, arg } }
+}
+
 /**
  * The params object, or nothing if what arrived was not one. Every route taking params
  * starts here, so "this is not even an object" is one answer rather than four.
@@ -507,6 +527,10 @@ export function createRouteTable(services: Services): RouteTable {
     'panes.add': {
       parseParams: expectPaneCreation,
       handle: async (creation) => ({ payload: await services.panes.add(creation) })
+    },
+    'panes.expand': {
+      parseParams: expectExpansion,
+      handle: async (request) => ({ payload: await services.panes.expand(request) })
     },
     'panes.list': {
       parseParams: expectNoParams,

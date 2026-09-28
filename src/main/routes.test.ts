@@ -352,6 +352,55 @@ describe('app.setSwitcher', () => {
   })
 })
 
+describe('panes.expand', () => {
+  function expander(): { dispatch: Dispatch; expand: ReturnType<typeof vi.fn> } {
+    const expand = vi.fn().mockResolvedValue({ live: false })
+    const panes = { expand }
+    return {
+      dispatch: createDispatch(createRouteTable({ panes } as unknown as Services)),
+      expand
+    }
+  }
+
+  it.each([
+    [{ cursor: 12 }, { cursor: 12 }],
+    [
+      { cursor: 12, arg: 2 },
+      { cursor: 12, arg: 2 }
+    ]
+  ])('takes %j and answers with what the pane service says', async (params, asked) => {
+    const { dispatch, expand } = expander()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.expand', params },
+      { surface: 'cli' }
+    )
+
+    expect(expand).toHaveBeenCalledWith(asked)
+    expect(response).toEqual({ id: '1', ok: true, data: { live: false } })
+  })
+
+  it.each([
+    ['nothing', undefined],
+    ['no cursor', { arg: 1 }],
+    ['a cursor that is not a position', { cursor: -1 }],
+    ['a fractional cursor', { cursor: 1.5 }],
+    ['an argument that is not an index', { cursor: 1, arg: 'first' }],
+    ['a negative argument', { cursor: 1, arg: -1 }],
+    ['a field it does not take', { cursor: 1, objectId: 'x' }]
+  ])('refuses %s', async (_, params) => {
+    const { dispatch, expand } = expander()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.expand', params },
+      { surface: 'cli' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(expand).not.toHaveBeenCalled()
+  })
+})
+
 describe('log.read', () => {
   /** The table over a real log, which is the store the route calls ([ADR-0006]). */
   function logDispatcher(): { dispatch: Dispatch; log: EventLog } {

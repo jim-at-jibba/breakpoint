@@ -12,7 +12,15 @@ import {
 import type { StateSnapshot } from '../src/shared/state'
 import { bundle, BUNDLE_PATH, BUNDLED_SOURCES } from './bundle'
 import { RESOLUTION_SCRIPTS, startFixture, type Fixture } from './fixture'
-import { closeApp, launchApp, runCli, Sandbox, type LaunchedApp } from './harness'
+import {
+  closeApp,
+  launchApp,
+  requestLine,
+  runCli,
+  sendRaw,
+  Sandbox,
+  type LaunchedApp
+} from './harness'
 
 /**
  * Console capture, proved from a terminal: a real page's real console reaching the real
@@ -607,4 +615,64 @@ test('a pane’s error count is everything that went wrong on its page, and only
     { guest: id, url: `${fixture.a}/` }
   )
   await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([0, ...counts.slice(1)])
+})
+
+test('a logged object expands over the socket while its page lives, and says so once it has gone', async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop')
+  await open(shop)
+  const entries = await everythingSaid(shop)
+  const [pane] = shop.panes
+  const first = messages(entries, pane.id).find((entry) => entry.text.startsWith('first'))
+  expect(first).toBeDefined()
+  const order = { cursor: first!.cursor, arg: 3 }
+
+  const live = await sendRaw(sandbox.socketPath, requestLine('panes.expand', order))
+  expect(live).toMatchObject({
+    ok: true,
+    data: {
+      live: true,
+      properties: expect.arrayContaining([
+        { name: 'id', value: '7' },
+        { name: 'name', value: "'Ada'" }
+      ]),
+      truncated: false
+    }
+  })
+  // A string was never an object, so there is nothing behind it to expand.
+  const word = await sendRaw(sandbox.socketPath, requestLine('panes.expand', { ...order, arg: 1 }))
+  expect(word).toMatchObject({ ok: true, data: { live: false } })
+
+  const since = (await state()).cursor
+  const allowed = await sendRaw(
+    sandbox.socketPath,
+    requestLine('project.setAllowedOrigins', { origins: [fixture.a] })
+  )
+  expect(allowed).toMatchObject({ ok: true })
+  const away = await runCli(sandbox, ['open', `${fixture.a}/`, '--json'])
+  expect(away.code).toBe(0)
+  await expect
+    .poll(
+      async () =>
+        (await logs()).some(
+          (entry) =>
+            entry.cursor > since &&
+            entry.type === 'pane.loaded' &&
+            entry.pane === pane.id &&
+            entry.url === `${fixture.a}/`
+        ),
+      { timeout: 20_000 }
+    )
+    .toBe(true)
+
+  const gone = await sendRaw(sandbox.socketPath, requestLine('panes.expand', order))
+  expect(gone).toEqual({ id: 'test', ok: true, data: { live: false } })
+
+  // The preview is as true as it was, and no handle ever reached the log.
+  const read = await runCli(sandbox, ['logs', '--json'])
+  const after = (JSON.parse(read.stdout) as LogRead).entries.find(
+    (entry) => entry.cursor === first!.cursor
+  )
+  expect(after).toMatchObject({ args: first!.args, text: first!.text })
+  expect(read.stdout).not.toMatch(/objectId|injectedScriptId/)
 })

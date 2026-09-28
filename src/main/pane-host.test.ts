@@ -5,7 +5,7 @@ import { createProject } from '../shared/project'
 import type { FetchText } from '../shared/resolution'
 import { StateFeed } from './state-feed'
 import { PaneHost } from './pane-host'
-import type { PaneService } from './services/pane-service'
+import type { LiveHandles, PaneService } from './services/pane-service'
 
 describe('pane navigation', () => {
   it('catches up a guest that attaches after the project was navigated', async () => {
@@ -140,7 +140,13 @@ describe("a pane's console", () => {
   function hostFor(guest: WebContents): {
     pane: string
     panes: Record<
-      'emulated' | 'console' | 'consoleFailed' | 'detached' | 'loadFailed' | 'pageReplaced',
+      | 'emulated'
+      | 'console'
+      | 'consoleFailed'
+      | 'contextDestroyed'
+      | 'detached'
+      | 'loadFailed'
+      | 'pageReplaced',
       ReturnType<typeof vi.fn>
     >
   } {
@@ -158,6 +164,7 @@ describe("a pane's console", () => {
       guestDestroyed: vi.fn(),
       console: vi.fn(),
       consoleFailed: vi.fn(),
+      contextDestroyed: vi.fn(),
       detached: vi.fn(),
       loadFailed: vi.fn(),
       pageReplaced: vi.fn()
@@ -207,7 +214,9 @@ describe("a pane's console", () => {
       expect.objectContaining({ type: 'console.message', text: 'hello' }),
       // The page it was heard on, whose origin is the dev server resolution reads.
       'http://localhost:3000/',
-      expect.any(Function)
+      expect.any(Function),
+      // A string is no object: there is nothing to hold beside the entry.
+      null
     )
     // A bundle is fetched through the pane's own session.
     const fetch = panes.console.mock.calls[0][3] as FetchText
@@ -218,6 +227,40 @@ describe("a pane's console", () => {
     expect(guest.session.fetch).toHaveBeenCalledWith('http://localhost:3000/assets/app.js', {
       signal
     })
+  })
+
+  it('hands over the handles behind what it heard, asked about over the same attachment', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+    const order = { type: 'object', objectId: 'order-1', description: 'Object' }
+
+    attachment.emit('message', {}, 'Runtime.consoleAPICalled', {
+      ...call,
+      args: [...call.args, order]
+    })
+
+    expect(panes.console.mock.calls[0][0]).toBe(pane)
+    const objects = panes.console.mock.calls[0][4] as LiveHandles
+    expect(objects).toMatchObject({ context: 1, handles: [null, 'order-1'] })
+    await objects.properties('order-1')
+    expect(guest.debugger.sendCommand).toHaveBeenLastCalledWith('Runtime.getProperties', {
+      objectId: 'order-1',
+      ownProperties: true,
+      generatePreview: true
+    })
+  })
+
+  it('reports an execution context going, so the objects it minted go with it', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    attachment.emit('message', {}, 'Runtime.executionContextDestroyed', {
+      executionContextId: 9
+    })
+
+    expect(panes.contextDestroyed).toHaveBeenCalledWith(pane, 9)
   })
 
   it('says so, rather than going quiet, when capture cannot be enabled', async () => {
