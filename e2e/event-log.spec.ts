@@ -204,11 +204,47 @@ test('a cursor that is not a position is refused by the terminal and by the rout
   expect(overSocket.ok === false && overSocket.error.code).toBe('INVALID_PARAMS')
 })
 
+test('a read is filtered by the app, from the terminal and over the socket alike', async () => {
+  launched = await launchApp(sandbox)
+  const shop = makeRepo('shop')
+  writeUnreadableProject(shop)
+  expect((await runCli(sandbox, ['.', '--json'], shop)).code).toBe(1)
+
+  async function logs(...flags: string[]): Promise<LogRead> {
+    const run = await runCli(sandbox, ['logs', ...flags, '--json'])
+    expect(run.stderr).toBe('')
+    expect(run.code).toBe(0)
+    return JSON.parse(run.stdout) as LogRead
+  }
+
+  // A project that did not open is an error, and the app's own: it belongs to no pane.
+  const everything = await logs()
+  const errors = await logs('--errors')
+  expect(errors.entries.map((entry) => entry.type)).toEqual(['project.openFailed'])
+  expect(await logs('--level', 'error')).toEqual(errors)
+  expect(await logs('--pane', 'no-such-pane')).toEqual({
+    entries: [],
+    cursor: everything.cursor
+  })
+  // The window reaches back past everything this run has done, so it is the whole log.
+  expect(await logs('--since', '5m')).toEqual(everything)
+
+  const usage = await runCli(sandbox, ['logs', '--since', '5x'])
+  expect(usage.code).toBe(2)
+  expect(usage.stderr).toContain('x is not a unit')
+
+  const overSocket = await sendRaw(
+    sandbox.socketPath,
+    requestLine('log.read', { errors: true, level: 'warn' })
+  )
+  expect(overSocket.ok === false && overSocket.error.code).toBe('INVALID_PARAMS')
+})
+
 test('a missing cursor preserves JSON error output and never launches the app', async () => {
   const run = await runCli(sandbox, ['logs', '--since', '--json', '--no-launch'])
   expect(run.code).toBe(2)
   expect(run.stdout).toBe('')
   expect(JSON.parse(run.stderr)).toEqual({
-    error: { code: 'INVALID_USAGE', message: '--since needs <cursor>' }
+    error: { code: 'INVALID_USAGE', message: '--since needs <cursor|duration>' }
   })
 })

@@ -1,4 +1,5 @@
 import {
+  levelOf,
   LOG_SOURCES,
   type ConsoleEntryBody,
   type ConsoleLevel,
@@ -146,7 +147,7 @@ export function consoleEntryFor(method: string, params: unknown): ConsoleEntryBo
  * level, by the page or by the browser about it. A warning is not.
  */
 export function isConsoleError(body: ConsoleEntryBody): boolean {
-  return body.type === 'console.exception' || body.level === 'error'
+  return levelOf(body) === 'error'
 }
 
 function consoleCall(params: Record<string, unknown>): ConsoleEntryBody | null {

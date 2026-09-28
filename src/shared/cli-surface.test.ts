@@ -76,20 +76,21 @@ describe('the declared surface', () => {
     for (const flag of CLI_FLAGS) expect(optionKeys).toContain(flag.sets)
   })
 
-  it('names every value flag with a double dash and shows what it takes', () => {
+  it('names every command flag with a double dash and shows what a value flag takes', () => {
     for (const command of CLI_COMMANDS) {
       for (const flag of command.flags ?? []) {
         expect(flag.name).toMatch(/^--[a-z][a-z-]*$/)
-        expect(flag.placeholder).toMatch(/^<.+>$/)
+        if (flag.placeholder !== undefined) expect(flag.placeholder).toMatch(/^<.+>$/)
       }
     }
   })
 
-  it('mentions every value flag in the help text, beside the command that takes it', () => {
+  it('mentions every command flag in the help text, beside the command that takes it', () => {
     const help = helpText()
     for (const command of CLI_COMMANDS) {
       for (const flag of command.flags ?? []) {
-        expect(help).toContain(`${flag.name} ${flag.placeholder}`)
+        const label = flag.placeholder ? `${flag.name} ${flag.placeholder}` : flag.name
+        expect(help).toContain(`[${label}]`)
       }
     }
   })
@@ -271,7 +272,7 @@ describe('reading the event log from a terminal', () => {
     (flag: string) => {
       const result = read(['logs', '--since', flag])
       expect(result.kind).toBe('error')
-      expect(result.kind === 'error' && result.message).toBe('--since needs <cursor>')
+      expect(result.kind === 'error' && result.message).toBe('--since needs <cursor|duration>')
       if (flag === '--json') expect(result.options.json).toBe(true)
       if (flag === '--no-launch') expect(result.options.noLaunch).toBe(true)
       if (flag === '--verbose') expect(result.options.verbose).toBe(true)
@@ -287,6 +288,91 @@ describe('reading the event log from a terminal', () => {
   it('never reads the cursor as a second positional', () => {
     const result = read(['logs', '--since', '12'])
     expect(result.kind).toBe('command')
+  })
+
+  it.each([
+    ['30s', 30_000],
+    ['5m', 300_000],
+    ['2h', 7_200_000],
+    ['250ms', 250]
+  ])('reads --since %s as a window of time back from now', (given, within) => {
+    const result = read(['logs', '--since', given])
+    expect(result.kind === 'command' && result.params).toEqual({ within })
+  })
+
+  it('lets the last --since win, whichever form each one took', () => {
+    const cursor = read(['logs', '--since', '5m', '--since', '12'])
+    expect(cursor.kind === 'command' && cursor.params).toEqual({ since: 12 })
+    const duration = read(['logs', '--since', '12', '--since', '5m'])
+    expect(duration.kind === 'command' && duration.params).toEqual({ within: 300_000 })
+  })
+
+  it.each([
+    ['5x', 'x is not a unit: use ms, s, m or h'],
+    ['5 m', 'a duration is a whole number and a unit, as in 30s'],
+    ['1.5m', 'a duration is a whole number and a unit, as in 30s'],
+    ['m', 'a duration is a whole number and a unit, as in 30s'],
+    ['0s', 'a duration of 0 reads nothing'],
+    ['-5m', 'a duration is a whole number and a unit, as in 30s'],
+    ['yesterday', 'a duration is a whole number and a unit, as in 30s']
+  ])('refuses --since %s, naming what was wrong', (given, reason) => {
+    const result = read(['logs', `--since=${given}`])
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toBe(
+      `--since takes a cursor position or a duration, not ${given}: ${reason}`
+    )
+  })
+
+  it("reads one pane, one level, or only errors, as the route's own filters", () => {
+    expect(read(['logs', '--pane', 'pane-1'])).toMatchObject({ params: { pane: 'pane-1' } })
+    expect(read(['logs', '--level=warn'])).toMatchObject({ params: { level: 'warn' } })
+    expect(read(['logs', '--errors'])).toMatchObject({ params: { errors: true } })
+    const all = read(['logs', '--errors', '--pane', 'pane-1', '--since', '5m', '--json'])
+    expect(all.kind === 'command' && all.params).toEqual({
+      errors: true,
+      pane: 'pane-1',
+      within: 300_000
+    })
+    expect(all.options.json).toBe(true)
+  })
+
+  it('refuses a level that is not one, naming the levels there are', () => {
+    const result = read(['logs', '--level', 'fatal'])
+    expect(result.kind === 'error' && result.message).toBe(
+      '--level takes one of debug, log, info, warn, error, not fatal'
+    )
+  })
+
+  it('refuses a pane given as nothing', () => {
+    const result = read(['logs', '--pane='])
+    expect(result.kind === 'error' && result.message).toBe('--pane needs <pane>')
+  })
+
+  it('refuses asking for errors and a level at once, since they are one filter', () => {
+    const result = read(['logs', '--errors', '--level', 'warn'])
+    expect(result.kind === 'error' && result.message).toBe(
+      '--errors is --level error: give one or the other'
+    )
+  })
+
+  it('takes nothing after --errors, and never reads the next token as its value', () => {
+    expect(read(['logs', '--errors=yes'])).toMatchObject({
+      kind: 'error',
+      message: '--errors takes no value'
+    })
+    // The token after it is the command, not a value the flag swallowed.
+    expect(read(['--errors', 'logs'])).toMatchObject({ kind: 'command', params: { errors: true } })
+  })
+
+  it.each([
+    ['state', '--errors'],
+    ['state', '--pane', 'pane-1'],
+    ['quit', '--level', 'warn'],
+    ['.', '--errors']
+  ])('refuses %s %s: a flag of logs is a usage error anywhere else', (...argv) => {
+    const result = read(argv)
+    expect(result.kind).toBe('error')
+    expect(result.kind === 'error' && result.message).toMatch(/^--[a-z]+ is not a flag of /)
   })
 
   it('refuses the cursor on a command that does not take one, a path included', () => {
