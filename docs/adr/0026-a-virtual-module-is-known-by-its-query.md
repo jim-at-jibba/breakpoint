@@ -22,6 +22,11 @@ a new cache-busting key loses resolution for those scripts, and nothing reports 
 Checked against a real Astro dev server. The frame URL and its inline map's source both carry
 the query, and the map's `sourcesContent` is the extracted TypeScript, not the page.
 
+The allow-list declines some names whose lines would have been right. Examples are Vite's
+`?worker_file`, `?import`, `?direct` and `?url`, and vue-loader's hash suffixes such as
+`App.vue?91b2`. Each of these appends as reported rather than resolving. If the smoke shows
+that one of them costs real resolutions, add its key to the list.
+
 A virtual module named with no query at all would still resolve to its namesake. No bundler
 in use does this. If one does, content comparison is the addition to make, on the map path,
 inside the same deadline.

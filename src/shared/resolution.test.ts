@@ -522,12 +522,11 @@ describe('resolveEntry through a source map', () => {
       expect(isFile).not.toHaveBeenCalledWith(`${REPO}/${PAGE_FILE}`)
     })
 
-    it('decides without the disk, so it costs nothing against the deadline', async () => {
+    it('decides from the name, so it costs nothing against the deadline', async () => {
       vi.useFakeTimers()
-      const isFile = vi.fn(everyFile)
       let settled = false
       const pending = resolveEntry(exception([frame('page', BUNDLE, 2)]), context, {
-        isFile,
+        isFile: everyFile,
         fetch: threeSources()
       }).then((resolved) => {
         settled = true
@@ -536,7 +535,6 @@ describe('resolveEntry through a source map', () => {
       await vi.advanceTimersByTimeAsync(0)
       expect(settled).toBe(true)
       expect((await pending).stack[0]).toMatchObject({ resolution: 'failed', path: null })
-      expect(isFile).not.toHaveBeenCalledWith(`${REPO}/${PAGE_FILE}`)
     })
   })
 
