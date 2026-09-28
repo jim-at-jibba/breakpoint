@@ -1,4 +1,5 @@
 import { stat } from 'node:fs/promises'
+import { isConsoleError } from '../../shared/console'
 import { affectedCapabilities, type EmulationResult } from '../../shared/emulation'
 import type { ConsoleEntryBody, EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
@@ -223,11 +224,20 @@ export class PaneService {
   }
 
   /**
-   * A load has started, which a navigation is. No entry: the log records where a pane
-   * got to, and "it set off" is said by the navigation entry that caused it.
+   * A load has started: a navigation, or a frame inside the page. No entry: the log
+   * records where a pane got to, and "it set off" is said by the navigation entry that
+   * caused it.
    */
   loading(pane: string): void {
     this.observe(pane, { type: 'loading' })
+  }
+
+  /**
+   * The page in the pane has been replaced by another, so its error count starts again,
+   * and only this does ([ADR-0022]). No entry, for the same reason `loading` writes none.
+   */
+  pageReplaced(pane: string): void {
+    this.observe(pane, { type: 'pageReplaced' })
   }
 
   loaded(pane: string, url: string): void {
@@ -330,10 +340,13 @@ export class PaneService {
    * Its locations are resolved against the repo before it is appended, within the
    * resolution timeout ([ADR-0020]), fetching a bundle and its map through `fetchText`.
    * Whether it is the project's is decided now, when it was heard, so what a pane said
-   * just before it went is kept, ahead of its going. Settles once appended.
+   * just before it went is kept, ahead of its going. An error is counted now too: waiting
+   * until resolution finished could put one heard just before a load onto the next page.
+   * Settles once appended.
    */
   console(pane: string, body: ConsoleEntryBody, page: string, fetchText: FetchText): Promise<void> {
     if (!this.has(pane)) return Promise.resolve()
+    if (isConsoleError(body)) this.observe(pane, { type: 'errorHeard' })
     const context = { repoPath: this.project?.repoPath ?? null, page }
     return this.record(pane, resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText }))
   }

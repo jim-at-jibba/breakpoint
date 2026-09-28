@@ -139,7 +139,10 @@ describe("a pane's console", () => {
 
   function hostFor(guest: WebContents): {
     pane: string
-    panes: Record<'emulated' | 'console' | 'consoleFailed' | 'detached', ReturnType<typeof vi.fn>>
+    panes: Record<
+      'emulated' | 'console' | 'consoleFailed' | 'detached' | 'loadFailed' | 'pageReplaced',
+      ReturnType<typeof vi.fn>
+    >
   } {
     const project = createProject('/repos/shop')
     const [pane] = project.panes
@@ -155,7 +158,9 @@ describe("a pane's console", () => {
       guestDestroyed: vi.fn(),
       console: vi.fn(),
       consoleFailed: vi.fn(),
-      detached: vi.fn()
+      detached: vi.fn(),
+      loadFailed: vi.fn(),
+      pageReplaced: vi.fn()
     }
     const host = new PaneHost(panes as unknown as PaneService, feed)
     feed.publish({ type: 'project.opened', project })
@@ -279,5 +284,88 @@ describe("a pane's console", () => {
     first.attachment.emit('message', {}, 'Runtime.consoleAPICalled', call)
 
     expect(panes.console).not.toHaveBeenCalled()
+  })
+
+  it('says the page was replaced only when the attachment hears its contexts cleared', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    // A navigation that starts is not one that arrived: a 204 leaves the page on screen.
+    guest.emit('did-start-navigation', {
+      url: 'http://localhost:3000/nothing',
+      isMainFrame: true,
+      isSameDocument: false
+    })
+    expect(panes.pageReplaced).not.toHaveBeenCalled()
+
+    attachment.emit('message', {}, 'Runtime.executionContextsCleared', {})
+    expect(panes.pageReplaced).toHaveBeenCalledExactlyOnceWith(pane)
+  })
+
+  it('uses a committed navigation when Runtime could not report the replacement', async () => {
+    const { guest } = attachedGuest((method) => method === 'Runtime.enable')
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.consoleFailed).toHaveBeenCalled())
+
+    guest.emit('did-navigate')
+
+    expect(panes.pageReplaced).toHaveBeenCalledExactlyOnceWith(pane)
+  })
+
+  it('starts over before counting a failed load when Runtime could not report it', async () => {
+    const { guest } = attachedGuest((method) => method === 'Runtime.enable')
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.consoleFailed).toHaveBeenCalled())
+
+    guest.emit('did-fail-load', {}, -102, 'ERR_CONNECTION_REFUSED', 'http://localhost:1/', true)
+
+    expect(panes.pageReplaced).toHaveBeenCalledExactlyOnceWith(pane)
+    expect(panes.loadFailed).toHaveBeenCalledExactlyOnceWith({
+      pane,
+      url: 'http://localhost:1/',
+      code: -102,
+      message: 'ERR_CONNECTION_REFUSED'
+    })
+    expect(panes.pageReplaced.mock.invocationCallOrder[0]).toBeLessThan(
+      panes.loadFailed.mock.invocationCallOrder[0]
+    )
+
+    // Chromium may finish its own error page after reporting the failed target load.
+    guest.emit('did-navigate')
+    expect(panes.pageReplaced).toHaveBeenCalledOnce()
+  })
+
+  it('uses a committed navigation after the attachment ends', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    attachment.emit('detach', {}, 'replaced with devtools')
+    guest.emit('did-navigate')
+
+    expect(panes.pageReplaced).toHaveBeenCalledExactlyOnceWith(pane)
+  })
+
+  it('does not report a committed navigation twice when Runtime already reported it', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    attachment.emit('message', {}, 'Runtime.executionContextsCleared', {})
+    guest.emit('did-navigate')
+
+    expect(panes.pageReplaced).toHaveBeenCalledExactlyOnceWith(pane)
+  })
+
+  it('says nothing of a page replaced in a guest the pane has replaced', async () => {
+    const { guest, attachment } = attachedGuest()
+    const { panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    guest.emit('destroyed')
+    attachment.emit('message', {}, 'Runtime.executionContextsCleared', {})
+
+    expect(panes.pageReplaced).not.toHaveBeenCalled()
   })
 })

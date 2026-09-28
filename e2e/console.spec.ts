@@ -1,7 +1,7 @@
 import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import type { Entry, EntryOf, LogRead } from '../src/shared/event-log'
 import {
   createProject,
@@ -235,6 +235,7 @@ test('a pane whose every override is refused still reports its console', async (
 test('a pane whose console cannot be enabled is degraded rather than quiet', async () => {
   launched = await launchApp(sandbox)
   await recordEnables(launched.app, { refuseOverrides: false, refuse: ['Runtime.enable'] })
+  const window = await launched.app.firstWindow()
   const shop = makeRepo('shop')
   await open(shop)
 
@@ -260,6 +261,18 @@ test('a pane whose console cannot be enabled is degraded rather than quiet', asy
     expect(exceptions(entries, pane.id)).toEqual([])
     expect(messages(entries, pane.id).filter((entry) => entry.source === 'console')).toEqual([])
   }
+
+  // Log still hears browser errors. Without Runtime's context-clear event, the committed
+  // main-frame navigation is what starts their count again for the new page.
+  const [mobile] = shop.panes
+  await expect
+    .poll(async () => (await state()).panes[mobile.id]?.errors ?? 0, { timeout: 20_000 })
+    .toBeGreaterThan(0)
+  const id = await guestId(window, mobile.id)
+  await inGuest(launched.app, id, `location.href = ${JSON.stringify(`${fixture.a}/`)}`)
+  await expect
+    .poll(async () => (await state()).panes[mobile.id]?.errors, { timeout: 20_000 })
+    .toBe(0)
 })
 
 /**
@@ -485,4 +498,113 @@ test('a project with no repo path keeps logging, with every location unresolved'
   for (const location of locations) {
     expect(location).toMatchObject({ resolution: 'failed', path: null })
   }
+})
+
+function guestId(page: Page, pane: string): Promise<number> {
+  return page
+    .locator(`webview[data-pane="${pane}"]`)
+    .evaluate((element) =>
+      (element as unknown as { getWebContentsId(): number }).getWebContentsId()
+    )
+}
+
+function inGuest<T>(app: LaunchedApp['app'], id: number, script: string): Promise<T> {
+  return app.evaluate(
+    ({ webContents }, { id, script }) => webContents.fromId(id)!.executeJavaScript(script),
+    { id, script }
+  ) as Promise<T>
+}
+
+async function errorCounts(project: StoredProject): Promise<number[]> {
+  const { panes } = await state()
+  return project.panes.map((pane) => panes[pane.id]?.errors ?? -1)
+}
+
+test('a pane’s error count is everything that went wrong on its page, and only its own', async () => {
+  launched = await launchApp(sandbox)
+  const window = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  const [mobile] = shop.panes
+
+  // Every pane counts exactly what its log holds at error level or thrown: one
+  // console.error, a throw, a rejection, and the browser's two for the CORS refusal. The
+  // log, debug, info and warn beside them count for nothing.
+  await everythingSaid(shop)
+  await expect
+    .poll(
+      async () => {
+        const entries = await logs()
+        const counted = shop.panes.map(
+          (pane) =>
+            entries.filter(
+              (entry) =>
+                entry.pane === pane.id &&
+                (entry.type === 'console.exception' ||
+                  (entry.type === 'console.message' && entry.level === 'error'))
+            ).length
+        )
+        return JSON.stringify(await errorCounts(shop)) === JSON.stringify(counted)
+      },
+      { timeout: 20_000 }
+    )
+    .toBe(true)
+  const counts = await errorCounts(shop)
+  for (const count of counts) expect(count).toBeGreaterThanOrEqual(5)
+
+  // A terminal can tell a pane with errors from a clean one.
+  const text = await runCli(sandbox, ['state'])
+  expect(text.stdout).toMatch(new RegExp(`${mobile.name}\\s.*errors: ${counts[0]}`))
+
+  // The pane follows a link to a page with nothing wrong on it: its count starts again,
+  // and no other pane's moves.
+  const id = await guestId(window, mobile.id)
+  await inGuest(launched.app, id, `location.href = ${JSON.stringify(`${fixture.a}/`)}`)
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([0, ...counts.slice(1)])
+  await expect.poll(() => inGuest<string>(launched!.app, id, 'location.href')).toBe(`${fixture.a}/`)
+
+  // What goes wrong on the new page is counted against it, and against no other pane.
+  await inGuest(launched.app, id, `console.error('after the move'); 0`)
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([1, ...counts.slice(1)])
+
+  // A frame loading inside the page does not replace the page, and resets nothing.
+  await inGuest(
+    launched.app,
+    id,
+    `new Promise((resolve) => {
+      const frame = document.createElement('iframe')
+      frame.onload = () => resolve(0)
+      frame.src = '/?frame'
+      document.body.append(frame)
+    })`
+  )
+  expect(await errorCounts(shop)).toEqual([1, ...counts.slice(1)])
+
+  // Nor does a navigation that never arrives: a 204 leaves the page, and its error, on
+  // screen. Once it has been answered, the next error is the page's second.
+  const noContent = (): number =>
+    fixture.requests().filter((request) => request.url === '/favicon.ico').length
+  const answered = noContent()
+  await inGuest(launched.app, id, `location.href = '/favicon.ico'; 0`)
+  await expect.poll(noContent).toBeGreaterThan(answered)
+  await inGuest(launched.app, id, `console.error('still here'); 0`)
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([2, ...counts.slice(1)])
+  expect(await inGuest<string>(launched.app, id, 'location.href')).toBe(`${fixture.a}/`)
+
+  // A load that fails replaces the page with Chromium's error page, whose one error is that.
+  await inGuest(launched.app, id, `location.href = 'http://127.0.0.1:1/'; 0`)
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([1, ...counts.slice(1)])
+  await expect.poll(async () => (await state()).panes[mobile.id]?.load).toBe('failed')
+
+  // If another debugger takes the attachment, Electron's committed navigation remains
+  // available to start the count again even though Runtime no longer is.
+  await launched.app.evaluate(
+    ({ webContents }, guest) => webContents.fromId(guest)!.debugger.detach(),
+    id
+  )
+  await launched.app.evaluate(
+    ({ webContents }, { guest, url }) => webContents.fromId(guest)!.loadURL(url),
+    { guest: id, url: `${fixture.a}/` }
+  )
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([0, ...counts.slice(1)])
 })

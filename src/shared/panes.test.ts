@@ -9,6 +9,7 @@ import {
   PANE_DIMENSION_RANGE,
   PANE_PREFERENCE,
   paneIdFromPreferences,
+  type PaneObservation,
   paneWebPreferences,
   reconcilePaneStatuses,
   rotateSize
@@ -61,11 +62,55 @@ describe('a pane status', () => {
   })
 
   it('counts a failed load as an error against the pane without degrading it', () => {
-    const failed = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' }), {
-      type: 'loadFailed'
-    })
-    expect(failed.errors).toBe(2)
+    const failed = foldPaneStatus(initialPaneStatus(), { type: 'loadFailed' })
+    expect(failed.errors).toBe(1)
     expect(failed.degraded).toEqual([])
+  })
+
+  it('counts every error heard of the page', () => {
+    const erred = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'errorHeard' }), {
+      type: 'errorHeard'
+    })
+    expect(erred.errors).toBe(2)
+    expect(erred.degraded).toEqual([])
+  })
+
+  it('starts the count again when the page is replaced', () => {
+    const erred = foldPaneStatus(foldPaneStatus(initialPaneStatus(), { type: 'errorHeard' }), {
+      type: 'errorHeard'
+    })
+    expect(foldPaneStatus(erred, { type: 'pageReplaced' }).errors).toBe(0)
+  })
+
+  it('counts a failed load as the one error of the error page it leaves on screen', () => {
+    const erred = foldPaneStatus(initialPaneStatus(), { type: 'errorHeard' })
+    // Chromium clears the page's contexts on both sides of a failure, so either order holds.
+    const cleared = foldPaneStatus(foldPaneStatus(erred, { type: 'loading' }), {
+      type: 'pageReplaced'
+    })
+    const failed = foldPaneStatus(cleared, { type: 'loadFailed' })
+    expect(failed.errors).toBe(1)
+    expect(foldPaneStatus(failed, { type: 'pageReplaced' }).errors).toBe(1)
+    // A second failure in a row is a second error page, not a second error on one.
+    expect(foldPaneStatus(failed, { type: 'loadFailed' }).errors).toBe(1)
+  })
+
+  it('keeps the count through everything else observed of the same page', () => {
+    const erred = foldPaneStatus(initialPaneStatus(), { type: 'errorHeard' })
+    const observations: PaneObservation[] = [
+      { type: 'attached' },
+      { type: 'attachFailed', message: 'refused' },
+      { type: 'consoleFailed', message: 'refused' },
+      { type: 'geometryChecked', result: mismatch },
+      // A frame inside the page loading is the pane loading, and not another page.
+      { type: 'loading' },
+      { type: 'loaded' },
+      { type: 'emulationPending', capabilities: ['viewport'] },
+      { type: 'emulated', results: [{ capability: 'viewport', ok: true }] }
+    ]
+    for (const observation of observations) {
+      expect(foldPaneStatus(erred, observation).errors).toBe(1)
+    }
   })
 
   it('forgets the errors of a guest that has been replaced', () => {

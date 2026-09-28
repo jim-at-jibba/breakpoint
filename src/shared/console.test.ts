@@ -3,8 +3,10 @@ import {
   CONSOLE_ENABLE_COMMANDS,
   ConsoleCapture,
   consoleEntryFor,
+  isConsoleError,
   MAX_STACK_FRAMES
 } from './console'
+import type { ConsoleEntryBody } from './event-log'
 
 /** Payloads shaped as Chromium sends them, trimmed to the fields that matter here. */
 
@@ -460,5 +462,44 @@ describe('what a pane hears across its execution contexts', () => {
     expect(
       capture.hear('Log.entryAdded', { entry: { source: 'network', level: 'error', text: 'x' } })
     ).toMatchObject({ source: 'network' })
+  })
+})
+
+describe('what counts against a pane', () => {
+  const heard = (method: string, params: Record<string, unknown>): ConsoleEntryBody => {
+    const body = consoleEntryFor(method, params)
+    if (body === null) throw new Error(`${method} was not heard as console output`)
+    return body
+  }
+  const exceptionDetails = (text: string): Record<string, unknown> => ({
+    exceptionDetails: { exceptionId: 1, text, lineNumber: 0, columnNumber: 0, url: APP }
+  })
+  const browser = (level: string): Record<string, unknown> => ({
+    entry: { source: 'network', level, text: 'Failed to load resource: net::ERR_FAILED' }
+  })
+
+  it.each([
+    ['an uncaught exception', heard('Runtime.exceptionThrown', exceptionDetails('Uncaught'))],
+    [
+      'an unhandled rejection',
+      heard('Runtime.exceptionThrown', exceptionDetails('Uncaught (in promise)'))
+    ],
+    ['console.error', heard('Runtime.consoleAPICalled', consoleCall('error', [text('no')]))],
+    ['a failed console.assert', heard('Runtime.consoleAPICalled', consoleCall('assert', []))],
+    ['an error from the browser', heard('Log.entryAdded', browser('error'))]
+  ])('%s is an error', (_name, body) => {
+    expect(isConsoleError(body)).toBe(true)
+  })
+
+  it.each([
+    ...['debug', 'log', 'info', 'warning', 'trace', 'table'].map(
+      (type) =>
+        [`console.${type}`, heard('Runtime.consoleAPICalled', consoleCall(type, []))] as const
+    ),
+    ...['verbose', 'info', 'warning'].map(
+      (level) => [`a browser ${level}`, heard('Log.entryAdded', browser(level))] as const
+    )
+  ])('%s is not', (_name, body) => {
+    expect(isConsoleError(body)).toBe(false)
   })
 })

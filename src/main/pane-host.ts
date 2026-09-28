@@ -1,5 +1,5 @@
 import type { App, LoadURLOptions, Session, WebContents, WebPreferences } from 'electron'
-import { CONSOLE_ENABLE_COMMANDS, ConsoleCapture } from '../shared/console'
+import { CONSOLE_ENABLE_COMMANDS, ConsoleCapture, PAGE_REPLACED } from '../shared/console'
 import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
 import { isWebUrl } from '../shared/urls'
@@ -65,6 +65,8 @@ export class PaneHost {
    * other client attached to, and that attachment is not ours to emulate over.
    */
   private readonly attachments = new WeakSet<WebContents>()
+  /** Guests whose Runtime domain reports document replacement over the attachment. */
+  private readonly runtimeAttachments = new WeakSet<WebContents>()
   /** The latest emulation pass per guest, so a slow answer cannot report over a newer one. */
   private readonly passes = new WeakMap<WebContents, number>()
   private readonly allowLoads = new WeakMap<WebContents, () => void>()
@@ -261,10 +263,20 @@ export class PaneHost {
     guest.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
       if (!isMainFrame || code === ERR_ABORTED || !isWebUrl(url)) return
       failed = true
-      if (current()) this.panes.loadFailed({ pane, url, code, message: description })
+      if (current()) {
+        // Without Runtime there is no executionContextsCleared event, so the committed
+        // error page has to be observed here before its one failure is counted.
+        if (!this.runtimeAttachments.has(guest)) this.panes.pageReplaced(pane)
+        this.panes.loadFailed({ pane, url, code, message: description })
+      }
     })
     guest.on('did-navigate', () => {
-      if (current() && isWebUrl(guest.getURL())) void this.emulate(pane, guest)
+      if (current() && isWebUrl(guest.getURL())) {
+        // Runtime is the ordered source while it is available. A committed main-frame
+        // navigation is the fallback after Runtime was refused or the attachment ended.
+        if (!failed && !this.runtimeAttachments.has(guest)) this.panes.pageReplaced(pane)
+        void this.emulate(pane, guest)
+      }
     })
     guest.once('destroyed', () => {
       const wasCurrent = current()
@@ -296,6 +308,7 @@ export class PaneHost {
     try {
       guest.debugger.attach(CDP_VERSION)
     } catch (error) {
+      this.runtimeAttachments.delete(guest)
       const retrying = attempt === 1
       const message = error instanceof Error ? error.message : String(error)
       this.panes.attachFailed({ pane, attempt, retrying, message })
@@ -318,6 +331,10 @@ export class PaneHost {
     // A bundle and its map are fetched as the pane would fetch them: its cookies, its cache.
     const fetchText = fetchTextWith((url, init) => guest.session.fetch(url, init))
     const onMessage = (_event: Electron.Event, method: string, params: unknown): void => {
+      // Heard in the same stream as the console, so no error of either page can be
+      // counted against the other. Not a browser-side navigation event: those arrive
+      // on their own channel, and fire for navigations that never replace the page.
+      if (method === PAGE_REPLACED && this.isCurrent(pane, guest)) this.panes.pageReplaced(pane)
       const body = capture.hear(method, params)
       if (body && this.isCurrent(pane, guest)) {
         void this.panes.console(pane, body, guest.getURL(), fetchText)
@@ -326,6 +343,7 @@ export class PaneHost {
     guest.debugger.on('message', onMessage)
     guest.debugger.once('detach', (_event, reason) => {
       this.attachments.delete(guest)
+      this.runtimeAttachments.delete(guest)
       guest.debugger.removeListener('message', onMessage)
       if (this.isCurrent(pane, guest) && !guest.isDestroyed()) {
         this.panes.detached(pane, reason)
@@ -335,12 +353,19 @@ export class PaneHost {
     // On either attempt: `Runtime.enable` replays what the page logged before it, and on
     // the retry that is everything since the page's own scripts started.
     for (const method of CONSOLE_ENABLE_COMMANDS) {
-      void guest.debugger.sendCommand(method).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error)
-        if (this.isCurrent(pane, guest) && this.attachments.has(guest)) {
-          this.panes.consoleFailed(pane, `${method}: ${message}`)
+      void guest.debugger.sendCommand(method).then(
+        () => {
+          if (method === 'Runtime.enable' && this.attachments.has(guest)) {
+            this.runtimeAttachments.add(guest)
+          }
+        },
+        (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
+          if (this.isCurrent(pane, guest) && this.attachments.has(guest)) {
+            this.panes.consoleFailed(pane, `${method}: ${message}`)
+          }
         }
-      })
+      )
     }
     await this.emulate(pane, guest)
   }

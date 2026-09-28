@@ -115,9 +115,10 @@ export interface PaneStatus {
   /** Empty when the pane is healthy. A degraded pane still renders ([CONTEXT.md]). */
   degraded: PaneDegradation[]
   /**
-   * Errors observed of the page in this pane since its guest was created, which is what
-   * the pane header counts. Load failures are the only producer in Phase 1; the console's
-   * exceptions join them in Phase 2 without the header having to learn anything new.
+   * What has gone wrong with the page in this pane, which is what the pane header counts:
+   * a load that failed, and everything the console heard that `isConsoleError` counts. It
+   * starts again when the page is replaced and on nothing else ([ADR-0022]), so no view of
+   * it, in any window, can make a pane look clean.
    */
   errors: number
 }
@@ -167,12 +168,27 @@ export type PaneObservation =
   /** The attachment was made but refused to carry the console ([ADR-0019]). */
   | { type: 'consoleFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
-  /** A load started, which a navigation is. Whatever was loaded before is not this one. */
+  /**
+   * A load started: a navigation, or a frame inside the page. The pane is not ready until
+   * it finishes, but this says nothing about whether its document was replaced.
+   */
   | { type: 'loading' }
+  /**
+   * The document in the pane was replaced by another: the pane was sent somewhere, followed
+   * a link or reloaded, and it arrived. What went wrong with the page before is not this
+   * one's. A route change inside a single-page app is the same page, and one that never
+   * arrived — a 204, a download, a stop — left the old page on screen.
+   */
+  | { type: 'pageReplaced' }
   /** The page in the pane finished loading. */
   | { type: 'loaded' }
-  /** The page in the pane failed to load. One error, counted; the pane still renders. */
+  /**
+   * The page in the pane failed to load, and Chromium's error page stands in its place.
+   * That page's one error is the failure; the pane still renders.
+   */
   | { type: 'loadFailed' }
+  /** Something went wrong with the page, heard over the console: one error, counted. */
+  | { type: 'errorHeard' }
   | { type: 'emulationPending'; capabilities: readonly EmulationCapability[] }
   | { type: 'emulated'; results: readonly EmulationResult[] }
   | { type: 'guestDestroyed' }
@@ -204,10 +220,16 @@ export function foldPaneStatus(status: PaneStatus, observation: PaneObservation)
       // drawn at, and nothing would re-measure it if this threw the last check away —
       // the window reports on resize and on attach, so `--wait` would hang for ever.
       return { ...status, load: 'pending' }
+    case 'pageReplaced':
+      // Chromium clears the contexts on both sides of committing an error page, so a
+      // failure can be heard before the last of them: it is the error page's, and stands.
+      return { ...status, errors: status.load === 'failed' ? 1 : 0 }
     case 'loaded':
       return { ...status, load: 'loaded' }
     case 'loadFailed':
-      return { ...status, load: 'failed', errors: status.errors + 1 }
+      return { ...status, load: 'failed', errors: 1 }
+    case 'errorHeard':
+      return { ...status, errors: status.errors + 1 }
     case 'attachFailed':
       return {
         ...status,
