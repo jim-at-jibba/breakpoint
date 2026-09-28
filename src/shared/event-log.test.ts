@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CONSOLE_LEVELS,
   ENTRIES_PER_READ,
   EventLog,
   MAX_ENTRY_TEXT_BYTES,
   type ConsoleEntryBody,
+  type ConsoleLevel,
   type Entry,
   type EntryOf,
   type ProjectEntryBody,
@@ -297,6 +299,218 @@ describe('eviction', () => {
     const after = log.read({ since: 0 })
     expect(after.entries[0].cursor).toBe(2)
     expect(after.droppedBefore).toBe(2)
+  })
+})
+
+function said(level: ConsoleLevel, text: string = level): ConsoleEntryBody {
+  return {
+    type: 'console.message',
+    level,
+    source: 'console',
+    text,
+    args: [text],
+    url: null,
+    location: null,
+    stack: []
+  }
+}
+
+const THROWN: ConsoleEntryBody = {
+  type: 'console.exception',
+  rejection: false,
+  text: 'Uncaught TypeError: x is undefined',
+  error: 'TypeError: x is undefined',
+  location: null,
+  stack: []
+}
+
+describe('a filtered read', () => {
+  it('reads one pane, leaving out every other pane and the app', () => {
+    const log = new EventLog()
+    log.append('pane-1', said('log'))
+    log.append('pane-2', said('log'))
+    log.append(null, failure('/a'))
+    log.append('pane-1', said('warn'))
+
+    const read = log.read({ pane: 'pane-1' })
+    expect(cursors(read.entries)).toEqual([1, 4])
+    expect(read.cursor).toBe(4)
+  })
+
+  it('reads a level and everything more severe, and nothing without a level', () => {
+    const log = new EventLog()
+    for (const level of CONSOLE_LEVELS) log.append('pane-1', said(level))
+    log.append('pane-1', { type: 'pane.loaded', url: 'http://127.0.0.1:5173/' })
+    log.append('pane-1', THROWN)
+
+    expect(log.read({ level: 'warn' }).entries.map((entry) => entry.type)).toEqual([
+      'console.message',
+      'console.message',
+      'console.exception'
+    ])
+    expect(cursors(log.read({ level: 'debug' }).entries)).toEqual([1, 2, 3, 4, 5, 7])
+  })
+
+  it('reads only errors: what was thrown, said at error level, or failed to load or open', () => {
+    const log = new EventLog()
+    log.append('pane-1', said('warn'))
+    log.append('pane-1', said('error'))
+    log.append('pane-1', THROWN)
+    log.append('pane-1', { type: 'pane.loadFailed', url: '/', code: -102, message: 'refused' })
+    log.append(null, failure('/a'))
+    log.append('pane-1', { type: 'pane.loaded', url: '/' })
+
+    expect(cursors(log.read({ errors: true }).entries)).toEqual([2, 3, 4, 5])
+    expect(log.read({ errors: true })).toEqual(log.read({ level: 'error' }))
+  })
+
+  it('combines its filters, and each with the cursor', () => {
+    const log = new EventLog()
+    log.append('pane-1', said('error'))
+    log.append('pane-2', said('error'))
+    log.append('pane-1', said('log'))
+    log.append('pane-1', THROWN)
+
+    expect(cursors(log.read({ pane: 'pane-1', errors: true }).entries)).toEqual([1, 4])
+    expect(cursors(log.read({ since: 1, pane: 'pane-1', errors: true }).entries)).toEqual([4])
+  })
+
+  it('finds an error past a thousand other entries, because it filters before the limit', () => {
+    const log = new EventLog()
+    for (let index = 0; index < ENTRIES_PER_READ * 2; index += 1) {
+      log.append('pane-1', said('debug', `noise ${index}`))
+    }
+    log.append('pane-2', THROWN)
+
+    const read = log.read({ errors: true })
+    expect(cursors(read.entries)).toEqual([ENTRIES_PER_READ * 2 + 1])
+    expect(read.cursor).toBe(log.cursor)
+  })
+
+  it('finds an error past the byte budget, for the same reason', () => {
+    const log = new EventLog()
+    // Each at the text limit, so a handful fill a read before its entry count does.
+    const big = 'x'.repeat(MAX_ENTRY_TEXT_BYTES)
+    const count = Math.ceil(MAX_FRAME_BYTES / MAX_ENTRY_TEXT_BYTES) + 1
+    for (let index = 0; index < count; index += 1) log.append('pane-1', said('log', big))
+    log.append('pane-1', THROWN)
+
+    expect(log.read().entries.length).toBeLessThan(count)
+    expect(cursors(log.read({ errors: true }).entries)).toEqual([count + 1])
+  })
+
+  it('stops at the limit counting only what matched, and leaves its cursor there', () => {
+    const log = new EventLog()
+    for (let index = 0; index < ENTRIES_PER_READ + 5; index += 1) {
+      log.append('pane-1', said('error'))
+      log.append('pane-2', said('log'))
+    }
+
+    const first = log.read({ pane: 'pane-1' })
+    expect(first.entries).toHaveLength(ENTRIES_PER_READ)
+    expect(first.cursor).toBe(first.entries.at(-1)?.cursor)
+    expect(log.read({ pane: 'pane-1', since: first.cursor }).entries).toHaveLength(5)
+  })
+
+  it('answers a pane that never said anything with a quiet read', () => {
+    const log = new EventLog()
+    log.append('pane-1', said('log'))
+    expect(log.read({ pane: 'pane-9' })).toEqual({ entries: [], cursor: 1 })
+  })
+})
+
+describe('a filtered read whose start was evicted', () => {
+  it('still says so, even when nothing left in the log matches', () => {
+    const log = new EventLog({ limit: 2 })
+    log.append('pane-1', said('error'))
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+
+    // The error was the evicted entry. Empty, but not quiet: the marker says why.
+    expect(log.read({ errors: true })).toEqual({ entries: [], cursor: 3, droppedBefore: 2 })
+  })
+
+  it('is told apart from an empty filtered read of a log that lost nothing', () => {
+    const log = new EventLog({ limit: 2 })
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+
+    expect(log.read({ errors: true })).toEqual({ entries: [], cursor: 2 })
+  })
+
+  it('reading one pane, answers for that pane’s evictions and not another’s', () => {
+    const log = new EventLog({ limit: 1 })
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+    log.append('pane-2', said('log'))
+
+    expect(log.read({ pane: 'pane-2' })).not.toHaveProperty('droppedBefore')
+    expect(log.read({ pane: 'pane-1' }).droppedBefore).toBe(2)
+  })
+})
+
+describe('a read of a window of time', () => {
+  function clocked(): { log: EventLog; at: (time: number) => void } {
+    let now = 0
+    return {
+      log: new EventLog({ limit: 2, now: () => now }),
+      at: (time) => {
+        now = time
+      }
+    }
+  }
+
+  it('returns the entries appended within that many milliseconds of now', () => {
+    const { log, at } = clocked()
+    at(1_000)
+    log.append('pane-1', said('log'))
+    at(5_000)
+    log.append('pane-2', said('log'))
+    at(9_000)
+    log.append('pane-3', said('log'))
+    at(10_000)
+
+    expect(cursors(log.read({ within: 5_000 }).entries)).toEqual([2, 3])
+    expect(cursors(log.read({ within: 60_000 }).entries)).toEqual([1, 2, 3])
+    expect(log.read({ within: 500 })).toEqual({ entries: [], cursor: 3 })
+  })
+
+  it('narrows a cursor rather than replacing it', () => {
+    const { log, at } = clocked()
+    at(1_000)
+    log.append('pane-1', said('log'))
+    log.append('pane-2', said('log'))
+    at(2_000)
+
+    expect(cursors(log.read({ since: 1, within: 10_000 }).entries)).toEqual([2])
+  })
+
+  it('says when an entry inside the window was evicted', () => {
+    const { log, at } = clocked()
+    at(1_000)
+    log.append('pane-1', said('log'))
+    at(8_000)
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+    at(10_000)
+
+    // Position 1 went, but it was older than the window: this read has missed nothing.
+    expect(log.read({ within: 5_000 })).not.toHaveProperty('droppedBefore')
+    expect(log.read({ within: 60_000 }).droppedBefore).toBe(2)
+  })
+
+  it('still says so when the clock stepped back between the entries it evicted', () => {
+    const { log, at } = clocked()
+    at(9_000)
+    log.append('pane-1', said('log'))
+    at(1_000)
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+    log.append('pane-1', said('log'))
+    at(10_000)
+
+    // The newest eviction is older than the window; an earlier one is inside it.
+    expect(log.read({ within: 5_000 }).droppedBefore).toBe(3)
   })
 })
 

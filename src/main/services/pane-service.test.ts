@@ -1164,6 +1164,25 @@ describe('expanding a logged object', () => {
     expect(await panes.expand({ cursor: onPage, arg: 1 })).toMatchObject({ live: true })
   })
 
+  it('does not answer an expansion that finishes after its context is destroyed', async () => {
+    const [mobile] = await openShop()
+    let answer: (result: unknown) => void = () => {}
+    const properties = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          answer = resolve
+        })
+    )
+    const cursor = await logObject(mobile.id, { ...page(9), properties })
+
+    const expanding = panes.expand({ cursor, arg: 1 })
+    expect(properties).toHaveBeenCalledWith(ORDER)
+    panes.contextDestroyed(mobile.id, 9)
+    answer(ANSWER)
+
+    await expect(expanding).resolves.toEqual({ live: false })
+  })
+
   it.each([
     ['its attachment ends', (pane: string) => panes.detached(pane, 'target closed')],
     ['its guest is replaced', (pane: string) => panes.guestCreated(pane, PAGE)],
@@ -1194,6 +1213,18 @@ describe('expanding a logged object', () => {
     })
 
     expect(await panes.expand({ cursor, arg: 1 })).toEqual({ live: false })
+  })
+
+  it('does not disguise an unexpected property-read failure as an expired object', async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id, {
+      ...page(),
+      properties: () => Promise.reject(new Error('CDP transport failed'))
+    })
+
+    await expect(panes.expand({ cursor, arg: 1 })).rejects.toThrow(
+      `could not expand argument 1 of entry ${cursor}: CDP transport failed`
+    )
   })
 
   it('answers "no longer live" for an argument that was never an object, or no entry', async () => {
@@ -1240,6 +1271,38 @@ describe('expanding a logged object', () => {
 
     const [entry] = log.read({ since: cursor }).entries
     expect(await panes.expand({ cursor: entry.cursor, arg: 1 })).toEqual({ live: false })
+  })
+
+  it('holds nothing whose context was destroyed while its entry resolved', async () => {
+    const [mobile] = await openShop()
+    await mkdir(join(shop, 'src'))
+    await writeFile(join(shop, 'src', 'App.tsx'), 'export {}\n')
+    let release = (): void => {}
+    const held = new Promise<boolean>((resolve) => {
+      release = () => resolve(true)
+    })
+    isFile = () => held
+    const { cursor } = log.read()
+    const slow = {
+      ...logged,
+      location: {
+        url: 'http://localhost:5173/src/App.tsx',
+        line: 1,
+        column: 1,
+        resolution: 'failed',
+        path: null
+      }
+    } as const
+    const objects = page(9)
+
+    const heard = panes.console(mobile.id, slow, PAGE, offline, objects)
+    panes.contextDestroyed(mobile.id, 9)
+    release()
+    await heard
+
+    const [entry] = log.read({ since: cursor }).entries
+    expect(await panes.expand({ cursor: entry.cursor, arg: 1 })).toEqual({ live: false })
+    expect(objects.asked).toEqual([])
   })
 
   it(`holds at most ${MAX_HELD_PER_PANE} entries’ handles per pane, dropping the oldest`, async () => {

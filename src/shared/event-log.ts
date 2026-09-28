@@ -208,10 +208,36 @@ export type ConsoleEntryBody =
       readonly stack: readonly StackFrame[]
     }
 
-/** Console calls by method name; the browser's own levels map onto the same five. */
+/**
+ * Console calls by method name; the browser's own levels map onto the same five. In
+ * order of severity, least first, which is what a read asking for a level counts along.
+ */
 export const CONSOLE_LEVELS = ['debug', 'log', 'info', 'warn', 'error'] as const
 
 export type ConsoleLevel = (typeof CONSOLE_LEVELS)[number]
+
+export function isConsoleLevel(value: unknown): value is ConsoleLevel {
+  return CONSOLE_LEVELS.includes(value as ConsoleLevel)
+}
+
+/**
+ * How severe an entry is, or `null` for one that reports something other than a fault.
+ * A console message has the level it was said at and an exception is an error. So is a
+ * page that did not load, which a pane's error count already counts, and a project that
+ * did not open: both are something going wrong that the reader did not do.
+ */
+export function levelOf(body: EntryBody): ConsoleLevel | null {
+  switch (body.type) {
+    case 'console.message':
+      return body.level
+    case 'console.exception':
+    case 'pane.loadFailed':
+    case 'project.openFailed':
+      return 'error'
+    default:
+      return null
+  }
+}
 
 /** What kind of browser message CDP's `Log` domain says one is. */
 export const LOG_SOURCES = [
@@ -312,9 +338,28 @@ export function isCursorPosition(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0
 }
 
+/**
+ * What a read asks for. Every filter is applied before the read's entry limit and byte
+ * budget, never after: a read filtered by its caller would carry a thousand irrelevant
+ * entries, drop them, and miss every error past the cap — an empty answer that looks
+ * like a clean page.
+ */
 export interface ReadParams {
   /** Everything strictly after this position. Zero, the default, is the whole log. */
   since?: number
+  /**
+   * Only what was appended within this many milliseconds of now, by the app's clock. A
+   * reader that has never had a cursor asks this way; given with `since`, both hold. It
+   * is the wall clock entries are stamped with, so a clock stepped back moves the window;
+   * the cursor is what a reader that cannot afford that asks by.
+   */
+  within?: number
+  /** Only what this pane said. The app's own entries belong to no pane and are left out. */
+  pane?: string
+  /** Only entries at this level or more severe, which leaves out every entry with none. */
+  level?: ConsoleLevel
+  /** Only errors: exactly `level: 'error'`, spelled the way an agent asks for it. */
+  errors?: true
 }
 
 export interface EventLogOptions {
@@ -331,6 +376,12 @@ interface Ring {
   entries: Entry[]
   /** The highest position evicted from this ring; 0 while it has lost nothing. */
   evictedThrough: number
+  /**
+   * The latest time any entry this ring evicted was appended. A read of a window of time
+   * lost something only if this falls inside the window. The latest rather than the
+   * newest eviction's, because a wall clock can step back and order them the other way.
+   */
+  evictedAt: number
 }
 
 export class EventLog {
@@ -365,19 +416,32 @@ export class EventLog {
     if (ring.entries.length > this.limit) {
       const [evicted] = ring.entries.splice(0, 1)
       ring.evictedThrough = evicted.cursor
+      ring.evictedAt = Math.max(ring.evictedAt, evicted.time)
     }
 
     return entry
   }
 
-  read({ since = 0 }: ReadParams = {}): LogRead {
+  read({ since = 0, within, pane, level, errors }: ReadParams = {}): LogRead {
+    const from = within === undefined ? -Infinity : this.now() - within
+    const minSeverity = CONSOLE_LEVELS.indexOf(errors ? 'error' : (level ?? 'debug'))
+    const matches = (entry: Entry): boolean => {
+      if (entry.cursor <= since || entry.time < from) return false
+      if (errors === undefined && level === undefined) return true
+      const severity = levelOf(entry)
+      return severity !== null && CONSOLE_LEVELS.indexOf(severity) >= minSeverity
+    }
+
     const entries: Entry[] = []
     let evictedThrough = 0
-
-    for (const ring of this.rings.values()) {
-      evictedThrough = Math.max(evictedThrough, ring.evictedThrough)
+    // Reading one pane, only that pane's ring can have lost anything it would return. A
+    // level cannot narrow it the same way: what was evicted is gone, level and all.
+    const rings = pane === undefined ? [...this.rings.values()] : [this.rings.get(pane)]
+    for (const ring of rings) {
+      if (!ring) continue
+      if (ring.evictedAt >= from) evictedThrough = Math.max(evictedThrough, ring.evictedThrough)
       for (const entry of ring.entries) {
-        if (entry.cursor > since) entries.push(entry)
+        if (matches(entry)) entries.push(entry)
       }
     }
     entries.sort((left, right) => left.cursor - right.cursor)
@@ -405,7 +469,7 @@ export class EventLog {
   private ringFor(pane: string | null): Ring {
     const existing = this.rings.get(pane)
     if (existing) return existing
-    const ring: Ring = { entries: [], evictedThrough: 0 }
+    const ring: Ring = { entries: [], evictedThrough: 0, evictedAt: -Infinity }
     this.rings.set(pane, ring)
     return ring
   }

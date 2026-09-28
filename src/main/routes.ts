@@ -1,4 +1,9 @@
-import { isCursorPosition, type EventLog } from '../shared/event-log'
+import {
+  CONSOLE_LEVELS,
+  isConsoleLevel,
+  isCursorPosition,
+  type EventLog
+} from '../shared/event-log'
 import { isPaneDimension, PANE_DIMENSION_RANGE } from '../shared/panes'
 import type { CertificateKey } from '../shared/certificates'
 import { isColorScheme, isLayout } from '../shared/project'
@@ -83,17 +88,53 @@ function expectPath(raw: unknown): ParamsOk<'project.open'> | ParamsBad {
   return { ok: true, params: { path } }
 }
 
-function expectSince(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
+const LOG_READ_FIELDS = ['since', 'within', 'pane', 'level', 'errors'] as const
+const LOG_READ_SHAPE = `this route takes { ${LOG_READ_FIELDS.join(', ')} }, each optional`
+
+/**
+ * A read's position and its filters. Filtering is the route's rather than any surface's,
+ * because only the log can filter before its read limit ([ADR-0006]).
+ */
+function expectLogRead(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   if (raw === undefined || raw === null) return { ok: true, params: {} }
-  if (typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ok: false, message: 'this route takes { since }' }
+  const given = asParams(raw)
+  if (!given) return { ok: false, message: LOG_READ_SHAPE }
+  const refused = rejectUnknown(given, LOG_READ_FIELDS, LOG_READ_SHAPE)
+  if (refused) return refused
+
+  const { since, within, pane, level, errors } = given
+  const params: RouteParams<'log.read'> = {}
+  if (since !== undefined) {
+    if (!isCursorPosition(since)) {
+      return { ok: false, message: 'since must be a cursor position: an integer of 0 or more' }
+    }
+    params.since = since
   }
-  const { since } = raw as { since?: unknown }
-  if (since === undefined) return { ok: true, params: {} }
-  if (!isCursorPosition(since)) {
-    return { ok: false, message: 'since must be a cursor position: an integer of 0 or more' }
+  if (within !== undefined) {
+    if (typeof within !== 'number' || !Number.isSafeInteger(within) || within <= 0) {
+      return { ok: false, message: 'within must be a whole number of milliseconds above 0' }
+    }
+    params.within = within
   }
-  return { ok: true, params: { since } }
+  if (pane !== undefined) {
+    if (typeof pane !== 'string' || pane.length === 0) {
+      return { ok: false, message: 'pane must be a non-empty string' }
+    }
+    params.pane = pane
+  }
+  if (level !== undefined) {
+    if (!isConsoleLevel(level)) {
+      return { ok: false, message: `level must be one of ${CONSOLE_LEVELS.join(', ')}` }
+    }
+    params.level = level
+  }
+  if (errors !== undefined) {
+    if (errors !== true) return { ok: false, message: 'errors must be true, or left out' }
+    // Two answers to one question would leave the reader guessing which one won.
+    if (level !== undefined) return { ok: false, message: 'errors is level error: give one' }
+    params.errors = true
+  }
+  return { ok: true, params }
 }
 
 const EXPANSION_SHAPE = 'this route takes { cursor } and optionally { arg }'
@@ -480,7 +521,7 @@ export function createRouteTable(services: Services): RouteTable {
       handle: () => ({ payload: services.certificates.list() })
     },
     'log.read': {
-      parseParams: expectSince,
+      parseParams: expectLogRead,
       handle: (params) => ({ payload: services.log.read(params) })
     },
     'panes.add': {

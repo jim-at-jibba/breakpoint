@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
+import { EventLog, type LogRead } from '../shared/event-log'
+import type { RouteResponse } from '../shared/protocol'
 import type { Navigation, Surface } from '../shared/routes'
 import { createDispatch, createRouteTable, type Dispatch, type Services } from './routes'
 
@@ -396,5 +398,60 @@ describe('panes.expand', () => {
 
     expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
     expect(expand).not.toHaveBeenCalled()
+  })
+})
+
+describe('log.read', () => {
+  /** The table over a real log, which is the store the route calls ([ADR-0006]). */
+  function logDispatcher(): { dispatch: Dispatch; log: EventLog } {
+    const log = new EventLog()
+    return { dispatch: createDispatch(createRouteTable({ log } as unknown as Services)), log }
+  }
+
+  async function read(params: unknown): Promise<RouteResponse> {
+    const { dispatch, log } = logDispatcher()
+    log.append('pane-1', { type: 'pane.loaded', url: 'http://127.0.0.1:5173/' })
+    log.append('pane-2', {
+      type: 'pane.loadFailed',
+      url: 'http://127.0.0.1:5173/',
+      code: -102,
+      message: 'ERR_CONNECTION_REFUSED'
+    })
+    const { response } = await dispatch({ id: '1', route: 'log.read', params }, { surface: 'cli' })
+    return response
+  }
+
+  it.each([
+    [undefined, [1, 2]],
+    [{}, [1, 2]],
+    [{ since: 1 }, [2]],
+    [{ within: 60_000 }, [1, 2]],
+    [{ pane: 'pane-1' }, [1]],
+    [{ level: 'warn' }, [2]],
+    [{ errors: true }, [2]],
+    [{ since: 0, within: 60_000, pane: 'pane-2', level: 'error' }, [2]]
+  ])('reads %j as filters on the log', async (params, expected) => {
+    const response = await read(params)
+    expect(response.ok).toBe(true)
+    const entries = response.ok ? (response.data as LogRead).entries : []
+    expect(entries.map((entry) => entry.cursor)).toEqual(expected)
+  })
+
+  it.each([
+    [{ since: -3 }, 'since must be a cursor position'],
+    [{ within: 0 }, 'within must be'],
+    [{ within: 1.5 }, 'within must be'],
+    [{ within: '5m' }, 'within must be'],
+    [{ pane: '' }, 'pane must be a non-empty string'],
+    [{ pane: 7 }, 'pane must be a non-empty string'],
+    [{ level: 'fatal' }, 'level must be one of debug, log, info, warn, error'],
+    [{ errors: false }, 'errors must be true'],
+    [{ errors: true, level: 'warn' }, 'errors is level error'],
+    [{ sinse: 12 }, 'not sinse'],
+    [[], 'this route takes']
+  ])('refuses %j, saying what was wrong', async (params, message) => {
+    const response = await read(params)
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(response.ok === false && response.error.message).toContain(message)
   })
 })

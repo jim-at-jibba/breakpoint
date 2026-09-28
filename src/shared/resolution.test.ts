@@ -55,6 +55,28 @@ describe('repoPathFor', () => {
     expect(repoPathFor('http://localhost:5173/src/My%20Page.tsx', PAGE)).toBe('src/My Page.tsx')
   })
 
+  it('reads through the cache-busting a dev server adds, which leaves the file as it is', () => {
+    for (const query of ['?t=1712', '?v=4f2a', '?v=4f2a&t=1712', '?']) {
+      expect(repoPathFor(`http://localhost:5173/src/App.tsx${query}`, PAGE), query).toBe(
+        'src/App.tsx'
+      )
+    }
+  })
+
+  it('names nothing for a virtual module, however much it looks like the file it came from', () => {
+    for (const query of [
+      '?astro&type=script&index=0&lang.ts',
+      '?vue&type=script&setup=true&lang.ts',
+      '?svelte&type=style&lang.css',
+      '?import',
+      '?t=1712&astro&type=script&index=0&lang.ts'
+    ]) {
+      expect(repoPathFor(`http://localhost:5173/src/pages/Page.astro${query}`, PAGE), query).toBe(
+        null
+      )
+    }
+  })
+
   it('names nothing for a script from another origin, however repo-shaped', () => {
     expect(repoPathFor('https://cdn.example.com/src/App.tsx', PAGE)).toBeNull()
     expect(repoPathFor('http://localhost:5174/src/App.tsx', PAGE)).toBeNull()
@@ -420,6 +442,100 @@ describe('resolveEntry through a source map', () => {
       { isFile: files(), fetch }
     )
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  describe('a virtual module', () => {
+    const PAGE_FILE = 'src/pages/smoke.astro'
+    const VIRTUAL = `${PAGE_FILE}?astro&type=script&index=0&lang.ts`
+    /**
+     * One bundle of three lines, and one map for it naming three sources: a file, a
+     * virtual module named after a file, and a file with a dev server's cache-busting on
+     * it. Line 1 is `smoke-lib.ts` 3:3, line 2 the page's script 26:5, line 3 `fresh.ts` 8:5.
+     */
+    const THREE = JSON.stringify({
+      version: 3,
+      sources: ['../../src/smoke-lib.ts', `../../${VIRTUAL}`, '../../src/fresh.ts?t=1712'],
+      names: [],
+      mappings: 'AAEE;ACuBE;AClBA'
+    })
+    const everyFile = files('src/smoke-lib.ts', PAGE_FILE, 'src/fresh.ts')
+    const threeSources = (): FetchText =>
+      network({
+        [BUNDLE]: served(`a()\nb()\nc()\n//# sourceMappingURL=index-4f2a.js.map\n`),
+        [MAP_URL]: served(THREE)
+      })
+
+    it('resolves the files in a map and not the virtual module beside them', async () => {
+      const body = exception([
+        frame('lib', BUNDLE, 1),
+        frame('page', BUNDLE, 2),
+        frame('', BUNDLE, 3)
+      ])
+      const resolved = await resolveEntry(body, context, {
+        isFile: everyFile,
+        fetch: threeSources()
+      })
+      expect(resolved.stack).toEqual([
+        {
+          function: 'lib',
+          url: BUNDLE,
+          line: 3,
+          column: 3,
+          resolution: 'resolved',
+          path: 'src/smoke-lib.ts'
+        },
+        // The page's script: its lines are the extracted script's, not the page's.
+        body.stack[1],
+        {
+          function: '',
+          url: BUNDLE,
+          line: 8,
+          column: 5,
+          resolution: 'resolved',
+          path: 'src/fresh.ts'
+        }
+      ])
+    })
+
+    it('does not resolve a dev server script that is a virtual module, arithmetic or map', async () => {
+      // As an Astro dev server serves a page's `<script>`: at the virtual module's URL, with
+      // an inline map over the extracted script that names the virtual module again.
+      const url = `http://localhost:5173/${VIRTUAL}`
+      const identity = JSON.stringify({
+        version: 3,
+        sources: ['smoke.astro?astro&type=script&index=0&lang.ts'],
+        names: [],
+        mappings: 'AAAA;AACA'
+      })
+      const isFile = vi.fn(everyFile)
+      const body = exception([frame('', url, 2)])
+      const resolved = await resolveEntry(body, context, {
+        isFile,
+        fetch: network({
+          [url]: served(
+            `x()\ny()\n//# sourceMappingURL=data:application/json;base64,${btoa(identity)}\n`
+          )
+        })
+      })
+      expect(resolved).toEqual(body)
+      // Decided from the name alone: it costs no read of the file it is named after.
+      expect(isFile).not.toHaveBeenCalledWith(`${REPO}/${PAGE_FILE}`)
+    })
+
+    it('decides from the name, so it costs nothing against the deadline', async () => {
+      vi.useFakeTimers()
+      let settled = false
+      const pending = resolveEntry(exception([frame('page', BUNDLE, 2)]), context, {
+        isFile: everyFile,
+        fetch: threeSources()
+      }).then((resolved) => {
+        settled = true
+        return resolved
+      })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(true)
+      expect((await pending).stack[0]).toMatchObject({ resolution: 'failed', path: null })
+    })
   })
 
   it('does not wait on a map that arrives after the timeout, and abandons it', async () => {

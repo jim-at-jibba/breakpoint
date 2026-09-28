@@ -85,6 +85,15 @@ export interface LiveHandles extends HeardHandles {
   properties(handle: string): Promise<unknown>
 }
 
+interface HandleTable {
+  entries: Map<number, LiveHandles>
+  pendingByContext: Map<number, Set<PendingHandleCapture>>
+}
+
+interface PendingHandleCapture {
+  invalidated: boolean
+}
+
 /**
  * Entries per pane whose handles are held. V8 keeps no more console messages than this
  * per page, and lets go of the objects of the ones it drops, so holding more would only
@@ -137,7 +146,7 @@ export class PaneService {
    * the entry they belong to, oldest first. A pane's table is replaced whole when its
    * page is, so an entry still resolving when that happens finds its table gone.
    */
-  private held = new Map<string, Map<number, LiveHandles>>()
+  private held = new Map<string, HandleTable>()
 
   constructor(
     private readonly feed: StateFeed,
@@ -278,8 +287,10 @@ export class PaneService {
   contextDestroyed(pane: string, context: number): void {
     const table = this.held.get(pane)
     if (!table) return
-    for (const [cursor, objects] of table) {
-      if (objects.context === context) table.delete(cursor)
+    for (const pending of table.pendingByContext.get(context) ?? []) pending.invalidated = true
+    table.pendingByContext.delete(context)
+    for (const [cursor, objects] of table.entries) {
+      if (objects.context === context) table.entries.delete(cursor)
     }
   }
 
@@ -289,15 +300,24 @@ export class PaneService {
    * let go of the object, or the argument was never an object, there is nothing to read.
    */
   async expand({ cursor, arg = 0 }: ExpansionRequest): Promise<Expansion> {
-    for (const table of this.held.values()) {
-      const objects = table.get(cursor)
+    for (const [pane, table] of this.held) {
+      const objects = table.entries.get(cursor)
       const handle = objects?.handles[arg]
       if (!objects || typeof handle !== 'string') continue
+      let result: unknown
       try {
-        return { live: true, ...propertiesOf(await objects.properties(handle)) }
-      } catch {
-        return { live: false }
+        result = await objects.properties(handle)
+      } catch (error) {
+        if (!this.isHeld(pane, table, cursor, objects) || handleNoLongerLives(error)) {
+          return { live: false }
+        }
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`could not expand argument ${arg} of entry ${cursor}: ${message}`, {
+          cause: error
+        })
       }
+      if (!this.isHeld(pane, table, cursor, objects)) return { live: false }
+      return { live: true, ...propertiesOf(result) }
     }
     return { live: false }
   }
@@ -420,13 +440,34 @@ export class PaneService {
     if (isConsoleError(body)) this.observe(pane, { type: 'errorHeard' })
     const context = { repoPath: this.project?.repoPath ?? null, page }
     const table = objects ? this.tableFor(pane) : undefined
-    const entry = await this.record(
-      pane,
-      resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText })
-    )
-    if (!objects || !table || this.held.get(pane) !== table) return
-    table.set(entry.cursor, objects)
-    if (table.size > MAX_HELD_PER_PANE) table.delete(table.keys().next().value as number)
+    const objectContext = objects?.context
+    const pending: PendingHandleCapture | null =
+      typeof objectContext === 'number' && table ? { invalidated: false } : null
+    if (pending && table && typeof objectContext === 'number') {
+      let contextPending = table.pendingByContext.get(objectContext)
+      if (!contextPending) {
+        contextPending = new Set()
+        table.pendingByContext.set(objectContext, contextPending)
+      }
+      contextPending.add(pending)
+    }
+    try {
+      const entry = await this.record(
+        pane,
+        resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText })
+      )
+      if (!objects || !table || this.held.get(pane) !== table || pending?.invalidated) return
+      table.entries.set(entry.cursor, objects)
+      if (table.entries.size > MAX_HELD_PER_PANE) {
+        table.entries.delete(table.entries.keys().next().value as number)
+      }
+    } finally {
+      if (pending && table && typeof objectContext === 'number') {
+        const contextPending = table.pendingByContext.get(objectContext)
+        contextPending?.delete(pending)
+        if (contextPending?.size === 0) table.pendingByContext.delete(objectContext)
+      }
+    }
   }
 
   /** Every handle a pane's page minted, once nothing it minted can be asked about. */
@@ -434,13 +475,17 @@ export class PaneService {
     this.held.delete(pane)
   }
 
-  private tableFor(pane: string): Map<number, LiveHandles> {
+  private tableFor(pane: string): HandleTable {
     let table = this.held.get(pane)
     if (!table) {
-      table = new Map()
+      table = { entries: new Map(), pendingByContext: new Map() }
       this.held.set(pane, table)
     }
     return table
+  }
+
+  private isHeld(pane: string, table: HandleTable, cursor: number, objects: LiveHandles): boolean {
+    return this.held.get(pane) === table && table.entries.get(cursor) === objects
   }
 
   /**
@@ -481,4 +526,17 @@ export class PaneService {
 
 function noSuchPane(pane: string): RouteError {
   return new RouteError('PANE_NOT_FOUND', `no pane ${pane} in the open project`)
+}
+
+/** CDP's expected answers when the execution context or remote object has gone. */
+function handleNoLongerLives(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return [
+    'Cannot find context with specified id',
+    'Could not find object with given id',
+    'Inspected target navigated or closed',
+    'Debugger is not attached',
+    'No debugger is attached',
+    'Target closed'
+  ].some((known) => message.includes(known))
 }

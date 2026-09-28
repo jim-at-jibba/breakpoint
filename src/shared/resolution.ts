@@ -52,9 +52,26 @@ export interface ResolutionIO {
 }
 
 /**
+ * The query keys a dev server adds to bust caches, which leave a file and its lines as they
+ * are: Vite's `t`, an HMR timestamp, and `v`, a dependency's build hash.
+ */
+const CACHE_BUSTING = new Set(['t', 'v'])
+
+/**
+ * Whether a URL's query leaves it naming the file its path names. Any query but
+ * cache-busting names a virtual module: `Page.astro?astro&type=script&index=0&lang.ts` is
+ * a script extracted from the page, and its lines are the script's, not the page's. Vue
+ * and Svelte write the same shape. Known keys are listed rather than virtual ones, so a
+ * query nobody anticipated fails honestly instead of resolving to the wrong line.
+ */
+function namesFile(query: string): boolean {
+  return [...new URLSearchParams(query).keys()].every((key) => CACHE_BUSTING.has(key))
+}
+
+/**
  * The repo-relative path a script URL was asked for, or `null` when it names none: another
- * origin, which is not the dev server; a path that is not a file's; or one that could
- * leave the repo once its escapes are read.
+ * origin, which is not the dev server; a virtual module; a path that is not a file's; or
+ * one that could leave the repo once its escapes are read.
  */
 export function repoPathFor(url: string, page: string): string | null {
   let script: URL
@@ -67,6 +84,7 @@ export function repoPathFor(url: string, page: string): string | null {
   }
   if (script.protocol !== 'http:' && script.protocol !== 'https:') return null
   if (script.origin !== origin) return null
+  if (!namesFile(script.search)) return null
   let path: string
   try {
     path = decodeURIComponent(script.pathname)
@@ -253,9 +271,13 @@ const SCHEME = /^([a-z][a-z\d+.-]*):\/\/([^/]*)(.*)$/i
  *   written, for a bundler that writes sources relative to the project.
  *
  * A reading that climbs out of where it starts names nothing, rather than a repo file that
- * happens to share its tail.
+ * happens to share its tail, and so does a virtual module, rather than the file it is
+ * named after.
  */
-function sourcePaths(source: string, base: string, root: string): string[] {
+function sourcePaths(written: string, base: string, root: string): string[] {
+  const query = written.indexOf('?')
+  if (query !== -1 && !namesFile(written.slice(query))) return []
+  const source = query === -1 ? written : written.slice(0, query)
   const home = `${root.replace(/\\/g, '/')}/`
   const scheme = SCHEME.exec(source)
   const paths: (string | null)[] = []

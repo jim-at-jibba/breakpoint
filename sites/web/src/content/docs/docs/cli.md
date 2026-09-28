@@ -238,14 +238,17 @@ it yet, because the question is one a human is being asked.
 
 ### `breakpoint logs`
 
-Prints what the event log holds after a cursor position. The log is one append-only
-record of everything Breakpoint observes, and every entry carries a position on a single
-monotonic cursor.
+Prints what the event log holds after a cursor position, or within a window of time. The
+log is one append-only record of everything Breakpoint observes, and every entry carries a
+position on a single monotonic cursor.
 
 ```sh
 breakpoint logs                      # everything the log still holds
 breakpoint logs --since 12           # only what followed position 12
+breakpoint logs --since 5m           # only what arrived in the last five minutes
 breakpoint logs --since 12 --json | jq .entries
+breakpoint logs --errors --json      # only what went wrong, on every pane
+breakpoint logs --pane 4f1c --level warn
 ```
 
 Take the cursor from `breakpoint state`, do some work, and ask from it: an agent reading
@@ -276,6 +279,24 @@ untagged entry — which is what makes the log the one channel worth polling.
 read. It is there even when `entries` is empty, so a poll never has to read the last
 entry to know where it got to.
 
+`--since` takes a cursor or a duration. A bare whole number is a cursor; a whole number
+with a unit — `ms`, `s`, `m` or `h`, as in `30s` or `2h` — is a window of time back from
+now, by the app's clock. That is the form for a first command, before there is a cursor to
+ask from. Anything else is a usage error that says what was wrong with it.
+
+Three filters narrow what is read. `--pane <pane>` reads one pane, by the id `state --json`
+gives it, and leaves out every other pane and the app's own entries. `--level <level>`
+reads one level and everything more severe — `debug`, `log`, `info`, `warn`, `error`, least
+first — and leaves out every entry that has no level. `--errors` is `--level error`, and
+asking for both at once is a usage error. An exception is an error, and so is a page that
+did not load and a project that did not open. The filters combine with each other and with
+`--since`.
+
+The app does the filtering, not the terminal, and it does it before the read's limits. A
+read stops at 1,000 entries and at a byte budget, so filtering what came back would read a
+thousand debug entries, keep none of them, and miss the error behind them: an empty answer
+that looks like a clean page. Filtered on the route, the error is the first thing read.
+
 Entries are ring-buffered per pane at 10,000, so a busy pane cannot push every other
 pane's history out of the log. That means positions are ordered but **not contiguous**,
 and a reader that falls far enough behind can be asking from a position whose entries
@@ -292,6 +313,11 @@ entries at. No `droppedBefore` at all means the read is complete, which is what 
 empty read genuinely quiet rather than possibly truncated. A read that is asking from a
 position whose own entry was evicted has missed nothing and is not marked: the read
 starts *after* that position.
+
+A filtered read is marked the same way, and it can be marked and empty at once: the entry
+it would have returned may be the one that was evicted. So an empty filtered read with no
+`droppedBefore` is quiet, and one that carries it is not. Reading one pane, only that
+pane's evictions count; reading a window of time, only evictions from inside the window do.
 
 One read carries at most 1,000 entries and is also limited by serialized UTF-8 bytes,
 leaving room for the response envelope within the socket's 1 MiB frame limit. When
@@ -490,7 +516,10 @@ asking for it, and `--background` has nothing to say about it.
 | Flag | What it does |
 | --- | --- |
 | `--json` | Prints the route's payload object on stdout and nothing else |
-| `--since <cursor>` | `logs` only. Reads what followed that cursor position. `--since=12` is the same flag |
+| `--since <cursor>`, `--since <duration>` | `logs` only. Reads what followed that cursor position, or with a unit — `30s`, `5m`, `2h`, `250ms` — what arrived within that long of now. `--since=12` is the same flag |
+| `--pane <pane>` | `logs` only. Reads one pane's entries, by its id |
+| `--level <level>` | `logs` only. Reads entries at that level or more severe: `debug`, `log`, `info`, `warn` or `error` |
+| `--errors` | `logs` only. Reads only errors: the same as `--level error`, and a usage error beside it |
 | `--wait` | `breakpoint .`, `open` and `state` only. Blocks until every pane has loaded and is drawn at its declared size, for up to 30s. A usage error on any other command |
 | `--background` | Starts or hands off without bringing the window forward |
 | `--no-launch` | Exits 3 rather than starting the app if it is not running |
@@ -573,7 +602,7 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
 | `certificates.forget` | `{ "host": "staging.example.com", "fingerprint": "sha256/…" }` | the same | the window, the socket |
 | `certificates.list` | none | the same | the socket |
-| `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
+| `log.read` | `{ "since": 12, "within": 300000, "pane": id, "level": "warn", "errors": true }`, each optional; none for the whole log. `within` is milliseconds; `errors` refuses `level` beside it | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
 | `panes.add` | `{ "preset": "mobile" }`, or `{ "width": 390, "height": 844 }` | `{ "pane": { … }, "index": n }`: the pane with its `status`, and where it was put | the window, the socket |
 | `panes.expand` | `{ "cursor": 12, "arg": 1 }`: an entry's cursor, and which of its arguments; `arg` is `0` if left out | `{ "live": true, "properties": [{ "name", "value" }], "truncated": false }`, or `{ "live": false }` once the page that logged it has gone | the socket |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |

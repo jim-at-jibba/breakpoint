@@ -1,4 +1,5 @@
 import {
+  levelOf,
   LOG_SOURCES,
   truncateText,
   type ConsoleEntryBody,
@@ -260,7 +261,7 @@ function propertyPreview(object: RemoteObject): string {
  * level, by the page or by the browser about it. A warning is not.
  */
 export function isConsoleError(body: ConsoleEntryBody): boolean {
-  return body.type === 'console.exception' || body.level === 'error'
+  return levelOf(body) === 'error'
 }
 
 function consoleCall(params: Record<string, unknown>): ConsoleEntryBody | null {
