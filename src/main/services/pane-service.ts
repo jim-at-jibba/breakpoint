@@ -340,8 +340,8 @@ export class PaneService {
    * Its locations are resolved against the repo before it is appended, within the
    * resolution timeout ([ADR-0020]), fetching a bundle and its map through `fetchText`.
    * Whether it is the project's is decided now, when it was heard, so what a pane said
-   * just before it went is kept, ahead of its going. An error is counted now too: counted
-   * once resolved, one heard just before a load would land on the page after it.
+   * just before it went is kept, ahead of its going. An error is counted now too: waiting
+   * until resolution finished could put one heard just before a load onto the next page.
    * Settles once appended.
    */
   console(pane: string, body: ConsoleEntryBody, page: string, fetchText: FetchText): Promise<void> {

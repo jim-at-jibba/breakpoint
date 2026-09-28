@@ -169,8 +169,8 @@ export type PaneObservation =
   | { type: 'consoleFailed'; message: string }
   | { type: 'geometryChecked'; result: GeometryResult }
   /**
-   * A load started: a navigation, or a frame inside the page. Whatever was loaded before
-   * is not this one.
+   * A load started: a navigation, or a frame inside the page. The pane is not ready until
+   * it finishes, but this says nothing about whether its document was replaced.
    */
   | { type: 'loading' }
   /**

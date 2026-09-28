@@ -1005,7 +1005,7 @@ describe("hearing a pane's console", () => {
     expect(panes.statuses()[tablet.id].errors).toBe(1)
   })
 
-  it('keeps the count through everything that does not replace the page', async () => {
+  it('keeps the count through pane changes and window-only view actions', async () => {
     const [mobile] = await openShop()
     await panes.console(mobile.id, message, PAGE, offline)
 
@@ -1020,6 +1020,8 @@ describe("hearing a pane's console", () => {
     // A frame inside the page loading, which is not the pane going anywhere.
     panes.loading(mobile.id)
     panes.loaded(mobile.id, PAGE)
+    await projects.setLayout({ layout: 'focus', focusedPane: mobile.id })
+    await projects.setZoom(50)
 
     expect(panes.statuses()[mobile.id].errors).toBe(1)
   })

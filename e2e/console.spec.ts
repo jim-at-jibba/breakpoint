@@ -235,6 +235,7 @@ test('a pane whose every override is refused still reports its console', async (
 test('a pane whose console cannot be enabled is degraded rather than quiet', async () => {
   launched = await launchApp(sandbox)
   await recordEnables(launched.app, { refuseOverrides: false, refuse: ['Runtime.enable'] })
+  const window = await launched.app.firstWindow()
   const shop = makeRepo('shop')
   await open(shop)
 
@@ -260,6 +261,18 @@ test('a pane whose console cannot be enabled is degraded rather than quiet', asy
     expect(exceptions(entries, pane.id)).toEqual([])
     expect(messages(entries, pane.id).filter((entry) => entry.source === 'console')).toEqual([])
   }
+
+  // Log still hears browser errors. Without Runtime's context-clear event, the committed
+  // main-frame navigation is what starts their count again for the new page.
+  const [mobile] = shop.panes
+  await expect
+    .poll(async () => (await state()).panes[mobile.id]?.errors ?? 0, { timeout: 20_000 })
+    .toBeGreaterThan(0)
+  const id = await guestId(window, mobile.id)
+  await inGuest(launched.app, id, `location.href = ${JSON.stringify(`${fixture.a}/`)}`)
+  await expect
+    .poll(async () => (await state()).panes[mobile.id]?.errors, { timeout: 20_000 })
+    .toBe(0)
 })
 
 /**
@@ -582,4 +595,16 @@ test('a pane’s error count is everything that went wrong on its page, and only
   await inGuest(launched.app, id, `location.href = 'http://127.0.0.1:1/'; 0`)
   await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([1, ...counts.slice(1)])
   await expect.poll(async () => (await state()).panes[mobile.id]?.load).toBe('failed')
+
+  // If another debugger takes the attachment, Electron's committed navigation remains
+  // available to start the count again even though Runtime no longer is.
+  await launched.app.evaluate(
+    ({ webContents }, guest) => webContents.fromId(guest)!.debugger.detach(),
+    id
+  )
+  await launched.app.evaluate(
+    ({ webContents }, { guest, url }) => webContents.fromId(guest)!.loadURL(url),
+    { guest: id, url: `${fixture.a}/` }
+  )
+  await expect.poll(() => errorCounts(shop), { timeout: 20_000 }).toEqual([0, ...counts.slice(1)])
 })
