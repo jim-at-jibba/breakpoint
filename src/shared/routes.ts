@@ -112,6 +112,10 @@ export interface RouteSignatures {
    * Everything the event log holds after a cursor position. Omitting `since` reads from
    * the beginning, which is everything the ring buffers still hold rather than
    * everything that ever happened.
+   *
+   * A window of time, one pane, a level and errors-only narrow it, and are params rather
+   * than any surface's filtering because they must apply before the read's limits: a
+   * surface filtering a capped read would miss every error past the cap.
    */
   'log.read': { params: ReadParams; payload: LogRead }
   /**

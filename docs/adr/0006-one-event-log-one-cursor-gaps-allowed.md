@@ -31,6 +31,14 @@ completeness boundary, never a line to trim the returned entries at.
 entries above what it evicted, so the marker and an empty `entries` cannot occur together.
 That is what makes an empty read unambiguously quiet.
 
+**A filtered read can be both (#54).** A read narrowed by pane, level or a window of time
+filters before its limits, and the entry it would have returned may be the one evicted, so
+the marker and an empty `entries` can occur together there. It is still unambiguous: empty
+with no marker is quiet, empty with one is not. The marker is narrowed only where that is
+provably safe. Reading one pane consults that pane's ring alone, and reading a window
+consults only evictions from inside it — a ring remembers when its newest eviction was
+appended. A level narrows nothing: what was evicted is gone, level and all.
+
 **The log reaches the route table as a store, not behind a service.** PRD 8.1's service list
 does not name one, and ADR-0005 asks that adapters hold no behaviour — not that every route
 noun be a service. A `LogService` over this would be pure delegation, so `log.read` calls the

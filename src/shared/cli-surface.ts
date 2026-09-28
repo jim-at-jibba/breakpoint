@@ -1,7 +1,14 @@
 import { resolve } from 'node:path'
 import { focusedPaneOf } from './canvas'
 import { describeCertificateTrustReason, type CertificateState } from './certificates'
-import { isCursorPosition, type Entry, type LogRead, type SourceLocation } from './event-log'
+import {
+  CONSOLE_LEVELS,
+  isConsoleLevel,
+  isCursorPosition,
+  type Entry,
+  type LogRead,
+  type SourceLocation
+} from './event-log'
 import { formatDpr } from './pane-header'
 import { describeDegradation, type LoadState } from './panes'
 import { looksLikePath } from './paths'
@@ -36,11 +43,11 @@ interface CommandSpec<N extends RouteName> {
    */
   argument?: CliArgumentSpec
   /**
-   * The value-carrying flags this command takes, which are the route's params by
-   * another spelling. Given to a command that does not declare it, such a flag is a
-   * usage error rather than a param the app has to refuse.
+   * The flags only this command takes, which are the route's params by another
+   * spelling. Given to a command that does not declare it, such a flag is a usage error
+   * rather than a param the app has to refuse.
    */
-  flags?: readonly CliValueFlagSpec[]
+  flags?: readonly CliCommandFlagSpec[]
   /**
    * Whether `--wait` is a flag of this command, and what it prints once the panes are
    * ready. `snapshot` replaces the route's payload with the snapshot the wait ended
@@ -66,10 +73,13 @@ export type CliCommandSpec<N extends RouteName = RouteName> = {
 
 export type ParsedValue<T> = { ok: true; value: T } | { ok: false; message: string }
 
-export interface CliValueFlagSpec {
+export interface CliCommandFlagSpec {
   name: string
-  /** How the value reads in the help text: `--since <cursor>`. */
-  placeholder: string
+  /**
+   * How the value reads in the help text: `--since <cursor|duration>`. Absent, the flag
+   * takes no value — `--errors` — and is never followed by one.
+   */
+  placeholder?: string
 }
 
 export interface CliArgumentSpec {
@@ -84,10 +94,10 @@ function needsArgument(name: string, argument: CliArgumentSpec): string {
 
 const URL_ARGUMENT: CliArgumentSpec = { placeholder: '<url>' }
 
-const SINCE_FLAG: CliValueFlagSpec = {
-  name: '--since',
-  placeholder: '<cursor>'
-}
+const SINCE_FLAG: CliCommandFlagSpec = { name: '--since', placeholder: '<cursor|duration>' }
+const PANE_FLAG: CliCommandFlagSpec = { name: '--pane', placeholder: '<pane>' }
+const LEVEL_FLAG: CliCommandFlagSpec = { name: '--level', placeholder: '<level>' }
+const ERRORS_FLAG: CliCommandFlagSpec = { name: '--errors' }
 
 /**
  * The command a path invokes. `breakpoint .` and `breakpoint <path>` are both this.
@@ -137,8 +147,8 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
   {
     name: 'logs',
     route: 'log.read',
-    summary: 'Print what the event log holds after a cursor position',
-    flags: [SINCE_FLAG],
+    summary: 'Print what the event log holds after a cursor or within a window of time',
+    flags: [SINCE_FLAG, PANE_FLAG, LEVEL_FLAG, ERRORS_FLAG],
     parseParams: parseLogParams,
     render: renderLog
   },
@@ -159,16 +169,74 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
   }
 ]
 
+/**
+ * The flags as the route's params. Each filter is sent rather than applied here: only the
+ * log can filter before its read limit, so a filter applied to what came back would miss
+ * every match past the cap and print a clean page.
+ */
 function parseLogParams({ values }: CliCommandInput): ParsedValue<RouteParams<'log.read'>> {
   const params: RouteParams<'log.read'> = {}
   for (const raw of values.get(SINCE_FLAG.name) ?? []) {
-    const since = raw.trim() === '' ? Number.NaN : Number(raw)
-    if (!isCursorPosition(since)) {
-      return { ok: false, message: `--since takes a cursor position, not ${raw}` }
+    const since = parseSince(raw)
+    if (!since.ok) return since
+    // The last one wins whichever form each took, so one never narrows the other.
+    delete params.since
+    delete params.within
+    Object.assign(params, since.value)
+  }
+  const pane = values.get(PANE_FLAG.name)?.at(-1)
+  if (pane !== undefined) {
+    if (pane.trim() === '') return { ok: false, message: `--pane needs ${PANE_FLAG.placeholder}` }
+    params.pane = pane
+  }
+  const level = values.get(LEVEL_FLAG.name)?.at(-1)
+  if (level !== undefined) {
+    if (!isConsoleLevel(level)) {
+      return {
+        ok: false,
+        message: `--level takes one of ${CONSOLE_LEVELS.join(', ')}, not ${level}`
+      }
     }
-    params.since = since
+    params.level = level
+  }
+  if (values.has(ERRORS_FLAG.name)) {
+    if (params.level !== undefined) {
+      return { ok: false, message: '--errors is --level error: give one or the other' }
+    }
+    params.errors = true
   }
   return { ok: true, value: params }
+}
+
+const DURATION_UNITS: Readonly<Record<string, number>> = {
+  ms: 1,
+  s: 1_000,
+  m: 60_000,
+  h: 3_600_000
+}
+
+/**
+ * A bare whole number is a cursor, as it always was; a number with a unit is a window of
+ * time. A cursor never has a unit, so the two forms cannot be mistaken for each other.
+ */
+function parseSince(raw: string): ParsedValue<Pick<RouteParams<'log.read'>, 'since' | 'within'>> {
+  if (/^\d+$/.test(raw)) {
+    const since = Number(raw)
+    if (isCursorPosition(since)) return { ok: true, value: { since } }
+  }
+  const refuse = (reason: string): ParsedValue<never> => ({
+    ok: false,
+    message: `--since takes a cursor position or a duration, not ${raw}: ${reason}`
+  })
+  const match = /^(\d+)([a-z]+)$/i.exec(raw)
+  if (!match) return refuse('a duration is a whole number and a unit, as in 30s')
+  const [, amount, unit] = match
+  const scale = DURATION_UNITS[unit]
+  if (scale === undefined) return refuse(`${unit} is not a unit: use ms, s, m or h`)
+  const within = Number(amount) * scale
+  if (within === 0) return refuse('a duration of 0 reads nothing')
+  if (!Number.isSafeInteger(within)) return refuse('that is longer than any log has run')
+  return { ok: true, value: { within } }
 }
 
 function renderNavigation(data: unknown): string {
@@ -468,16 +536,17 @@ const FLAGS_BY_NAME: ReadonlyMap<string, CliFlagSpec> = new Map(
 )
 
 /**
- * Every value flag any command declares, which is what lets the parser know a flag
+ * Every flag any command declares, which is what lets the parser know whether a flag
  * takes the token after it before it knows which command was asked for — flags are
  * allowed on either side of the command name.
  */
-const VALUE_FLAGS_BY_NAME: ReadonlyMap<string, CliValueFlagSpec> = new Map(
+const COMMAND_FLAGS_BY_NAME: ReadonlyMap<string, CliCommandFlagSpec> = new Map(
   CLI_COMMANDS.flatMap((command) => (command.flags ?? []).map((flag) => [flag.name, flag]))
 )
 
-interface GivenValueFlag {
-  flag: CliValueFlagSpec
+interface GivenCommandFlag {
+  flag: CliCommandFlagSpec
+  /** Empty for a flag that takes no value. */
   raw: string
 }
 
@@ -494,7 +563,7 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
     wait: false,
     background: false
   }
-  const given: GivenValueFlag[] = []
+  const given: GivenCommandFlag[] = []
   /** The command name, then its one argument. Anything further is a usage error. */
   const positionals: string[] = []
   let help = false
@@ -505,10 +574,15 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
     if (argument.startsWith('-')) {
       const separator = argument.indexOf('=')
       const name = separator === -1 ? argument : argument.slice(0, separator)
-      const valueFlag = VALUE_FLAGS_BY_NAME.get(name)
-      if (valueFlag) {
+      const commandFlag = COMMAND_FLAGS_BY_NAME.get(name)
+      if (commandFlag && commandFlag.placeholder === undefined) {
+        if (separator !== -1) error ??= `${commandFlag.name} takes no value`
+        else given.push({ flag: commandFlag, raw: '' })
+        continue
+      }
+      if (commandFlag) {
         if (separator !== -1) {
-          given.push({ flag: valueFlag, raw: argument.slice(separator + 1) })
+          given.push({ flag: commandFlag, raw: argument.slice(separator + 1) })
           continue
         }
         const next = argv[index + 1]
@@ -516,13 +590,13 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
         if (
           next === undefined ||
           (nextName !== undefined &&
-            (FLAGS_BY_NAME.has(nextName) || VALUE_FLAGS_BY_NAME.has(nextName)))
+            (FLAGS_BY_NAME.has(nextName) || COMMAND_FLAGS_BY_NAME.has(nextName)))
         ) {
-          error ??= `${valueFlag.name} needs ${valueFlag.placeholder}`
+          error ??= `${commandFlag.name} needs ${commandFlag.placeholder}`
           continue
         }
         index += 1
-        given.push({ flag: valueFlag, raw: next })
+        given.push({ flag: commandFlag, raw: next })
         continue
       }
 
@@ -574,7 +648,7 @@ export function parseArgv(argv: readonly string[], cwd: string): ArgvParse {
 
 function readValueFlags(
   command: CliCommandSpec,
-  given: readonly GivenValueFlag[]
+  given: readonly GivenCommandFlag[]
 ): ParsedValue<ReadonlyMap<string, readonly string[]>> {
   const values = new Map<string, string[]>()
   for (const { flag, raw } of given) {
@@ -595,7 +669,9 @@ export function helpText(): string {
     [
       command.name,
       ...(command.argument ? [command.argument.placeholder] : []),
-      ...(command.flags ?? []).map((flag) => `[${flag.name} ${flag.placeholder}]`),
+      ...(command.flags ?? []).map((flag) =>
+        flag.placeholder ? `[${flag.name} ${flag.placeholder}]` : `[${flag.name}]`
+      ),
       ...(command.waits ? ['[--wait]'] : [])
     ].join(' ')
 
@@ -622,6 +698,7 @@ export function helpText(): string {
     '  breakpoint open https://staging.example.com/cart --json',
     '  breakpoint state --json | jq .project.panes',
     '  breakpoint logs --since 12 --json',
+    '  breakpoint logs --errors --since 5m --json',
     '  breakpoint quit',
     ''
   ].join('\n')
