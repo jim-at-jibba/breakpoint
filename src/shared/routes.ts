@@ -10,6 +10,7 @@
  */
 
 import type { CertificateKey, CertificateState } from './certificates'
+import type { Expansion } from './console'
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
 import type { PaneStatus, Size } from './panes'
@@ -32,6 +33,7 @@ export const ROUTE_NAMES = [
   'certificates.list',
   'log.read',
   'panes.add',
+  'panes.expand',
   'panes.list',
   'panes.remove',
   'panes.reportGeometry',
@@ -120,6 +122,15 @@ export interface RouteSignatures {
    * never consulted again ([ADR-0011]), so editing it afterwards leaves this pane alone.
    */
   'panes.add': { params: PaneCreation; payload: { pane: PaneListing; index: number } }
+  /**
+   * The properties of an object a pane's page logged, named by the cursor of the entry
+   * that logged it and which of its arguments it was. The entry keeps only a preview,
+   * which is as true after the page has gone as before; the object behind it lives only
+   * as long as the page does, so asking after that answers `live: false` rather than
+   * failing ([ADR-0021]). No command reaches it in this phase: the console is the
+   * surface that draws it ([ADR-0025]).
+   */
+  'panes.expand': { params: ExpansionRequest; payload: Expansion }
   /** The open project's panes, each with what is observed of it. Empty with nothing open. */
   'panes.list': { params: undefined; payload: { panes: PaneListing[] } }
   /** Takes a pane out of the open project, leaving every other pane as it was. */
@@ -231,6 +242,12 @@ export interface GeometryReport {
 }
 
 export type EmulationSetting = EmulationChanges & { pane: string }
+
+/** An entry by its cursor, and one of its arguments: the first, unless another is named. */
+export interface ExpansionRequest {
+  cursor: number
+  arg?: number
+}
 
 /** A pane from a preset, or one at a size the developer typed. Never both. */
 export type PaneCreation =

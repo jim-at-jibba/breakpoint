@@ -1,7 +1,12 @@
 import { stat } from 'node:fs/promises'
-import { isConsoleError } from '../../shared/console'
+import {
+  isConsoleError,
+  propertiesOf,
+  type Expansion,
+  type HeardHandles
+} from '../../shared/console'
 import { affectedCapabilities, type EmulationResult } from '../../shared/emulation'
-import type { ConsoleEntryBody, EventLog, PaneEntryBody } from '../../shared/event-log'
+import type { ConsoleEntryBody, Entry, EventLog, PaneEntryBody } from '../../shared/event-log'
 import {
   compareGeometry,
   foldPaneStatus,
@@ -12,6 +17,7 @@ import type { Pane, PaneChanges, Project } from '../../shared/project'
 import { resolveEntry, type FetchText, type IsFile } from '../../shared/resolution'
 import type {
   EmulationSetting,
+  ExpansionRequest,
   GeometryReport,
   PaneCreation,
   PaneListing,
@@ -70,6 +76,22 @@ export function fetchTextWith(
   }
 }
 
+/**
+ * The handles behind one entry's arguments, and the way to ask the page that minted them
+ * about one. The pane host binds `properties` to the guest it heard them from, so a pane
+ * whose guest has been replaced can never be asked about the old one's objects.
+ */
+export interface LiveHandles extends HeardHandles {
+  properties(handle: string): Promise<unknown>
+}
+
+/**
+ * Entries per pane whose handles are held. V8 keeps no more console messages than this
+ * per page, and lets go of the objects of the ones it drops, so holding more would only
+ * hold handles that answer "no longer live" anyway.
+ */
+export const MAX_HELD_PER_PANE = 1_000
+
 /** A pane after a change, and which of the asked-for values were actually different. */
 export interface PaneUpdate {
   pane: Pane
@@ -110,6 +132,12 @@ export class PaneService {
   private written: Promise<void> = Promise.resolve()
   /** Entries queued and not yet appended. */
   private waiting = 0
+  /**
+   * Handles beside the log rather than in it ([ADR-0021]): per pane, by the cursor of
+   * the entry they belong to, oldest first. A pane's table is replaced whole when its
+   * page is, so an entry still resolving when that happens finds its table gone.
+   */
+  private held = new Map<string, Map<number, LiveHandles>>()
 
   constructor(
     private readonly feed: StateFeed,
@@ -127,6 +155,7 @@ export class PaneService {
   open(project: Project): void {
     this.project = project
     this.current = paneStatusesFor(project, this.current)
+    for (const pane of this.held.keys()) if (!this.has(pane)) this.forget(pane)
   }
 
   statuses(): Record<string, PaneStatus> {
@@ -170,6 +199,7 @@ export class PaneService {
   async remove(pane: string): Promise<{ pane: Pane }> {
     if (!this.has(pane)) throw noSuchPane(pane)
     const removed = await this.projects.removePane(pane)
+    this.forget(pane)
     this.record(pane, { type: 'pane.removed' })
     return removed
   }
@@ -195,7 +225,9 @@ export class PaneService {
     return { pane: { ...update.pane, status: this.current[pane] } }
   }
 
+  /** A new guest is a new page: nothing the one before it minted can be asked about. */
   guestCreated(pane: string, url: string): void {
+    this.forget(pane)
     this.record(pane, { type: 'pane.created', url })
     this.observe(pane, { type: 'guestCreated' })
   }
@@ -213,6 +245,7 @@ export class PaneService {
   /** A connection that had attached ended while its pane remained. */
   detached(pane: string, reason: string): void {
     const message = `debugger detached: ${reason}`
+    this.forget(pane)
     this.record(pane, { type: 'pane.detached', reason })
     this.observe(pane, { type: 'attachFailed', message })
   }
@@ -237,7 +270,36 @@ export class PaneService {
    * and only this does ([ADR-0022]). No entry, for the same reason `loading` writes none.
    */
   pageReplaced(pane: string): void {
+    this.forget(pane)
     this.observe(pane, { type: 'pageReplaced' })
+  }
+
+  /** One of a pane's execution contexts has gone, a frame's say, and its objects with it. */
+  contextDestroyed(pane: string, context: number): void {
+    const table = this.held.get(pane)
+    if (!table) return
+    for (const [cursor, objects] of table) {
+      if (objects.context === context) table.delete(cursor)
+    }
+  }
+
+  /**
+   * A logged object's properties, asked of the page that logged it. "No longer live" is
+   * an answer rather than a failure ([ADR-0021]): whether the page has gone, the page has
+   * let go of the object, or the argument was never an object, there is nothing to read.
+   */
+  async expand({ cursor, arg = 0 }: ExpansionRequest): Promise<Expansion> {
+    for (const table of this.held.values()) {
+      const objects = table.get(cursor)
+      const handle = objects?.handles[arg]
+      if (!objects || typeof handle !== 'string') continue
+      try {
+        return { live: true, ...propertiesOf(await objects.properties(handle)) }
+      } catch {
+        return { live: false }
+      }
+    }
+    return { live: false }
   }
 
   loaded(pane: string, url: string): void {
@@ -262,7 +324,9 @@ export class PaneService {
    */
   guestDestroyed({ pane, current }: GuestDestruction): void {
     this.record(pane, { type: 'pane.destroyed' })
-    if (current) this.observe(pane, { type: 'guestDestroyed' })
+    if (!current) return
+    this.forget(pane)
+    this.observe(pane, { type: 'guestDestroyed' })
   }
 
   /**
@@ -342,13 +406,41 @@ export class PaneService {
    * Whether it is the project's is decided now, when it was heard, so what a pane said
    * just before it went is kept, ahead of its going. An error is counted now too: waiting
    * until resolution finished could put one heard just before a load onto the next page.
-   * Settles once appended.
+   * The handles behind its arguments are held against its cursor once it has one, unless
+   * the page that minted them was replaced while it resolved. Settles once appended.
    */
-  console(pane: string, body: ConsoleEntryBody, page: string, fetchText: FetchText): Promise<void> {
-    if (!this.has(pane)) return Promise.resolve()
+  async console(
+    pane: string,
+    body: ConsoleEntryBody,
+    page: string,
+    fetchText: FetchText,
+    objects: LiveHandles | null = null
+  ): Promise<void> {
+    if (!this.has(pane)) return
     if (isConsoleError(body)) this.observe(pane, { type: 'errorHeard' })
     const context = { repoPath: this.project?.repoPath ?? null, page }
-    return this.record(pane, resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText }))
+    const table = objects ? this.tableFor(pane) : undefined
+    const entry = await this.record(
+      pane,
+      resolveEntry(body, context, { isFile: this.isFile, fetch: fetchText })
+    )
+    if (!objects || !table || this.held.get(pane) !== table) return
+    table.set(entry.cursor, objects)
+    if (table.size > MAX_HELD_PER_PANE) table.delete(table.keys().next().value as number)
+  }
+
+  /** Every handle a pane's page minted, once nothing it minted can be asked about. */
+  private forget(pane: string): void {
+    this.held.delete(pane)
+  }
+
+  private tableFor(pane: string): Map<number, LiveHandles> {
+    let table = this.held.get(pane)
+    if (!table) {
+      table = new Map()
+      this.held.set(pane, table)
+    }
+    return table
   }
 
   /**
@@ -356,21 +448,23 @@ export class PaneService {
    * the log is written at once while none is resolving, and behind it while one is: a
    * page's error heard before it navigated never lands after the navigation.
    */
-  private record(pane: string, body: PaneEntryBody | Promise<PaneEntryBody>): Promise<void> {
+  private record(pane: string, body: PaneEntryBody | Promise<PaneEntryBody>): Promise<Entry> {
     if (this.waiting === 0 && !(body instanceof Promise)) {
-      this.log.append(pane, body)
-      return Promise.resolve()
+      return Promise.resolve(this.log.append(pane, body))
     }
     this.waiting += 1
     const appended = this.written.then(async () => {
       try {
-        this.log.append(pane, await body)
+        return this.log.append(pane, await body)
       } finally {
         this.waiting -= 1
       }
     })
     // One entry that could not be appended must not hold up everything observed after it.
-    this.written = appended.catch(() => {})
+    this.written = appended.then(
+      () => {},
+      () => {}
+    )
     return appended
   }
 

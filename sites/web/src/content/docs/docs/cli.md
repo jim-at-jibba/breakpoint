@@ -360,6 +360,13 @@ preview of what was thrown. Anything logged before the app's attachment existed 
 replayed when the attachment is made, and a replayed object keeps only its name, such as
 `Object` or `Array(2)`, not its properties.
 
+An entry never holds the object itself, because the object lasts only as long as its page
+does. While the page that logged it lives, `panes.expand` reads an argument's properties,
+using the entry's `cursor` and the argument's index. An exception's thrown value is argument
+`0`. Once that pane has navigated, reloaded or gone, the same call answers
+`{ "live": false }` instead of failing. It answers the same for an argument that was never
+an object. No command reaches it yet: the console will draw it.
+
 `location` is where it happened, or `null`, and `stack` is up to 32 frames, innermost
 first. Both have `url`, a `line` and `column` counted from 1, `resolution` and `path`, and
 each frame also has `function`.
@@ -568,6 +575,7 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `certificates.list` | none | the same | the socket |
 | `log.read` | `{ "since": 12 }`, or none for the whole log | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
 | `panes.add` | `{ "preset": "mobile" }`, or `{ "width": 390, "height": 844 }` | `{ "pane": { … }, "index": n }`: the pane with its `status`, and where it was put | the window, the socket |
+| `panes.expand` | `{ "cursor": 12, "arg": 1 }`: an entry's cursor, and which of its arguments; `arg` is `0` if left out | `{ "live": true, "properties": [{ "name", "value" }], "truncated": false }`, or `{ "live": false }` once the page that logged it has gone | the socket |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
 | `panes.remove` | `{ "pane": id }` | `{ "pane": { … } }`: the pane that was removed | the window, the socket |
 | `panes.reportGeometry` | `{ "pane": id, "expected": { "width", "height" }, "measured": { "width", "height" } }` | `{ "status": … }` | the window |

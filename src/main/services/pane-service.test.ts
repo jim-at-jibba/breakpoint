@@ -10,7 +10,14 @@ import { applyPatch, type RevisionedPatch } from '../../shared/state'
 import type { FetchText, IsFile } from '../../shared/resolution'
 import type { PaneListing } from '../../shared/routes'
 import { StateFeed } from '../state-feed'
-import { fetchTextWith, isFileOnDisk, MAX_FETCHED_BYTES, PaneService } from './pane-service'
+import {
+  fetchTextWith,
+  isFileOnDisk,
+  MAX_FETCHED_BYTES,
+  MAX_HELD_PER_PANE,
+  PaneService,
+  type LiveHandles
+} from './pane-service'
 import { PresetService } from './preset-service'
 import { PresetStore } from './preset-store'
 import { ProjectService } from './project-service'
@@ -1059,5 +1066,188 @@ describe('fetchTextWith', () => {
       )
     )
     expect(await huge('http://localhost:5173/x.js.map', signal)).toBeNull()
+  })
+})
+
+describe('expanding a logged object', () => {
+  const PAGE = 'http://localhost:5173/checkout'
+  const offline: FetchText = () => Promise.resolve(null)
+  const logged = {
+    type: 'console.message',
+    level: 'log',
+    source: 'console',
+    text: 'an order {id: 7} 3',
+    args: ['an order', '{id: 7}', '3'],
+    url: null,
+    location: null,
+    stack: []
+  } as const
+  const ORDER = '{"injectedScriptId":3,"id":1}'
+  const ANSWER = {
+    result: [{ name: 'id', value: { type: 'number', value: 7, description: '7' } }]
+  }
+
+  /** A page holding one object, as the pane host would reach it over the attachment. */
+  function page(context = 3): LiveHandles & { asked: string[] } {
+    const asked: string[] = []
+    return {
+      asked,
+      context,
+      handles: [null, ORDER, null],
+      properties: (objectId) => {
+        asked.push(objectId)
+        return objectId === ORDER
+          ? Promise.resolve(ANSWER)
+          : Promise.reject(new Error('Could not find object with given id'))
+      }
+    }
+  }
+
+  async function logObject(pane: string, objects: LiveHandles = page()): Promise<number> {
+    const { cursor } = log.read()
+    await panes.console(pane, logged, PAGE, offline, objects)
+    const [entry] = log.read({ since: cursor }).entries
+    return entry.cursor
+  }
+
+  it("answers with the object's properties while its page lives", async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id)
+
+    expect(await panes.expand({ cursor, arg: 1 })).toEqual({
+      live: true,
+      properties: [{ name: 'id', value: '7' }],
+      truncated: false
+    })
+  })
+
+  it('keeps no handle in the entry, which stays as JSON says it is', async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id)
+
+    const read = log.read({ since: cursor - 1 })
+    expect(JSON.stringify(read)).not.toContain('injectedScriptId')
+    expect(JSON.parse(JSON.stringify(read.entries[0]))).toEqual(read.entries[0])
+  })
+
+  it('answers "no longer live" once the pane’s page has been replaced', async () => {
+    const [mobile] = await openShop()
+    const objects = page()
+    const cursor = await logObject(mobile.id, objects)
+
+    panes.pageReplaced(mobile.id)
+
+    expect(await panes.expand({ cursor, arg: 1 })).toEqual({ live: false })
+    expect(objects.asked).toEqual([])
+    // The preview is as true as it was.
+    expect(log.read({ since: cursor - 1 }).entries[0]).toMatchObject({ args: logged.args })
+  })
+
+  it('drops only the replaced pane’s handles', async () => {
+    const [mobile, tablet] = await openShop()
+    const kept = await logObject(tablet.id)
+    await logObject(mobile.id)
+
+    panes.pageReplaced(mobile.id)
+
+    expect(await panes.expand({ cursor: kept, arg: 1 })).toMatchObject({ live: true })
+  })
+
+  it('drops the handles of a context that is destroyed, and no others', async () => {
+    const [mobile] = await openShop()
+    const inFrame = await logObject(mobile.id, page(9))
+    const onPage = await logObject(mobile.id, page(3))
+
+    panes.contextDestroyed(mobile.id, 9)
+
+    expect(await panes.expand({ cursor: inFrame, arg: 1 })).toEqual({ live: false })
+    expect(await panes.expand({ cursor: onPage, arg: 1 })).toMatchObject({ live: true })
+  })
+
+  it.each([
+    ['its attachment ends', (pane: string) => panes.detached(pane, 'target closed')],
+    ['its guest is replaced', (pane: string) => panes.guestCreated(pane, PAGE)],
+    ['its guest goes', (pane: string) => panes.guestDestroyed({ pane, current: true })]
+  ])('answers "no longer live" once %s', async (_, end) => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id)
+
+    end(mobile.id)
+
+    expect(await panes.expand({ cursor, arg: 1 })).toEqual({ live: false })
+  })
+
+  it('answers "no longer live" once the pane is removed', async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id)
+
+    await panes.remove(mobile.id)
+
+    expect(await panes.expand({ cursor, arg: 1 })).toEqual({ live: false })
+  })
+
+  it('answers "no longer live" rather than failing when the page has let go of it', async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id, {
+      ...page(),
+      properties: () => Promise.reject(new Error('Cannot find context with specified id'))
+    })
+
+    expect(await panes.expand({ cursor, arg: 1 })).toEqual({ live: false })
+  })
+
+  it('answers "no longer live" for an argument that was never an object, or no entry', async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id)
+
+    expect(await panes.expand({ cursor, arg: 0 })).toEqual({ live: false })
+    expect(await panes.expand({ cursor, arg: 7 })).toEqual({ live: false })
+    expect(await panes.expand({ cursor: cursor + 100, arg: 0 })).toEqual({ live: false })
+  })
+
+  it('expands the first argument when none is named', async () => {
+    const [mobile] = await openShop()
+    const cursor = await logObject(mobile.id, { ...page(), handles: [ORDER] })
+
+    expect(await panes.expand({ cursor })).toMatchObject({ live: true })
+  })
+
+  it('holds nothing heard before a page that was replaced while it resolved', async () => {
+    const [mobile] = await openShop()
+    await mkdir(join(shop, 'src'))
+    await writeFile(join(shop, 'src', 'App.tsx'), 'export {}\n')
+    let release = (): void => {}
+    const held = new Promise<boolean>((resolve) => {
+      release = () => resolve(true)
+    })
+    isFile = () => held
+    const { cursor } = log.read()
+    const slow = {
+      ...logged,
+      location: {
+        url: 'http://localhost:5173/src/App.tsx',
+        line: 1,
+        column: 1,
+        resolution: 'failed',
+        path: null
+      }
+    } as const
+
+    const heard = panes.console(mobile.id, slow, PAGE, offline, page())
+    panes.pageReplaced(mobile.id)
+    release()
+    await heard
+
+    const [entry] = log.read({ since: cursor }).entries
+    expect(await panes.expand({ cursor: entry.cursor, arg: 1 })).toEqual({ live: false })
+  })
+
+  it(`holds at most ${MAX_HELD_PER_PANE} entries’ handles per pane, dropping the oldest`, async () => {
+    const [mobile] = await openShop()
+    const first = await logObject(mobile.id)
+    for (let index = 0; index < MAX_HELD_PER_PANE; index += 1) await logObject(mobile.id)
+
+    expect(await panes.expand({ cursor: first, arg: 1 })).toEqual({ live: false })
+    expect(await panes.expand({ cursor: first + 1, arg: 1 })).toMatchObject({ live: true })
   })
 })

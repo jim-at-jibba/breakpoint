@@ -626,7 +626,8 @@ function truncateStack(stack: readonly StackFrame[]): readonly StackFrame[] {
   return Object.freeze(kept)
 }
 
-function truncateText(text: string, limit = MAX_ENTRY_TEXT_BYTES): string {
+/** `text` cut to at most `limit` bytes of JSON-encoded UTF-8, never inside a character. */
+export function truncateText(text: string, limit = MAX_ENTRY_TEXT_BYTES): string {
   if (jsonByteLength(text) <= limit) return text
   let start = 0
   let end = Math.min(text.length, limit)

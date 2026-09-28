@@ -1,5 +1,6 @@
 import {
   LOG_SOURCES,
+  truncateText,
   type ConsoleEntryBody,
   type ConsoleLevel,
   type ConsoleSource,
@@ -35,11 +36,54 @@ export const CONSOLE_ENABLE_COMMANDS = ['Runtime.enable', 'Log.enable'] as const
  */
 export const PAGE_REPLACED = 'Runtime.executionContextsCleared'
 
+/** What the attachment hears when one execution context goes, a frame's say. */
+export const CONTEXT_DESTROYED = 'Runtime.executionContextDestroyed'
+
 /** Frames kept of a stack: enough to find the call site, bounded whatever the page does. */
 export const MAX_STACK_FRAMES = 32
 
+/** Properties an expansion answers with, at most: the rest are said to be missing. */
+export const MAX_EXPANDED_PROPERTIES = 256
+
+/** Bytes of JSON a property's name or value is shortened to, each on its own. */
+export const MAX_PROPERTY_TEXT_BYTES = 1024
+
+/** What expanding an object asks the page that minted it: the object's own properties. */
+export const EXPAND_COMMAND = 'Runtime.getProperties'
+
+export function expandParams(objectId: string): Record<string, unknown> {
+  return { objectId, ownProperties: true, generatePreview: true }
+}
+
+/**
+ * The handles behind one entry's arguments, which never go in the entry ([ADR-0021]):
+ * one per argument, in order, `null` where it was not an object. An exception's one
+ * argument is the value it threw. `context` is the execution context that minted them,
+ * where CDP says; they are valid only while it lives. A browser message's belong to no
+ * context CDP names, so only the page being replaced lets go of them.
+ */
+export interface HeardHandles {
+  context: number | null
+  handles: readonly (string | null)[]
+}
+
+/** One property of an expanded object, previewed as the console prints a value in one. */
+export interface ObjectProperty {
+  name: string
+  value: string
+}
+
+/**
+ * What expanding a logged object answers. `live` is false whenever there is no object
+ * behind the argument any more — its page has gone — or there never was one. `truncated`
+ * says properties were left out, or a name or value was shortened.
+ */
+export type Expansion =
+  { live: true; properties: ObjectProperty[]; truncated: boolean } | { live: false }
+
 /** The parts of CDP's `Runtime.RemoteObject` a preview reads. */
 interface RemoteObject {
+  objectId?: string
   type?: string
   subtype?: string
   className?: string
@@ -101,7 +145,7 @@ export class ConsoleCapture {
         }
         return null
       }
-      case 'Runtime.executionContextDestroyed':
+      case CONTEXT_DESTROYED:
         if (typeof params.executionContextId === 'number') {
           this.foreign.delete(params.executionContextId)
         }
@@ -138,6 +182,76 @@ export function consoleEntryFor(method: string, params: unknown): ConsoleEntryBo
     default:
       return null
   }
+}
+
+/**
+ * The handles behind what `consoleEntryFor` makes of the same message, or `null` when
+ * none of its arguments was an object and so nothing is worth holding.
+ */
+export function handlesIn(method: string, params: unknown): HeardHandles | null {
+  if (!isRecord(params)) return null
+  let context: unknown = null
+  let args: unknown[] = []
+  switch (method) {
+    case 'Runtime.consoleAPICalled':
+      context = params.executionContextId
+      args = Array.isArray(params.args) ? params.args : []
+      break
+    case 'Runtime.exceptionThrown':
+      if (!isRecord(params.exceptionDetails)) return null
+      context = params.exceptionDetails.executionContextId
+      args = [params.exceptionDetails.exception]
+      break
+    case 'Log.entryAdded':
+      args = isRecord(params.entry) && Array.isArray(params.entry.args) ? params.entry.args : []
+      break
+    default:
+      return null
+  }
+  const handles = args.map((arg) =>
+    isRecord(arg) && typeof arg.objectId === 'string' ? arg.objectId : null
+  )
+  if (handles.every((handle) => handle === null)) return null
+  return { context: typeof context === 'number' ? context : null, handles }
+}
+
+/**
+ * An answer to `EXPAND_COMMAND` as properties: own ones first, then the internal ones
+ * V8 names in double brackets. An accessor is not invoked, so it reads `(...)` as it
+ * does in DevTools. Bounded in count and in text, so one enormous object cannot make an
+ * answer the socket will not carry.
+ */
+export function propertiesOf(result: unknown): {
+  properties: ObjectProperty[]
+  truncated: boolean
+} {
+  const answer = isRecord(result) ? result : {}
+  const descriptors = [answer.result, answer.internalProperties]
+    .flatMap((list) => (Array.isArray(list) ? list : []))
+    .filter(isRecord)
+  const properties: ObjectProperty[] = []
+  let truncated = descriptors.length > MAX_EXPANDED_PROPERTIES
+  for (const descriptor of descriptors.slice(0, MAX_EXPANDED_PROPERTIES)) {
+    const name = typeof descriptor.name === 'string' ? descriptor.name : ''
+    const value = isRecord(descriptor.value)
+      ? propertyPreview(descriptor.value as RemoteObject)
+      : isRecord(descriptor.get) || isRecord(descriptor.set)
+        ? '(...)'
+        : 'undefined'
+    const short = {
+      name: truncateText(name, MAX_PROPERTY_TEXT_BYTES),
+      value: truncateText(value, MAX_PROPERTY_TEXT_BYTES)
+    }
+    if (short.name !== name || short.value !== value) truncated = true
+    properties.push(short)
+  }
+  return { properties, truncated }
+}
+
+/** Inside an object a string is quoted, which is how it is told from a word. */
+function propertyPreview(object: RemoteObject): string {
+  if (object.type === 'string') return `'${typeof object.value === 'string' ? object.value : ''}'`
+  return preview(object)
 }
 
 /**
