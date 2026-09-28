@@ -254,12 +254,12 @@ cannot make for you.
   sends an agent to edit the wrong thing.
 - Fail: nothing resolved, or paths that are still Vite URLs with `?t=` cache-busting
   query strings on them. The latter is the likely shape of a real bug here.
-- **Known, and tracked as #61:** code written in an Astro `<script>` block resolves to the
-  right file and the wrong line, because the map names a virtual module
-  (`smoke.astro?astro&type=script&index=0&lang.ts`) whose coordinates belong to the
-  extracted script. A real `.ts` file in the same map resolves exactly. Until #61 lands,
-  check B1's lines against a source that is a genuine file, and expect the `.astro` lines
-  to be wrong — do not read that as a regression in #51 or #52.
+- **Expected since #61:** code written in an Astro `<script>` block does not resolve. The
+  map names a virtual module (`smoke.astro?astro&type=script&index=0&lang.ts`), and its
+  coordinates belong to the extracted script, so it appends with `resolution: "failed"`
+  and not a wrong line in `smoke.astro` (ADR-0026). A real `.ts` file in the same map
+  resolves exactly, so check B1's lines against a source that is a genuine file. A
+  `.astro` path on a `<script>` frame is a regression.
 
 **B2 — stack frames, not just the entry's own location.**
 
