@@ -437,6 +437,20 @@ describe('log.read', () => {
     expect(entries.map((entry) => entry.cursor)).toEqual(expected)
   })
 
+  it('reads only changes, leaving out what the developer did', async () => {
+    const { dispatch, log } = logDispatcher()
+    log.append('pane-1', { type: 'pane.resized', width: 844, height: 390 })
+    log.append(null, { type: 'project.zoomChanged', zoom: 50 })
+    log.append('pane-1', { type: 'pane.loaded', url: 'http://127.0.0.1:5173/' })
+    const { response } = await dispatch(
+      { id: '1', route: 'log.read', params: { changes: true, since: 0, pane: 'pane-1' } },
+      { surface: 'window' }
+    )
+    expect(response.ok && (response.data as LogRead).entries.map((entry) => entry.cursor)).toEqual([
+      3
+    ])
+  })
+
   it.each([
     [{ since: -3 }, 'since must be a cursor position'],
     [{ within: 0 }, 'within must be'],
@@ -447,6 +461,8 @@ describe('log.read', () => {
     [{ level: 'fatal' }, 'level must be one of debug, log, info, warn, error'],
     [{ errors: false }, 'errors must be true'],
     [{ errors: true, level: 'warn' }, 'errors is level error'],
+    [{ changes: false }, 'changes must be true'],
+    [{ changes: 'yes' }, 'changes must be true'],
     [{ sinse: 12 }, 'not sinse'],
     [[], 'this route takes']
   ])('refuses %j, saying what was wrong', async (params, message) => {

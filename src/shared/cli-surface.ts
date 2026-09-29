@@ -153,6 +153,18 @@ export const CLI_COMMANDS: readonly CliCommandSpec[] = [
     render: renderLog
   },
   {
+    name: 'changes',
+    route: 'log.read',
+    summary: 'Print what went wrong and where the page went, after a cursor or within a window',
+    // No level: the route's definition of a change already decides which entries count.
+    flags: [SINCE_FLAG, PANE_FLAG],
+    parseParams: (input) => {
+      const read = parseLogParams(input)
+      return read.ok ? { ok: true, value: { ...read.value, changes: true } } : read
+    },
+    render: (data) => renderLog(data, 'No changes')
+  },
+  {
     name: 'state',
     route: 'project.state',
     summary: 'Print the open project: name, repo, the URL its panes are on, and the panes',
@@ -318,7 +330,8 @@ function describeLayout(project: Project): string {
   return `Focus on ${focused?.name ?? 'no pane'}`
 }
 
-function renderLog(data: unknown): string {
+/** `emptyLabel` is what an empty read says, which names what was asked for. */
+function renderLog(data: unknown, emptyLabel = 'Nothing'): string {
   const read = data as Partial<LogRead> | undefined
   const entries = read?.entries ?? []
   const lines: string[] = []
@@ -330,7 +343,7 @@ function renderLog(data: unknown): string {
     const marker = entry.truncated ? ` [truncated: ${entry.truncated.join(', ')}]` : ''
     lines.push(`${entry.cursor}  ${entry.pane ?? 'app'}  ${describeEntry(entry)}${marker}`)
   }
-  if (entries.length === 0) lines.push(`Nothing after cursor ${read?.cursor ?? 0}.`)
+  if (entries.length === 0) lines.push(`${emptyLabel} after cursor ${read?.cursor ?? 0}.`)
 
   return lines.join('\n')
 }
@@ -699,6 +712,7 @@ export function helpText(): string {
     '  breakpoint state --json | jq .project.panes',
     '  breakpoint logs --since 12 --json',
     '  breakpoint logs --errors --since 5m --json',
+    '  breakpoint changes --since 30s',
     '  breakpoint quit',
     ''
   ].join('\n')

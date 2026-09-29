@@ -239,6 +239,57 @@ export function levelOf(body: EntryBody): ConsoleLevel | null {
   }
 }
 
+/**
+ * Whether each kind of entry is a change: something going wrong, or the page going
+ * somewhere. The test is whether an agent that has just edited a file would want to know,
+ * so everything that reports the developer acting — a resize, zoom, layout, origins,
+ * emulation, a certificate decided — is not. A recovery is, because a change read that
+ * reported a failure and never its end would describe a page that no longer exists.
+ *
+ * A record rather than a switch, so a new kind does not compile until it is decided.
+ */
+const CHANGE_KINDS: Readonly<Record<EntryBody['type'], boolean>> = {
+  'project.openFailed': true,
+  'project.layoutChanged': false,
+  'project.zoomChanged': false,
+  'project.navigated': true,
+  'project.navigationRefused': true,
+  'project.originsChanged': false,
+  'certificate.trusted': false,
+  // A pane held on a certificate did not arrive where it was sent.
+  'certificate.prompted': true,
+  'certificate.refused': false,
+  'certificate.forgotten': false,
+  'pane.added': false,
+  'pane.removed': false,
+  'pane.resized': false,
+  'pane.created': false,
+  'pane.attached': false,
+  'pane.attachFailed': true,
+  'pane.detached': true,
+  'pane.consoleFailed': true,
+  // Where each pane's page went: a navigation, a link followed, a reload, or a new pane's
+  // first load, which is the page arriving somewhere the agent has not seen it yet.
+  'pane.loaded': true,
+  'pane.loadFailed': true,
+  'pane.geometryMismatch': true,
+  'pane.geometryMatched': true,
+  'pane.emulationChanged': false,
+  'pane.emulationFailed': true,
+  'pane.emulationRecovered': true,
+  'pane.destroyed': false,
+  // Decided by level in `isChange`: only error is a change, and warn, info, log and debug
+  // are not.
+  'console.message': true,
+  'console.exception': true
+}
+
+/** Whether an entry is a change, as `changes: true` reads them. */
+export function isChange(body: EntryBody): boolean {
+  if (body.type === 'console.message') return body.level === 'error'
+  return CHANGE_KINDS[body.type]
+}
+
 /** What kind of browser message CDP's `Log` domain says one is. */
 export const LOG_SOURCES = [
   'xml',
@@ -360,6 +411,12 @@ export interface ReadParams {
   level?: ConsoleLevel
   /** Only errors: exactly `level: 'error'`, spelled the way an agent asks for it. */
   errors?: true
+  /**
+   * Only changes: what went wrong and where the page went, as `isChange` names them. A
+   * named filter on the read rather than one each surface writes, so every surface reads
+   * the one definition.
+   */
+  changes?: true
 }
 
 export interface EventLogOptions {
@@ -422,11 +479,12 @@ export class EventLog {
     return entry
   }
 
-  read({ since = 0, within, pane, level, errors }: ReadParams = {}): LogRead {
+  read({ since = 0, within, pane, level, errors, changes }: ReadParams = {}): LogRead {
     const from = within === undefined ? -Infinity : this.now() - within
     const minSeverity = CONSOLE_LEVELS.indexOf(errors ? 'error' : (level ?? 'debug'))
     const matches = (entry: Entry): boolean => {
       if (entry.cursor <= since || entry.time < from) return false
+      if (changes && !isChange(entry)) return false
       if (errors === undefined && level === undefined) return true
       const severity = levelOf(entry)
       return severity !== null && CONSOLE_LEVELS.indexOf(severity) >= minSeverity

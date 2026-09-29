@@ -387,6 +387,51 @@ describe('reading the event log from a terminal', () => {
   })
 })
 
+describe('reading changes from a terminal', () => {
+  const read = (argv: string[]): ReturnType<typeof parseArgv> => parseArgv(argv, '/cwd')
+
+  it('reads the log route with the change filter, and never filters here', () => {
+    const result = read(['changes'])
+    expect(result.kind === 'command' && result.command.route).toBe('log.read')
+    expect(result.kind === 'command' && result.params).toEqual({ changes: true })
+  })
+
+  it.each([
+    [['changes', '--since', '12'], { changes: true, since: 12 }],
+    [['changes', '--since=5m'], { changes: true, within: 300_000 }],
+    [
+      ['changes', '--pane', 'pane-1', '--since', '30s'],
+      { changes: true, pane: 'pane-1', within: 30_000 }
+    ]
+  ])('reads %j with a cursor or a duration', (argv, params) => {
+    const result = read(argv)
+    expect(result.kind === 'command' && result.params).toEqual(params)
+  })
+
+  it('refuses a --since that is neither, as logs does', () => {
+    expect(read(['changes', '--since', 'yesterday'])).toMatchObject({
+      kind: 'error',
+      message: expect.stringContaining('--since takes a cursor position or a duration')
+    })
+  })
+
+  it.each([['--errors'], ['--level', 'warn']])(
+    'refuses %s: every change is one, whatever its level',
+    (...flag) => {
+      const result = read(['changes', ...flag])
+      expect(result.kind === 'error' && result.message).toMatch(/is not a flag of changes/)
+    }
+  )
+
+  it('says there were no changes rather than printing nothing', () => {
+    const changes = CLI_COMMANDS.find((command) => command.name === 'changes')
+    expect(changes?.render({ entries: [], cursor: 7 })).toBe('No changes after cursor 7.')
+    expect(changes?.render({ entries: [], cursor: 7, droppedBefore: 3 })).toContain(
+      'Entries before cursor 3 were evicted'
+    )
+  })
+})
+
 describe('the log as a terminal reads it', () => {
   const logs = CLI_COMMANDS.find((command) => command.route === 'log.read')
 

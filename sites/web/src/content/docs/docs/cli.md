@@ -428,6 +428,48 @@ leading items as fit.
 Every other producer, such as network, arrives with the feature that observes it, in this
 same payload and on this same cursor.
 
+### `breakpoint changes`
+
+Prints what went wrong and where the page went: the event log with the developer's own
+actions taken out. It answers the question an agent asks right after it edits a file —
+did that fix it, and did the page move?
+
+```sh
+breakpoint changes --since 12        # what changed after position 12
+breakpoint changes --since 30s       # what changed in the last thirty seconds
+breakpoint changes --since 12 --pane 4f1c --json
+```
+
+The test for a change is whether an agent that has just edited a file would want to know.
+These are changes:
+
+- an exception or an unhandled rejection (`console.exception`)
+- a console call or a browser message at `error` level (`console.message`)
+- a page that did not load (`pane.loadFailed`) and a project that did not open
+  (`project.openFailed`)
+- an attachment that failed or ended, or whose console could not be captured
+  (`pane.attachFailed`, `pane.detached`, `pane.consoleFailed`)
+- a geometry mismatch, and the pane being drawn at its size again
+  (`pane.geometryMismatch`, `pane.geometryMatched`)
+- an emulation override refused, and working again (`pane.emulationFailed`,
+  `pane.emulationRecovered`)
+- a navigation, a navigation refused, and every page a pane arrived at, reloads included
+  (`project.navigated`, `project.navigationRefused`, `pane.loaded`)
+- a pane held on a certificate (`certificate.prompted`)
+
+A recovery is a change because a read that reported the failure and never its end would
+describe a page that is no longer there. Everything else is not: routine `log`, `info`,
+`debug` and `warn` calls, and every kind that reports the developer acting — a resize,
+zoom, a layout change, allowed origins, an emulation change, a pane added or removed, a
+certificate decided.
+
+`changes` takes `--since` as `logs` does, a cursor or a duration, and `--pane`. It is the
+`log.read` route with `changes: true`, so the filter is the app's rather than the
+terminal's: every surface reads one definition of a change, and it is applied before the
+read's limits, so a change behind a thousand resizes is still the first thing read. The
+payload, `cursor` and `droppedBefore` are exactly those of `logs`, and an empty read with
+no `droppedBefore` means nothing changed.
+
 ### `breakpoint quit`
 
 Shuts the app down cleanly, releasing the single-instance lock.
@@ -516,8 +558,8 @@ asking for it, and `--background` has nothing to say about it.
 | Flag | What it does |
 | --- | --- |
 | `--json` | Prints the route's payload object on stdout and nothing else |
-| `--since <cursor>`, `--since <duration>` | `logs` only. Reads what followed that cursor position, or with a unit — `30s`, `5m`, `2h`, `250ms` — what arrived within that long of now. `--since=12` is the same flag |
-| `--pane <pane>` | `logs` only. Reads one pane's entries, by its id |
+| `--since <cursor>`, `--since <duration>` | `logs` and `changes` only. Reads what followed that cursor position, or with a unit — `30s`, `5m`, `2h`, `250ms` — what arrived within that long of now. `--since=12` is the same flag |
+| `--pane <pane>` | `logs` and `changes` only. Reads one pane's entries, by its id |
 | `--level <level>` | `logs` only. Reads entries at that level or more severe: `debug`, `log`, `info`, `warn` or `error` |
 | `--errors` | `logs` only. Reads only errors: the same as `--level error`, and a usage error beside it |
 | `--wait` | `breakpoint .`, `open` and `state` only. Blocks until every pane has loaded and is drawn at its declared size, for up to 30s. A usage error on any other command |
@@ -602,7 +644,7 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
 | `certificates.forget` | `{ "host": "staging.example.com", "fingerprint": "sha256/…" }` | the same | the window, the socket |
 | `certificates.list` | none | the same | the socket |
-| `log.read` | `{ "since": 12, "within": 300000, "pane": id, "level": "warn", "errors": true }`, each optional; none for the whole log. `within` is milliseconds; `errors` refuses `level` beside it | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs` |
+| `log.read` | `{ "since": 12, "within": 300000, "pane": id, "level": "warn", "errors": true, "changes": true }`, each optional; none for the whole log. `within` is milliseconds; `errors` refuses `level` beside it; `changes` reads only changes, and narrows the others rather than replacing them | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs`, `breakpoint changes` |
 | `panes.add` | `{ "preset": "mobile" }`, or `{ "width": 390, "height": 844 }` | `{ "pane": { … }, "index": n }`: the pane with its `status`, and where it was put | the window, the socket |
 | `panes.expand` | `{ "cursor": 12, "arg": 1 }`: an entry's cursor, and which of its arguments; `arg` is `0` if left out | `{ "live": true, "properties": [{ "name", "value" }], "truncated": false }`, or `{ "live": false }` once the page that logged it has gone | the socket |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
@@ -722,6 +764,8 @@ is on by default — there is no configuration step and no first command that fa
 
 The shape a harness wants is already here: `breakpoint . --wait --json` to know the app
 is ready and see what the developer is looking at, take `cursor` from that payload, do
-the work, then `breakpoint logs --since <cursor> --json`. What the log carries grows with
+the work, then `breakpoint changes --since <cursor> --json` to learn whether it fixed
+anything and where the page went, or `breakpoint logs --since <cursor> --json` for
+everything. What the log carries grows with
 each phase — the console, network and layout producers arrive with the features that
 observe them — and the cursor it is read by does not change.
