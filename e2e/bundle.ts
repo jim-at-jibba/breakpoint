@@ -9,6 +9,9 @@ import { join } from 'node:path'
  *
  * Built as though its root were a repo: a test whose repo holds `BUNDLED_SOURCES` at
  * `src/` expects an error thrown from the bundle to resolve there.
+ *
+ * Two entries, sharing nothing, so that what one throws never reaches a test of the other:
+ * `main` throws at every width, and `responsive` only in a pane narrower than its nav.
  */
 
 /** The page that loads the bundle, and the directory everything it built is served from. */
@@ -17,9 +20,18 @@ export const BUNDLE_PATH = '/bundled'
 /** The sources the bundle is built from, which a test copies into its repo as `src/`. */
 export const BUNDLED_SOURCES = join(__dirname, 'bundled', 'src')
 
+/** The bundle's entries, each a module in `BUNDLED_SOURCES` of the same name. */
+export const BUNDLE_ENTRIES = ['main', 'responsive'] as const
+export type BundleEntry = (typeof BUNDLE_ENTRIES)[number]
+
+/** `/bundled` loads `main`; `/bundled?entry=responsive` loads the other. */
+export function bundledPageFor(entry: BundleEntry): string {
+  return entry === 'main' ? BUNDLE_PATH : `${BUNDLE_PATH}?entry=${entry}`
+}
+
 export interface Bundle {
-  /** The origin-relative path of the entry script, such as `/bundled/main-3f9a1c.js`. */
-  entry: string
+  /** Each entry's origin-relative script path, such as `/bundled/main-3f9a1c.js`. */
+  entries: Readonly<Record<BundleEntry, string>>
   /** Everything the build emitted, the entry and its map included, by path. */
   files: ReadonlyMap<string, string>
 }
@@ -47,25 +59,29 @@ async function build(): Promise<Bundle> {
       sourcemap: true,
       modulePreload: false,
       rollupOptions: {
-        input: join(BUNDLED_SOURCES, 'main.js'),
+        input: Object.fromEntries(
+          BUNDLE_ENTRIES.map((name) => [name, join(BUNDLED_SOURCES, `${name}.js`)])
+        ),
         output: { entryFileNames: `${BUNDLE_PATH.slice(1)}/[name]-[hash].js` }
       }
     }
   })
   const outputs = Array.isArray(result) ? result : [result]
   const files = new Map<string, string>()
-  let entry: string | undefined
+  const entries: Partial<Record<BundleEntry, string>> = {}
   for (const output of outputs) {
     if (!('output' in output)) throw new Error('The fixture bundle was built to watch')
     for (const emitted of output.output) {
       if (emitted.type === 'chunk') {
         files.set(`/${emitted.fileName}`, emitted.code)
-        if (emitted.isEntry) entry = `/${emitted.fileName}`
+        if (emitted.isEntry) entries[emitted.name as BundleEntry] = `/${emitted.fileName}`
       } else {
         files.set(`/${emitted.fileName}`, String(emitted.source))
       }
     }
   }
-  if (!entry) throw new Error('The fixture bundle has no entry')
-  return { entry, files }
+  for (const name of BUNDLE_ENTRIES) {
+    if (!entries[name]) throw new Error(`The fixture bundle has no ${name} entry`)
+  }
+  return { entries: entries as Record<BundleEntry, string>, files }
 }

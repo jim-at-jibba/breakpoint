@@ -1,7 +1,7 @@
 import { createServer, type RequestListener, type Server } from 'node:http'
 import { createServer as createSecureServer } from 'node:https'
 import type { AddressInfo } from 'node:net'
-import { bundle, BUNDLE_PATH } from './bundle'
+import { bundle, BUNDLE_ENTRIES, BUNDLE_PATH, type BundleEntry } from './bundle'
 
 /**
  * The page the panes load in tests. Written for Phase 1 and deliberately not lifted
@@ -28,6 +28,8 @@ import { bundle, BUNDLE_PATH } from './bundle'
  * `/console` is a different page, for console capture: see `consolePage`. `/resolution` is
  * another, for resolving what it logs to paths in a repo: see `RESOLUTION_SCRIPTS`.
  * `/bundled` loads a production-style bundle, served with its map beneath it: see `bundle`.
+ * `/bundled?entry=responsive` loads the bundle's other entry, which throws only in a pane
+ * narrower than 640 CSS px and asks the other origin for something it will not share.
  *
  * Every request either origin answers is recorded with its headers, which is what a
  * server doing device detection would see.
@@ -213,11 +215,17 @@ ${Object.keys(RESOLUTION_SCRIPTS)
 </html>
 `
 
-function bundledPage(entry: string): string {
+/**
+ * The other origin rides on the document, because a module script has no `currentScript`.
+ * The viewport is the device's, as a responsive site declares it: without it a pane with
+ * the mobile flag lays out at Chromium's 980 CSS px whatever its width.
+ */
+function bundledPage(entry: string, other: string): string {
   return `<!doctype html>
-<html>
+<html data-other="${other}">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>bundled</title>
 <script type="module" src="${entry}"></script>
 </head>
@@ -273,14 +281,15 @@ function respond(
     if (target.pathname === BUNDLE_PATH || target.pathname.startsWith(`${BUNDLE_PATH}/`)) {
       // Built on first asking, so a test that never loads it never waits on a bundler.
       void bundle().then(
-        ({ entry, files }) => {
+        ({ entries, files }) => {
           const file = files.get(target.pathname)
-          if (target.pathname === BUNDLE_PATH) {
+          const name = target.searchParams.get('entry') ?? 'main'
+          if (target.pathname === BUNDLE_PATH && BUNDLE_ENTRIES.includes(name as BundleEntry)) {
             response.writeHead(200, {
               'content-type': 'text/html; charset=utf-8',
               'cache-control': 'no-store'
             })
-            response.end(bundledPage(entry))
+            response.end(bundledPage(entries[name as BundleEntry], other()))
           } else if (file === undefined) {
             response.writeHead(404).end()
           } else {
