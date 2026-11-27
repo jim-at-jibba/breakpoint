@@ -5,7 +5,7 @@ import { createProject } from '../shared/project'
 import type { FetchText } from '../shared/resolution'
 import { StateFeed } from './state-feed'
 import { PaneHost } from './pane-host'
-import type { LiveHandles, PaneService } from './services/pane-service'
+import type { Evaluator, LiveHandles, PaneService } from './services/pane-service'
 
 describe('pane navigation', () => {
   it('catches up a guest that attaches after the project was navigated', async () => {
@@ -140,6 +140,7 @@ describe("a pane's console", () => {
   function hostFor(guest: WebContents): {
     pane: string
     panes: Record<
+      | 'attached'
       | 'emulated'
       | 'console'
       | 'consoleFailed'
@@ -249,6 +250,26 @@ describe("a pane's console", () => {
       ownProperties: true,
       generatePreview: true
     })
+  })
+
+  it('evaluates over the attachment it made, in REPL mode, and lets go of the result', async () => {
+    const { guest, calls } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    expect(panes.attached).toHaveBeenCalledWith(pane, 1, expect.any(Function))
+    const evaluate = panes.attached.mock.calls[0][2] as Evaluator
+    await evaluate('await Promise.resolve(innerWidth)')
+
+    expect(guest.debugger.sendCommand).toHaveBeenCalledWith(
+      'Runtime.evaluate',
+      expect.objectContaining({
+        expression: 'await Promise.resolve(innerWidth)',
+        replMode: true,
+        awaitPromise: true
+      })
+    )
+    expect(calls.at(-1)).toBe('Runtime.releaseObjectGroup')
   })
 
   it('reports an execution context going, so the objects it minted go with it', async () => {

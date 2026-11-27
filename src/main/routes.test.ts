@@ -492,6 +492,55 @@ describe('app.setSwitcher', () => {
   })
 })
 
+describe('panes.evaluate', () => {
+  function evaluator(): { dispatch: Dispatch; evaluate: ReturnType<typeof vi.fn> } {
+    const evaluate = vi.fn().mockResolvedValue({ results: [] })
+    const panes = { evaluate }
+    return {
+      dispatch: createDispatch(createRouteTable({ panes } as unknown as Services)),
+      evaluate
+    }
+  }
+
+  it.each([
+    [{ expression: 'innerWidth' }, { expression: 'innerWidth' }],
+    [
+      { expression: 'await fetch("/")', pane: 'pane-1' },
+      { expression: 'await fetch("/")', pane: 'pane-1' }
+    ]
+  ])('takes %j and answers with what the pane service says', async (params, asked) => {
+    const { dispatch, evaluate } = evaluator()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.evaluate', params },
+      { surface: 'window' }
+    )
+
+    expect(evaluate).toHaveBeenCalledWith(asked)
+    expect(response).toEqual({ id: '1', ok: true, data: { results: [] } })
+  })
+
+  it.each([
+    ['nothing', undefined],
+    ['no expression', { pane: 'pane-1' }],
+    ['an expression that is not a string', { expression: 1 }],
+    ['an empty expression', { expression: '  ' }],
+    ['an empty pane', { expression: '1', pane: '' }],
+    ['a pane that is not a string', { expression: '1', pane: 2 }],
+    ['a field it does not take', { expression: '1', panes: ['pane-1'] }]
+  ])('refuses %s', async (_, params) => {
+    const { dispatch, evaluate } = evaluator()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.evaluate', params },
+      { surface: 'cli' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+})
+
 describe('panes.expand', () => {
   function expander(): { dispatch: Dispatch; expand: ReturnType<typeof vi.fn> } {
     const expand = vi.fn().mockResolvedValue({ live: false })

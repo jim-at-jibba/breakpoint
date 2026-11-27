@@ -1,8 +1,9 @@
 import { Button } from '@renderer/components/ui/button'
 import { useConsole } from '@renderer/hooks/use-console'
+import { useRepl } from '@renderer/hooks/use-repl'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { BanIcon } from 'lucide-react'
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { aboveFloor, type ConsoleDisplay } from '../../../shared/console-floor'
 import {
   anchorAt,
@@ -13,6 +14,7 @@ import {
   consoleRow,
   consoleRowHeight,
   filterConsole,
+  formatTime,
   isAtBottom,
   isFiltering,
   NO_CONSOLE_FILTER,
@@ -30,6 +32,13 @@ import {
   type ConsoleRow
 } from '../../../shared/console-rows'
 import { CONSOLE_LEVELS, type ConsoleLevel } from '../../../shared/event-log'
+import {
+  evaluationLevel,
+  mergeLines,
+  replLines,
+  stepHistory,
+  type ReplLine
+} from '../../../shared/repl'
 import { paneColorVar } from '../../../shared/pane-palette'
 import type { Pane } from '../../../shared/project'
 import type { RouteParams } from '../../../shared/routes'
@@ -78,7 +87,14 @@ export function ConsoleView({
   const groups = useMemo(() => collapseConsole(inView), [inView])
   /** The cursors of the rows the reader expanded; a row is open while any entry of it is. */
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
-  const lines = useMemo(() => consoleLines(groups, expanded), [groups, expanded])
+  const repl = useRepl()
+  const followFloor = repl.followFloor
+  useEffect(() => followFloor(display.floor), [followFloor, display.floor])
+  const asked = useMemo(() => replLines(repl.exchanges, filter), [repl.exchanges, filter])
+  const lines = useMemo(
+    () => mergeLines<ConsoleLine, ReplLine>(consoleLines(groups, expanded), asked),
+    [groups, expanded, asked]
+  )
   const scroller = useRef<HTMLDivElement>(null)
   /** `null` is pinned to the bottom; otherwise the line the reader is holding. */
   const anchor = useRef<ConsoleAnchor | null>(null)
@@ -157,6 +173,15 @@ export function ConsoleView({
           ))}
         </div>
       </div>
+      <ReplPrompt
+        panes={panes}
+        repl={repl}
+        onEvaluate={(expression, pane) => {
+          // Sending is reading: follow the answer down, as the console a developer knows does.
+          anchor.current = null
+          repl.evaluate(expression, pane, history.cursor)
+        }}
+      />
       <ConsoleFilterBar
         panes={panes}
         filter={filter}
@@ -212,12 +237,15 @@ function ConsoleLineView({
   onToggle,
   top
 }: {
-  line: ConsoleLine
+  line: ConsoleLine | ReplLine
   panes: ConsolePanes
   expanded: ReadonlySet<number>
   onToggle: (group: ConsoleGroup) => void
   top: number
 }): React.JSX.Element {
+  if (line.kind === 'input' || line.kind === 'result') {
+    return <ReplLineView line={line} panes={panes} top={top} />
+  }
   if (line.kind === 'entry') {
     const row = consoleRow(line.entry, panes)
     return (
@@ -490,6 +518,211 @@ function ConsoleFilterBar({
       >
         preserve log
       </button>
+    </div>
+  )
+}
+
+/** The badge for a pane an answer came from, or that an expression was sent to. */
+function paneBadge(pane: string, panes: ConsolePanes): ConsolePaneBadge {
+  const known = panes.get(pane)
+  return known
+    ? { id: pane, label: known.name, color: known.index }
+    : { id: pane, label: pane, color: null }
+}
+
+/**
+ * A REPL line in the console's own columns, so an answer reads like a row: the expression
+ * as sent, marked `›` and badged with where it went, then one answer per pane beneath it,
+ * marked `‹` and badged with its pane, so answers from several widths line up to compare.
+ */
+function ReplLineView({
+  line,
+  panes,
+  top
+}: {
+  line: ReplLine
+  panes: ConsolePanes
+  top: number
+}): React.JSX.Element {
+  const { exchange } = line
+  if (line.kind === 'input') {
+    const badges =
+      exchange.pane === null
+        ? [{ id: '', label: 'all', color: null }]
+        : [paneBadge(exchange.pane, panes)]
+    return (
+      <div
+        className={ROW}
+        style={{ top, height: consoleRowHeight() }}
+        data-testid="console-repl-input"
+        data-pane={exchange.pane ?? ''}
+        data-pending={exchange.results === null}
+      >
+        <span
+          className="w-[var(--bp-console-level-w)] flex-none text-center text-[color:var(--bp-accent)]"
+          aria-label="evaluated"
+        >
+          ›
+        </span>
+        <ReplBadges badges={badges} />
+        <span className="w-[var(--bp-console-time-w)] flex-none text-[color:var(--bp-ink-faint)]">
+          {formatTime(exchange.time)}
+        </span>
+        <span
+          className="min-w-0 flex-1 truncate whitespace-nowrap text-[color:var(--bp-ink)]"
+          title={exchange.expression}
+          data-testid="console-message"
+        >
+          {exchange.expression}
+        </span>
+      </div>
+    )
+  }
+
+  const { evaluation } = line
+  const level = evaluationLevel(evaluation)
+  return (
+    <div
+      className={`${ROW} ${LEVEL_WASH[level]}`}
+      style={{ top, height: consoleRowHeight() }}
+      data-testid="console-repl-result"
+      data-pane={evaluation.pane}
+      data-outcome={evaluation.outcome}
+      data-level={level}
+    >
+      <span
+        className={`w-[var(--bp-console-level-w)] flex-none text-center ${
+          level === 'error' ? LEVEL_INK.error : 'text-[color:var(--bp-ink-faint)]'
+        }`}
+        aria-label={evaluation.outcome}
+      >
+        {level === 'error' ? LEVEL_GLYPH.error : '‹'}
+      </span>
+      <ReplBadges badges={[paneBadge(evaluation.pane, panes)]} />
+      <span className="w-[var(--bp-console-time-w)] flex-none text-[color:var(--bp-ink-faint)]">
+        {exchange.answered === null ? '' : formatTime(exchange.answered)}
+      </span>
+      <span
+        className={`min-w-0 flex-1 truncate whitespace-nowrap ${
+          level === 'error' ? 'text-[color:var(--bp-error)]' : 'text-[color:var(--bp-ink)]'
+        }`}
+        title={evaluation.text}
+        data-testid="console-message"
+      >
+        {evaluation.text}
+      </span>
+    </div>
+  )
+}
+
+function ReplBadges({ badges }: { badges: readonly ConsolePaneBadge[] }): React.JSX.Element {
+  return (
+    <span className="flex w-[var(--bp-console-pane-w)] flex-none gap-[var(--bp-space-1)] overflow-hidden">
+      {badges.map((badge) => (
+        <Badge
+          key={badge.id}
+          label={badge.label}
+          title={badge.label}
+          background={badge.color === null ? 'var(--bp-border-strong)' : paneColorVar(badge.color)}
+          testId="console-pane-badge"
+          pane={badge.id}
+        />
+      ))}
+    </span>
+  )
+}
+
+/**
+ * Where an expression is typed: a chip per target — every pane, or one — then the prompt.
+ * Enter evaluates, Up and Down step through what was evaluated before, and stepping off the
+ * newest end gives back what was being typed.
+ */
+function ReplPrompt({
+  panes,
+  repl,
+  onEvaluate
+}: {
+  panes: readonly Pane[]
+  repl: ReturnType<typeof useRepl>
+  onEvaluate: (expression: string, pane: string | null) => void
+}): React.JSX.Element {
+  const [text, setText] = useState('')
+  const [chosen, setChosen] = useState<string | null>(null)
+  // A pane removed since it was picked is not somewhere to send anything.
+  const target = chosen !== null && panes.some((pane) => pane.id === chosen) ? chosen : null
+
+  function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      if (text.trim() === '' || panes.length === 0) return
+      onEvaluate(text, target)
+      setText('')
+      return
+    }
+    if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+    const step = stepHistory(repl.history, event.key === 'ArrowUp' ? 'back' : 'forward', text)
+    if (!step) return
+    event.preventDefault()
+    repl.setHistory(step.history)
+    setText(step.text)
+  }
+
+  const targets: { id: string | null; label: string; color: number | null }[] = [
+    { id: null, label: 'all', color: null },
+    ...panes.map((pane, index) => ({ id: pane.id, label: pane.name, color: index }))
+  ]
+  return (
+    <div
+      className="flex h-[var(--bp-row)] flex-none items-center gap-[var(--bp-space-2)] overflow-hidden border-t border-[var(--bp-border)] px-[var(--bp-space-3)] font-mono text-[length:var(--bp-text-sm)]"
+      data-testid="console-repl"
+    >
+      <span
+        role="radiogroup"
+        aria-label="Evaluate in"
+        className="flex min-w-0 flex-none gap-[var(--bp-space-1)] overflow-hidden"
+      >
+        {targets.map((each) => {
+          const on = each.id === target
+          return (
+            <button
+              key={each.id ?? ''}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              title={each.id === null ? 'Evaluate in every pane' : `Evaluate in ${each.label}`}
+              className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+              onClick={() => setChosen(each.id)}
+              data-testid="console-repl-target"
+              data-pane={each.id ?? ''}
+            >
+              {each.color !== null && (
+                <span
+                  className="h-[var(--bp-pane-tab-h)] w-[var(--bp-pane-tab-w)] flex-none rounded-[var(--bp-radius-xs)]"
+                  style={{ background: paneColorVar(each.color) }}
+                  aria-hidden
+                />
+              )}
+              {each.label}
+            </button>
+          )
+        })}
+      </span>
+      <span className="flex-none text-[color:var(--bp-accent)]" aria-hidden>
+        ›
+      </span>
+      <input
+        type="text"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={onKeyDown}
+        disabled={panes.length === 0}
+        placeholder={panes.length === 0 ? 'no panes to evaluate in' : 'evaluate…'}
+        aria-label="Evaluate an expression"
+        spellCheck={false}
+        autoComplete="off"
+        data-testid="console-repl-input-field"
+        className="h-full min-w-0 flex-1 bg-transparent text-[color:var(--bp-ink)] outline-none placeholder:text-[color:var(--bp-ink-faint)]"
+      />
     </div>
   )
 }

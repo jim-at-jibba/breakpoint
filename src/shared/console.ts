@@ -511,3 +511,75 @@ function entryValue(preview: ObjectPreview | undefined): string {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
+
+// ---------------------------------------------------------------------------------------
+// Evaluation
+// ---------------------------------------------------------------------------------------
+
+/**
+ * What the REPL asks a pane's page ([PRD §11.6]): `Runtime.evaluate` in REPL mode, so
+ * top-level `await` resolves and a `let` may be declared again, with the console's own
+ * helpers such as `$0` and `copy` in scope, as the console a developer already uses has.
+ */
+export const EVALUATE_COMMAND = 'Runtime.evaluate'
+
+/**
+ * The object group an evaluation's result is minted into, released once it is read: the
+ * answer is a preview, and nothing asks about the object behind it afterwards.
+ */
+export const EVALUATION_GROUP = 'breakpoint-repl'
+
+export const RELEASE_GROUP_COMMAND = 'Runtime.releaseObjectGroup'
+
+export function evaluateParams(expression: string): Record<string, unknown> {
+  return {
+    expression,
+    replMode: true,
+    awaitPromise: true,
+    includeCommandLineAPI: true,
+    generatePreview: true,
+    userGesture: true,
+    objectGroup: EVALUATION_GROUP
+  }
+}
+
+/** Bytes of JSON a result's text is shortened to, so one huge string still crosses the socket. */
+export const MAX_EVALUATION_TEXT_BYTES = 16 * 1024
+
+/**
+ * How one pane's evaluation ended: with a `value`, with the expression having `thrown`,
+ * or `failed` when it could not be asked at all — no attachment, or no answer in time.
+ */
+export type EvaluationOutcome = 'value' | 'thrown' | 'failed'
+
+/** One pane's answer, as the console prints a value: a string quoted, an object previewed. */
+export interface Evaluation {
+  pane: string
+  outcome: EvaluationOutcome
+  text: string
+}
+
+/**
+ * An answer to `EVALUATE_COMMAND` as the console prints it. A thrown value reads as
+ * DevTools reads it, `Uncaught` and what was thrown, and is an answer rather than a
+ * failure: the expression ran, and this is what it did.
+ */
+export function evaluationOf(answer: unknown): { outcome: 'value' | 'thrown'; text: string } {
+  const response = isRecord(answer) ? answer : {}
+  if (isRecord(response.exceptionDetails)) {
+    const details = response.exceptionDetails
+    const thrown = isRecord(details.exception) ? preview(details.exception as RemoteObject) : null
+    const text =
+      thrown !== null
+        ? `Uncaught ${thrown}`
+        : typeof details.text === 'string'
+          ? details.text
+          : 'Uncaught'
+    return { outcome: 'thrown', text: truncateText(text, MAX_EVALUATION_TEXT_BYTES) }
+  }
+  const result = isRecord(response.result) ? (response.result as RemoteObject) : {}
+  return {
+    outcome: 'value',
+    text: truncateText(propertyPreview(result), MAX_EVALUATION_TEXT_BYTES)
+  }
+}

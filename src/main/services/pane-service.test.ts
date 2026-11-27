@@ -13,11 +13,13 @@ import type { FetchText, IsFile } from '../../shared/resolution'
 import type { PaneListing } from '../../shared/routes'
 import { StateFeed } from '../state-feed'
 import {
+  EVALUATION_TIMEOUT_MS,
   fetchTextWith,
   isFileOnDisk,
   MAX_FETCHED_BYTES,
   MAX_HELD_PER_PANE,
   PaneService,
+  type Evaluator,
   type LiveHandles
 } from './pane-service'
 import { PresetService } from './preset-service'
@@ -1334,5 +1336,162 @@ describe('expanding a logged object', () => {
 
     expect(await panes.expand({ cursor: first, arg: 1 })).toEqual({ live: false })
     expect(await panes.expand({ cursor: first + 1, arg: 1 })).toMatchObject({ live: true })
+  })
+})
+
+describe('evaluating in panes', () => {
+  /** A page that answers as `Runtime.evaluate` would, recording what it was asked. */
+  function evaluator(answer: (expression: string) => Promise<unknown>): Evaluator & {
+    asked: string[]
+  } {
+    const asked: string[] = []
+    return Object.assign(
+      (expression: string) => {
+        asked.push(expression)
+        return answer(expression)
+      },
+      { asked }
+    )
+  }
+
+  const width = (value: number) => () =>
+    Promise.resolve({ result: { type: 'number', value, description: String(value) } })
+
+  it('answers from the one pane named, tagged with it', async () => {
+    const [mobile, tablet] = await openShop()
+    const inMobile = evaluator(width(390))
+    const inTablet = evaluator(width(820))
+    panes.attached(mobile.id, 1, inMobile)
+    panes.attached(tablet.id, 1, inTablet)
+
+    expect(await panes.evaluate({ expression: 'innerWidth', pane: mobile.id })).toEqual({
+      results: [{ pane: mobile.id, outcome: 'value', text: '390' }]
+    })
+    expect(inTablet.asked).toEqual([])
+  })
+
+  it('answers from every pane, one each and in the project’s order, when none is named', async () => {
+    const all = await openShop()
+    all.forEach((pane, index) => panes.attached(pane.id, 1, evaluator(width(100 * (index + 1)))))
+
+    const { results } = await panes.evaluate({ expression: 'innerWidth' })
+
+    expect(results).toEqual(
+      all.map((pane, index) => ({
+        pane: pane.id,
+        outcome: 'value',
+        text: String(100 * (index + 1))
+      }))
+    )
+  })
+
+  it('answers with what was thrown rather than failing, and the other panes still answer', async () => {
+    const [mobile, tablet] = await openShop()
+    panes.attached(
+      mobile.id,
+      1,
+      evaluator(() =>
+        Promise.resolve({
+          result: { type: 'object', subtype: 'error' },
+          exceptionDetails: {
+            text: 'Uncaught',
+            exception: {
+              type: 'object',
+              subtype: 'error',
+              description: 'TypeError: nope\n    at <anonymous>:1:7'
+            }
+          }
+        })
+      )
+    )
+    panes.attached(tablet.id, 1, evaluator(width(820)))
+
+    const { results } = await panes.evaluate({ expression: 'nope()' })
+
+    expect(results[0]).toEqual({
+      pane: mobile.id,
+      outcome: 'thrown',
+      text: 'Uncaught TypeError: nope'
+    })
+    expect(results[1]).toEqual({ pane: tablet.id, outcome: 'value', text: '820' })
+  })
+
+  it('says a pane with no attachment cannot be asked, and asks no other page for it', async () => {
+    const [mobile] = await openShop()
+
+    const { results } = await panes.evaluate({ expression: '1', pane: mobile.id })
+
+    expect(results).toEqual([
+      { pane: mobile.id, outcome: 'failed', text: expect.stringMatching(/not attached/) }
+    ])
+  })
+
+  it('lets go of a pane’s page once its attachment ends or its guest is replaced', async () => {
+    const [mobile, tablet] = await openShop()
+    const detached = evaluator(width(1))
+    const replaced = evaluator(width(2))
+    panes.attached(mobile.id, 1, detached)
+    panes.attached(tablet.id, 1, replaced)
+
+    panes.detached(mobile.id, 'target closed')
+    panes.guestCreated(tablet.id, 'http://localhost:3000/')
+    const { results } = await panes.evaluate({ expression: '1' })
+
+    expect(results.slice(0, 2).map((result) => result.outcome)).toEqual(['failed', 'failed'])
+    expect([...detached.asked, ...replaced.asked]).toEqual([])
+  })
+
+  it('keeps its page across a page replacement: the attachment is the same one', async () => {
+    const [mobile] = await openShop()
+    panes.attached(mobile.id, 1, evaluator(width(390)))
+
+    panes.pageReplaced(mobile.id)
+
+    expect((await panes.evaluate({ expression: 'innerWidth', pane: mobile.id })).results).toEqual([
+      { pane: mobile.id, outcome: 'value', text: '390' }
+    ])
+  })
+
+  it('says a pane that never answers did not, rather than holding the call', async () => {
+    vi.useFakeTimers()
+    try {
+      const [mobile] = await openShop()
+      panes.attached(
+        mobile.id,
+        1,
+        evaluator(() => new Promise(() => {}))
+      )
+
+      const asked = panes.evaluate({ expression: 'await new Promise(() => {})', pane: mobile.id })
+      await vi.advanceTimersByTimeAsync(EVALUATION_TIMEOUT_MS)
+
+      expect((await asked).results).toEqual([
+        {
+          pane: mobile.id,
+          outcome: 'failed',
+          text: `no answer within ${EVALUATION_TIMEOUT_MS / 1000}s`
+        }
+      ])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('refuses a pane the project does not have', async () => {
+    await openShop()
+
+    await expect(panes.evaluate({ expression: '1', pane: 'nope' })).rejects.toMatchObject({
+      code: 'PANE_NOT_FOUND'
+    })
+  })
+
+  it('writes nothing to the log', async () => {
+    const [mobile] = await openShop()
+    panes.attached(mobile.id, 1, evaluator(width(390)))
+    const { cursor } = log.read()
+
+    await panes.evaluate({ expression: 'innerWidth' })
+
+    expect(log.read({ since: cursor }).entries).toEqual([])
   })
 })

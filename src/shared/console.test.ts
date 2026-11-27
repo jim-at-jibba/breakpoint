@@ -3,7 +3,10 @@ import {
   CONSOLE_ENABLE_COMMANDS,
   ConsoleCapture,
   consoleEntryFor,
+  evaluateParams,
+  evaluationOf,
   isConsoleError,
+  MAX_EVALUATION_TEXT_BYTES,
   MAX_EXPANDED_PROPERTIES,
   MAX_PROPERTY_TEXT_BYTES,
   MAX_STACK_FRAMES,
@@ -614,5 +617,68 @@ describe('an object expanded', () => {
   it('of something that is not an answer has no properties', () => {
     expect(propertiesOf(undefined)).toEqual({ properties: [], truncated: false })
     expect(propertiesOf({ result: 'nope' })).toEqual({ properties: [], truncated: false })
+  })
+})
+
+describe('an evaluation', () => {
+  it('is asked in REPL mode, so top-level await resolves', () => {
+    expect(evaluateParams('await 1')).toMatchObject({
+      expression: 'await 1',
+      replMode: true,
+      awaitPromise: true
+    })
+  })
+
+  it('answers a value as the console prints one: a string quoted, an object previewed', () => {
+    expect(evaluationOf({ result: { type: 'number', value: 390, description: '390' } })).toEqual({
+      outcome: 'value',
+      text: '390'
+    })
+    expect(evaluationOf({ result: { type: 'string', value: 'dark' } })).toEqual({
+      outcome: 'value',
+      text: "'dark'"
+    })
+    expect(evaluationOf({ result: { type: 'undefined' } })).toEqual({
+      outcome: 'value',
+      text: 'undefined'
+    })
+    expect(
+      evaluationOf({
+        result: {
+          type: 'object',
+          preview: {
+            type: 'object',
+            description: 'Object',
+            properties: [{ name: 'w', type: 'number', value: '390' }]
+          }
+        }
+      })
+    ).toEqual({ outcome: 'value', text: '{w: 390}' })
+  })
+
+  it('answers what was thrown as thrown, without its stack', () => {
+    expect(
+      evaluationOf({
+        result: { type: 'object', subtype: 'error' },
+        exceptionDetails: {
+          text: 'Uncaught',
+          exception: {
+            type: 'object',
+            subtype: 'error',
+            description: 'ReferenceError: nope is not defined\n    at <anonymous>:1:1'
+          }
+        }
+      })
+    ).toEqual({ outcome: 'thrown', text: 'Uncaught ReferenceError: nope is not defined' })
+    expect(
+      evaluationOf({
+        exceptionDetails: { text: 'Uncaught', exception: { type: 'string', value: 'x' } }
+      })
+    ).toEqual({ outcome: 'thrown', text: 'Uncaught x' })
+  })
+
+  it('is bounded, so an enormous string still crosses the socket', () => {
+    const { text } = evaluationOf({ result: { type: 'string', value: 'x'.repeat(100_000) } })
+    expect(jsonByteLength(text)).toBeLessThanOrEqual(MAX_EVALUATION_TEXT_BYTES)
   })
 })

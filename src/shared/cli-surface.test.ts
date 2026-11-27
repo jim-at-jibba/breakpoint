@@ -45,6 +45,13 @@ describe('the declared surface', () => {
     }
   })
 
+  it('publishes no command for panes.evaluate: eval waits for the Evaluate tier (ADR-0025)', () => {
+    expect(ROUTE_NAMES).toContain('panes.evaluate')
+    expect(CLI_COMMANDS.map((command) => command.route)).not.toContain('panes.evaluate')
+    expect(CLI_COMMANDS.map((command) => command.name)).not.toContain('eval')
+    expect(parseArgv(['eval', '1'], '/cwd').kind).not.toBe('command')
+  })
+
   it('names every flag with a double dash', () => {
     for (const flag of CLI_FLAGS) {
       expect(flag.name).toMatch(/^--[a-z][a-z-]*$/)

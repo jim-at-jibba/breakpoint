@@ -108,7 +108,7 @@ function oneLine(text: string): string {
   return text.replace(/\s*[\r\n]+\s*/g, ' ').trim()
 }
 
-function formatTime(time: number): string {
+export function formatTime(time: number): string {
   const date = new Date(time)
   const two = (n: number): string => String(n).padStart(2, '0')
   return `${two(date.getHours())}:${two(date.getMinutes())}:${two(date.getSeconds())}.${String(
@@ -339,6 +339,15 @@ export function consoleLines(
 }
 
 /**
+ * What the list needs of any line it places, whatever drew it: a key that is stable while
+ * the line is retained, and the log position that orders it among the others.
+ */
+export interface PlacedLine {
+  readonly key: string
+  readonly cursor: number
+}
+
+/**
  * Where a reader scrolled up is reading: the line at the top of the viewport, and how far
  * into it. Held by key and its row's cursor rather than by index, because evictions move
  * every index under it.
@@ -350,7 +359,7 @@ export interface ConsoleAnchor {
 }
 
 /** The anchor at a scroll position, or `null` with nothing to anchor to. */
-export function anchorAt(lines: readonly ConsoleLine[], scrollTop: number): ConsoleAnchor | null {
+export function anchorAt(lines: readonly PlacedLine[], scrollTop: number): ConsoleAnchor | null {
   if (lines.length === 0) return null
   const index = Math.min(lines.length - 1, Math.max(0, Math.floor(scrollTop / CONSOLE_ROW_HEIGHT)))
   const line = lines[index]
@@ -372,7 +381,7 @@ export function isAtBottom(scrollTop: number, scrollHeight: number, clientHeight
  * A line that is gone holds the first row after where it was.
  */
 export function scrollTarget(
-  lines: readonly ConsoleLine[],
+  lines: readonly PlacedLine[],
   anchor: ConsoleAnchor | null,
   viewport: number
 ): number {

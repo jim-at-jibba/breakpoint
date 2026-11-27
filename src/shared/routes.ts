@@ -10,7 +10,7 @@
  */
 
 import type { CertificateKey, CertificateState } from './certificates'
-import type { Expansion } from './console'
+import type { Evaluation, Expansion } from './console'
 import type { ConsoleDisplay } from './console-floor'
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
@@ -38,6 +38,7 @@ export const ROUTE_NAMES = [
   'certificates.list',
   'log.read',
   'panes.add',
+  'panes.evaluate',
   'panes.expand',
   'panes.list',
   'panes.remove',
@@ -156,6 +157,18 @@ export interface RouteSignatures {
    * never consulted again ([ADR-0011]), so editing it afterwards leaves this pane alone.
    */
   'panes.add': { params: PaneCreation; payload: { pane: PaneListing; index: number } }
+  /**
+   * Evaluates an expression in one pane's page, or in every pane's, which is what the
+   * Console's REPL sends. Top-level `await` resolves. Every pane asked answers, in the
+   * project's order, so widths can be compared side by side: a value, what the expression
+   * threw, or why it could not be asked — none of them fails the call. Naming a pane the
+   * project does not have is `PANE_NOT_FOUND`.
+   *
+   * Nothing is written to the log: what the page logs while it runs is heard like
+   * anything else it logs. No command reaches it in this phase; `breakpoint eval` waits for
+   * the Evaluate tier that governs it ([ADR-0025]).
+   */
+  'panes.evaluate': { params: EvaluationRequest; payload: { results: Evaluation[] } }
   /**
    * The properties of an object a pane's page logged, named by the cursor of the entry
    * that logged it and which of its arguments it was. The entry keeps only a preview,
@@ -276,6 +289,12 @@ export interface GeometryReport {
 }
 
 export type EmulationSetting = EmulationChanges & { pane: string }
+
+/** An expression, and the pane to evaluate it in; every pane when none is named. */
+export interface EvaluationRequest {
+  expression: string
+  pane?: string
+}
 
 /** An entry by its cursor, and one of its arguments: the first, unless another is named. */
 export interface ExpansionRequest {

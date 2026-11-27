@@ -142,6 +142,26 @@ function expectLogRead(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   return { ok: true, params }
 }
 
+const EVALUATION_SHAPE = 'this route takes { expression } and optionally { pane }'
+
+function expectEvaluation(raw: unknown): ParamsOk<'panes.evaluate'> | ParamsBad {
+  const request = asParams(raw)
+  if (!request) return { ok: false, message: EVALUATION_SHAPE }
+  const unknown = unknownFields(request, ['expression', 'pane'])
+  if (unknown.length > 0) {
+    return { ok: false, message: `${EVALUATION_SHAPE}, not ${unknown.join(', ')}` }
+  }
+  const { expression, pane } = request
+  if (typeof expression !== 'string' || expression.trim() === '') {
+    return { ok: false, message: 'expression must be a string with something in it' }
+  }
+  if (pane === undefined) return { ok: true, params: { expression } }
+  if (typeof pane !== 'string' || pane.length === 0) {
+    return { ok: false, message: 'pane must be a non-empty string' }
+  }
+  return { ok: true, params: { expression, pane } }
+}
+
 const EXPANSION_SHAPE = 'this route takes { cursor } and optionally { arg }'
 
 function expectExpansion(raw: unknown): ParamsOk<'panes.expand'> | ParamsBad {
@@ -594,6 +614,10 @@ export function createRouteTable(services: Services): RouteTable {
     'panes.add': {
       parseParams: expectPaneCreation,
       handle: async (creation) => ({ payload: await services.panes.add(creation) })
+    },
+    'panes.evaluate': {
+      parseParams: expectEvaluation,
+      handle: async (request) => ({ payload: await services.panes.evaluate(request) })
     },
     'panes.expand': {
       parseParams: expectExpansion,

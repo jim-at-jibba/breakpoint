@@ -3,10 +3,14 @@ import {
   CONSOLE_ENABLE_COMMANDS,
   ConsoleCapture,
   CONTEXT_DESTROYED,
+  EVALUATE_COMMAND,
+  EVALUATION_GROUP,
+  evaluateParams,
   EXPAND_COMMAND,
   expandParams,
   handlesIn,
-  PAGE_REPLACED
+  PAGE_REPLACED,
+  RELEASE_GROUP_COMMAND
 } from '../shared/console'
 import { applyEmulation, currentHostIdentity, emulationFor } from '../shared/emulation'
 import { PANE_PREFERENCE, paneIdFromPreferences } from '../shared/panes'
@@ -368,7 +372,21 @@ export class PaneHost {
         this.panes.detached(pane, reason)
       }
     })
-    this.panes.attached(pane, attempt)
+    // The REPL evaluates over this attachment too, and only while it stands: once it has
+    // ended, the pane service has already let go of this.
+    const evaluate = async (expression: string): Promise<unknown> => {
+      try {
+        return await guest.debugger.sendCommand(EVALUATE_COMMAND, evaluateParams(expression))
+      } finally {
+        // The answer carries its preview; nothing asks about the object behind it again.
+        if (!guest.isDestroyed() && this.attachments.has(guest)) {
+          void guest.debugger
+            .sendCommand(RELEASE_GROUP_COMMAND, { objectGroup: EVALUATION_GROUP })
+            .catch(() => undefined)
+        }
+      }
+    }
+    this.panes.attached(pane, attempt, evaluate)
     // On either attempt: `Runtime.enable` replays what the page logged before it, and on
     // the retry that is everything since the page's own scripts started.
     for (const method of CONSOLE_ENABLE_COMMANDS) {
