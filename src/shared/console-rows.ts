@@ -117,26 +117,161 @@ function formatTime(time: number): string {
 }
 
 /**
- * Where a reader scrolled up is reading: the entry at the top of the viewport, and how far
- * into its row. Held by cursor rather than index, because evictions move every index under
- * it.
+ * Collapsing ([ADR-0023]): the same message from several panes is one row carrying each of
+ * their pane badges. A property of this view and never of the log — the window collapses
+ * continuously over the entries it retains, while `log.read` collapses within one response
+ * only — so the two may disagree about how many rows there are while agreeing exactly about
+ * what happened.
+ */
+
+/**
+ * What makes two entries the same message: everything an entry says except when, where in
+ * the log, and which pane. Location is in it, so one row is one line of code; the stack is
+ * not, because expanding the row is how a reader checks the copies really are identical.
+ */
+export function collapseKey(entry: ConsoleEntry): string {
+  const location = entry.location
+  const at = location ? [location.path ?? location.url, location.line, location.column] : null
+  return entry.type === 'console.message'
+    ? JSON.stringify([entry.type, entry.level, entry.source, entry.text, entry.args, entry.url, at])
+    : JSON.stringify([entry.type, entry.rejection, entry.text, entry.error, at])
+}
+
+/**
+ * Entries that collapse into one row, in cursor order, at most one from each pane: a pane
+ * saying something twice said it twice, and the second time is a row of its own. The row
+ * sits where its first entry arrived.
+ */
+export interface ConsoleGroup {
+  /** The first entry's cursor, which places the row. */
+  readonly cursor: number
+  readonly entries: readonly ConsoleEntry[]
+}
+
+/**
+ * The retained entries, collapsed. A pane's `n`th entry with a key joins the `n`th row with
+ * that key, so a matching entry arriving later joins the row that is waiting for its pane
+ * rather than starting another, and three panes reloading into the same error twice read
+ * as two rows of three, however their entries interleave. Linear in the entries.
+ */
+export function collapseConsole(entries: readonly ConsoleEntry[]): ConsoleGroup[] {
+  const groups: { cursor: number; entries: ConsoleEntry[] }[] = []
+  /** Per key, its rows in order, and per pane how many of them that pane is already in. */
+  const byKey = new Map<string, { rows: ConsoleEntry[][]; seen: Map<string | null, number> }>()
+  for (const entry of entries) {
+    const key = collapseKey(entry)
+    let known = byKey.get(key)
+    if (!known) {
+      known = { rows: [], seen: new Map() }
+      byKey.set(key, known)
+    }
+    const n = known.seen.get(entry.pane) ?? 0
+    known.seen.set(entry.pane, n + 1)
+    const row = known.rows[n]
+    if (row) {
+      row.push(entry)
+    } else {
+      const fresh = [entry]
+      known.rows.push(fresh)
+      groups.push({ cursor: entry.cursor, entries: fresh })
+    }
+  }
+  return groups
+}
+
+/** A collapsed row: its first entry's columns, and every pane it carries. */
+export interface ConsoleGroupRow extends ConsoleRow {
+  /** One per entry, in the panes' project order; a pane no longer in it goes last. */
+  badges: ConsolePaneBadge[]
+}
+
+export function consoleGroupRow(group: ConsoleGroup, panes: ConsolePanes): ConsoleGroupRow {
+  const row = consoleRow(group.entries[0], panes)
+  const badges = group.entries
+    .map((entry) => consoleRow(entry, panes).pane)
+    .sort((a, b) => (a.color ?? Infinity) - (b.color ?? Infinity))
+  return { ...row, badges }
+}
+
+/**
+ * Badges a row draws before the rest become a count, as the prototype draws them: two fit
+ * the column at any pane name, and a third would be clipped into a lie about which panes.
+ */
+export const CONSOLE_BADGES_SHOWN = 2
+
+export function shownBadges(badges: readonly ConsolePaneBadge[]): {
+  shown: readonly ConsolePaneBadge[]
+  more: readonly ConsolePaneBadge[]
+} {
+  if (badges.length <= CONSOLE_BADGES_SHOWN) return { shown: badges, more: [] }
+  return { shown: badges.slice(0, CONSOLE_BADGES_SHOWN), more: badges.slice(CONSOLE_BADGES_SHOWN) }
+}
+
+/**
+ * One line of the list, which the virtualiser places at a fixed height: a row, or one of
+ * an expanded row's entries beneath it. `cursor` is the row's, for every line of it, so
+ * lines are in cursor order whatever an expanded row carries.
+ */
+export type ConsoleLine =
+  | {
+      readonly kind: 'group'
+      readonly key: string
+      readonly cursor: number
+      readonly group: ConsoleGroup
+    }
+  | {
+      readonly kind: 'entry'
+      readonly key: string
+      readonly cursor: number
+      readonly entry: ConsoleEntry
+    }
+
+/** Whether a row can expand: only one carrying more than one entry has anything to show. */
+export function isExpandable(group: ConsoleGroup): boolean {
+  return group.entries.length > 1
+}
+
+/**
+ * Whether a row is expanded, given the cursors the reader expanded. Any of its entries
+ * counts, so a row whose first entry was evicted stays open.
+ */
+export function isExpanded(group: ConsoleGroup, expanded: ReadonlySet<number>): boolean {
+  return isExpandable(group) && group.entries.some((entry) => expanded.has(entry.cursor))
+}
+
+export function consoleLines(
+  groups: readonly ConsoleGroup[],
+  expanded: ReadonlySet<number>
+): ConsoleLine[] {
+  const lines: ConsoleLine[] = []
+  for (const group of groups) {
+    lines.push({ kind: 'group', key: `g${group.cursor}`, cursor: group.cursor, group })
+    if (expanded.size > 0 && isExpanded(group, expanded)) {
+      for (const entry of group.entries) {
+        lines.push({ kind: 'entry', key: `e${entry.cursor}`, cursor: group.cursor, entry })
+      }
+    }
+  }
+  return lines
+}
+
+/**
+ * Where a reader scrolled up is reading: the line at the top of the viewport, and how far
+ * into it. Held by key and its row's cursor rather than by index, because evictions move
+ * every index under it.
  */
 export interface ConsoleAnchor {
+  key: string
   cursor: number
   offset: number
 }
 
 /** The anchor at a scroll position, or `null` with nothing to anchor to. */
-export function anchorAt(
-  entries: readonly ConsoleEntry[],
-  scrollTop: number
-): ConsoleAnchor | null {
-  if (entries.length === 0) return null
-  const index = Math.min(
-    entries.length - 1,
-    Math.max(0, Math.floor(scrollTop / CONSOLE_ROW_HEIGHT))
-  )
-  return { cursor: entries[index].cursor, offset: scrollTop - index * CONSOLE_ROW_HEIGHT }
+export function anchorAt(lines: readonly ConsoleLine[], scrollTop: number): ConsoleAnchor | null {
+  if (lines.length === 0) return null
+  const index = Math.min(lines.length - 1, Math.max(0, Math.floor(scrollTop / CONSOLE_ROW_HEIGHT)))
+  const line = lines[index]
+  return { key: line.key, cursor: line.cursor, offset: scrollTop - index * CONSOLE_ROW_HEIGHT }
 }
 
 /**
@@ -148,18 +283,20 @@ export function isAtBottom(scrollTop: number, scrollHeight: number, clientHeight
 }
 
 /**
- * Where the list should be scrolled to once its entries change. Pinned, or with nothing to
- * hold, the bottom. Otherwise wherever the anchored entry now is, so entries arriving below
- * move nothing and entries evicted above move the scroll position by exactly their rows. An
- * anchor that was itself evicted holds the first entry after it.
+ * Where the list should be scrolled to once its lines change. Pinned, or with nothing to
+ * hold, the bottom. Otherwise wherever the anchored line now is, so entries arriving below
+ * move nothing and entries evicted above move the scroll position by exactly their lines.
+ * A line that is gone holds the first row after where it was.
  */
 export function scrollTarget(
-  entries: readonly ConsoleEntry[],
+  lines: readonly ConsoleLine[],
   anchor: ConsoleAnchor | null,
   viewport: number
 ): number {
-  if (!anchor) return Math.max(0, entries.length * CONSOLE_ROW_HEIGHT - viewport)
-  const index = indexAtOrAfter(entries, anchor.cursor)
-  const same = entries[index]?.cursor === anchor.cursor
-  return index * CONSOLE_ROW_HEIGHT + (same ? anchor.offset : 0)
+  if (!anchor) return Math.max(0, lines.length * CONSOLE_ROW_HEIGHT - viewport)
+  const first = indexAtOrAfter(lines, anchor.cursor)
+  for (let index = first; index < lines.length && lines[index].cursor === anchor.cursor; index++) {
+    if (lines[index].key === anchor.key) return index * CONSOLE_ROW_HEIGHT + anchor.offset
+  }
+  return first * CONSOLE_ROW_HEIGHT
 }

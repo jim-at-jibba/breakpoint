@@ -205,3 +205,46 @@ test('the list follows new entries at the bottom, and holds its place once scrol
   await inPane(page, mobile.id, `console.log('newest'); 0`)
   await expect(rows(page).filter({ hasText: 'newest' })).toBeVisible()
 })
+
+test('the same message from several panes is one row carrying each of their badges', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await attached(shop)
+  const [one, two, three] = shop.panes
+  const say = `console.error('the same error'); 0`
+
+  await inPane(page, one.id, say)
+  await inPane(page, two.id, say)
+  await inPane(page, one.id, `console.log('something else'); 0`)
+  await expect.poll(async () => (await consoleEntries()).length).toBe(3)
+
+  // Asserted on the panes a row carries, never on how many rows there are: a view that
+  // dropped entries and one that collapsed them draw the same number.
+  const row = rows(page).filter({ hasText: 'the same error' })
+  await expect(row).toHaveAttribute('data-panes', `${one.id} ${two.id}`)
+
+  // A matching entry arriving later joins the row rather than starting another.
+  await inPane(page, three.id, say)
+  await expect(row).toHaveAttribute('data-panes', `${one.id} ${two.id} ${three.id}`)
+  await expect(row.getByTestId('console-pane-badge')).toHaveCount(2)
+  await expect(row.getByTestId('console-more-badge')).toHaveText('+1')
+
+  await row.click()
+  await expect(row).toHaveAttribute('aria-expanded', 'true')
+  const entries = page.getByTestId('console-entry')
+  await expect(entries).toHaveCount(3)
+  expect(
+    await entries
+      .getByTestId('console-pane-badge')
+      .evaluateAll((all) => all.map((badge) => (badge as HTMLElement).dataset.pane))
+  ).toEqual([one.id, two.id, three.id])
+  for (const entry of await entries.all()) {
+    await expect(entry).toContainText(/\d\d:\d\d:\d\d\.\d{3}/)
+    await expect(entry.getByTestId('console-message')).toHaveText('the same error')
+  }
+
+  await row.click()
+  await expect(entries).toHaveCount(0)
+})

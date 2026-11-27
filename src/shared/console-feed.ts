@@ -106,7 +106,10 @@ function evict(
  * that entry should be now. Entries are in cursor order, so a binary search; an entry that
  * was evicted is answered with the first one that survived it.
  */
-export function indexAtOrAfter(entries: readonly ConsoleEntry[], cursor: number): number {
+export function indexAtOrAfter(
+  entries: readonly { readonly cursor: number }[],
+  cursor: number
+): number {
   let low = 0
   let high = entries.length
   while (low < high) {

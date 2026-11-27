@@ -1,15 +1,23 @@
 import { useConsole } from '@renderer/hooks/use-console'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useLayoutEffect, useMemo, useRef } from 'react'
-import type { ConsoleEntry } from '../../../shared/console-feed'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   anchorAt,
+  collapseConsole,
+  consoleGroupRow,
+  consoleLines,
   consolePanes,
   consoleRow,
   consoleRowHeight,
   isAtBottom,
+  isExpandable,
+  isExpanded,
   scrollTarget,
+  shownBadges,
   type ConsoleAnchor,
+  type ConsoleGroup,
+  type ConsoleLine,
+  type ConsolePaneBadge,
   type ConsolePanes,
   type ConsoleRow
 } from '../../../shared/console-rows'
@@ -21,42 +29,49 @@ import type { Pane } from '../../../shared/project'
 const OVERSCAN = 20
 
 /**
- * The Console tab: every console entry the log retains, one fixed-height row each
- * ([ADR-0024]), virtualised so only what is on screen is drawn.
+ * The Console tab: every console entry the log retains, collapsed ([ADR-0023]) so the same
+ * message from several panes is one row carrying their badges, one fixed-height line per
+ * row ([ADR-0024]), virtualised so only what is on screen is drawn. Clicking a row that
+ * carries several panes expands it into one line per entry beneath it, each with its own
+ * time and location, so the copies can be checked for really being identical.
  *
- * At the bottom it follows new entries. Scrolled up, it holds the entry at the top of the
+ * At the bottom it follows new entries. Scrolled up, it holds the line at the top of the
  * viewport where it is while entries arrive below and old ones are evicted above: the
- * scroll position is recomputed from that entry's index before the frame is painted, so
- * nothing jumps. Rows have one height, so that position is arithmetic.
+ * scroll position is recomputed from that line's index before the frame is painted, so
+ * nothing jumps. Lines have one height, so that position is arithmetic.
  */
 export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.Element {
   const { history, ...state } = useConsole()
   const entries = history.entries
   const lookup = useMemo(() => consolePanes(panes), [panes])
+  const groups = useMemo(() => collapseConsole(entries), [entries])
+  /** The cursors of the rows the reader expanded; a row is open while any entry of it is. */
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
+  const lines = useMemo(() => consoleLines(groups, expanded), [groups, expanded])
   const scroller = useRef<HTMLDivElement>(null)
-  /** `null` is pinned to the bottom; otherwise the entry the reader is holding. */
+  /** `null` is pinned to the bottom; otherwise the line the reader is holding. */
   const anchor = useRef<ConsoleAnchor | null>(null)
-  const latest = useRef(entries)
+  const latest = useRef(lines)
 
   // The compiler skips this component rather than memoise the virtualiser's functions,
   // which is what the virtualiser needs: it re-renders on every scroll by design.
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
-    count: entries.length,
+    count: lines.length,
     getScrollElement: () => scroller.current,
-    // Exact rather than estimated: no row is ever measured.
+    // Exact rather than estimated: no line is ever measured.
     estimateSize: () => consoleRowHeight(),
-    getItemKey: (index) => entries[index].cursor,
+    getItemKey: (index) => lines[index].key,
     overscan: OVERSCAN
   })
 
   useLayoutEffect(() => {
-    latest.current = entries
+    latest.current = lines
     const element = scroller.current
     if (!element) return
-    const target = scrollTarget(entries, anchor.current, element.clientHeight)
+    const target = scrollTarget(lines, anchor.current, element.clientHeight)
     if (Math.round(element.scrollTop) !== Math.round(target)) virtualizer.scrollToOffset(target)
-  }, [entries, virtualizer])
+  }, [lines, virtualizer])
 
   function onScroll(): void {
     const element = scroller.current
@@ -64,6 +79,15 @@ export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.El
     anchor.current = isAtBottom(element.scrollTop, element.scrollHeight, element.clientHeight)
       ? null
       : anchorAt(latest.current, element.scrollTop)
+  }
+
+  function toggle(group: ConsoleGroup): void {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (isExpanded(group, current)) for (const entry of group.entries) next.delete(entry.cursor)
+      else next.add(group.cursor)
+      return next
+    })
   }
 
   return (
@@ -79,10 +103,12 @@ export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.El
       >
         <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
           {virtualizer.getVirtualItems().map((item) => (
-            <ConsoleRowView
+            <ConsoleLineView
               key={item.key}
-              entry={entries[item.index]}
+              line={lines[item.index]}
               panes={lookup}
+              expanded={expanded}
+              onToggle={toggle}
               top={item.start}
             />
           ))}
@@ -125,24 +151,78 @@ const LEVEL_WASH: Readonly<Record<ConsoleLevel, string>> = {
   debug: ''
 }
 
-function ConsoleRowView({
-  entry,
+const ROW =
+  'absolute left-0 flex w-full items-center gap-[var(--bp-space-3)] overflow-hidden border-b border-[var(--bp-border)] px-[var(--bp-space-3)] font-mono text-[length:var(--bp-text-sm)]'
+
+function ConsoleLineView({
+  line,
   panes,
+  expanded,
+  onToggle,
   top
 }: {
-  entry: ConsoleEntry
+  line: ConsoleLine
   panes: ConsolePanes
+  expanded: ReadonlySet<number>
+  onToggle: (group: ConsoleGroup) => void
   top: number
 }): React.JSX.Element {
-  const row: ConsoleRow = consoleRow(entry, panes)
+  if (line.kind === 'entry') {
+    const row = consoleRow(line.entry, panes)
+    return (
+      <div
+        className={`${ROW} bg-[var(--bp-chrome-sunken)]`}
+        style={{ top, height: consoleRowHeight() }}
+        data-testid="console-entry"
+        data-cursor={row.key}
+        data-row={line.cursor}
+        data-level={row.level}
+      >
+        <Columns row={row} badges={[row.pane]} />
+      </div>
+    )
+  }
+
+  const { group } = line
+  const row = consoleGroupRow(group, panes)
+  const expandable = isExpandable(group)
+  const open = isExpanded(group, expanded)
+  const toggle = (): void => onToggle(group)
   return (
     <div
-      className={`absolute left-0 flex w-full items-center gap-[var(--bp-space-3)] overflow-hidden border-b border-[var(--bp-border)] px-[var(--bp-space-3)] font-mono text-[length:var(--bp-text-sm)] ${LEVEL_WASH[row.level]}`}
+      className={`${ROW} ${LEVEL_WASH[row.level]}${expandable ? ' cursor-pointer' : ''}`}
       style={{ top, height: consoleRowHeight() }}
       data-testid="console-row"
       data-cursor={row.key}
       data-level={row.level}
+      data-panes={row.badges.map((badge) => badge.id).join(' ')}
+      {...(expandable && {
+        role: 'button',
+        tabIndex: 0,
+        'aria-expanded': open,
+        onClick: toggle,
+        onKeyDown: (event: React.KeyboardEvent) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return
+          event.preventDefault()
+          toggle()
+        }
+      })}
     >
+      <Columns row={row} badges={row.badges} />
+    </div>
+  )
+}
+
+function Columns({
+  row,
+  badges
+}: {
+  row: ConsoleRow
+  badges: readonly ConsolePaneBadge[]
+}): React.JSX.Element {
+  const { shown, more } = shownBadges(badges)
+  return (
+    <>
       <span
         className={`w-[var(--bp-console-level-w)] flex-none text-center text-[length:var(--bp-text-micro)] ${LEVEL_INK[row.level]}`}
         aria-label={row.level}
@@ -150,18 +230,26 @@ function ConsoleRowView({
         {LEVEL_GLYPH[row.level]}
       </span>
       <span className="flex w-[var(--bp-console-pane-w)] flex-none gap-[var(--bp-space-1)] overflow-hidden">
-        <span
-          className="inline-flex h-[var(--bp-badge-h)] max-w-full items-center truncate rounded-[var(--bp-radius-xs)] px-[var(--bp-space-2)] text-[length:var(--bp-text-micro)] font-medium text-[color:var(--bp-pane-ink)]"
-          style={{
-            background:
-              row.pane.color === null ? 'var(--bp-border-strong)' : paneColorVar(row.pane.color)
-          }}
-          title={row.pane.label}
-          data-testid="console-pane-badge"
-          data-pane={row.pane.id}
-        >
-          {row.pane.label}
-        </span>
+        {shown.map((badge) => (
+          <Badge
+            key={badge.id}
+            label={badge.label}
+            title={badge.label}
+            background={
+              badge.color === null ? 'var(--bp-border-strong)' : paneColorVar(badge.color)
+            }
+            testId="console-pane-badge"
+            pane={badge.id}
+          />
+        ))}
+        {more.length > 0 && (
+          <Badge
+            label={`+${more.length}`}
+            title={more.map((badge) => badge.label).join(', ')}
+            background="var(--bp-border-strong)"
+            testId="console-more-badge"
+          />
+        )}
       </span>
       <span className="w-[var(--bp-console-time-w)] flex-none text-[color:var(--bp-ink-faint)]">
         {row.time}
@@ -184,6 +272,32 @@ function ConsoleRowView({
           {row.location}
         </span>
       )}
-    </div>
+    </>
+  )
+}
+
+function Badge({
+  label,
+  title,
+  background,
+  testId,
+  pane
+}: {
+  label: string
+  title: string
+  background: string
+  testId: string
+  pane?: string
+}): React.JSX.Element {
+  return (
+    <span
+      className="inline-flex h-[var(--bp-badge-h)] max-w-full min-w-0 items-center truncate rounded-[var(--bp-radius-xs)] px-[var(--bp-space-2)] text-[length:var(--bp-text-micro)] font-medium text-[color:var(--bp-pane-ink)]"
+      style={{ background }}
+      title={title}
+      data-testid={testId}
+      data-pane={pane}
+    >
+      {label}
+    </span>
   )
 }

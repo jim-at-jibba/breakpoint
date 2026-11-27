@@ -4,18 +4,26 @@ import { describe, expect, it } from 'vitest'
 import type { ConsoleEntry } from './console-feed'
 import {
   anchorAt,
+  collapseConsole,
+  collapseKey,
   CONSOLE_ROW_HEIGHT,
+  consoleGroupRow,
+  consoleLines,
   consolePanes,
   consoleRow,
   consoleRowHeight,
   isAtBottom,
-  scrollTarget
+  isExpanded,
+  scrollTarget,
+  shownBadges,
+  type ConsoleGroup,
+  type ConsoleLine
 } from './console-rows'
 import { createProject } from './project'
 
 const project = createProject('/repos/shop')
 const panes = consolePanes(project.panes)
-const [first, second] = project.panes
+const [first, second, third] = project.panes
 const at = new Date(2026, 10, 27, 14, 2, 11, 4).getTime()
 
 type MessageEntry = Extract<ConsoleEntry, { type: 'console.message' }>
@@ -140,10 +148,199 @@ describe('row height', () => {
   })
 })
 
+describe('the collapse key', () => {
+  const located = {
+    url: 'http://localhost:5173/src/Cart.tsx?t=1',
+    line: 87,
+    column: 22,
+    resolution: 'resolved' as const,
+    path: 'src/Cart.tsx'
+  }
+
+  it('is the same for the same message from different panes, at different times', () => {
+    expect(collapseKey(message({ pane: first.id, cursor: 1, time: 1 }))).toBe(
+      collapseKey(message({ pane: third.id, cursor: 9, time: 2 }))
+    )
+  })
+
+  it.each<[string, Partial<MessageEntry>]>([
+    ['text', { text: 'other' }],
+    ['level', { level: 'error' }],
+    ['source', { source: 'network' }],
+    ['arguments', { args: ['careful', '{width: 390}'] }],
+    ['resource', { url: 'http://localhost:5173/api' }],
+    ['whether it was located', { location: null }],
+    ['line', { location: { ...located, line: 88 } }]
+  ])('tells messages apart by %s', (_what, overrides) => {
+    const base = message({ location: located })
+    expect(collapseKey({ ...base, ...overrides })).not.toBe(collapseKey(base))
+  })
+
+  it('locates by the repo path once resolved, so a cache-busting query does not split a row', () => {
+    expect(
+      collapseKey(
+        message({ location: { ...located, url: 'http://localhost:5173/src/Cart.tsx?t=2' } })
+      )
+    ).toBe(collapseKey(message({ location: located })))
+  })
+
+  it('ignores the stack, which expanding the row is for', () => {
+    expect(
+      collapseKey(
+        message({
+          stack: [{ functionName: 'f', url: located.url, line: 1, column: 1 } as never]
+        })
+      )
+    ).toBe(collapseKey(message()))
+  })
+
+  it('never takes a message for an exception with the same text', () => {
+    expect(
+      collapseKey({
+        cursor: 1,
+        time: at,
+        pane: first.id,
+        type: 'console.exception',
+        rejection: false,
+        text: 'careful',
+        error: null,
+        location: null,
+        stack: []
+      })
+    ).not.toBe(collapseKey(message({ text: 'careful' })))
+  })
+})
+
+describe('collapsing in the view', () => {
+  const said = (cursor: number, pane: string, text = 'Uncaught TypeError: total'): MessageEntry =>
+    message({ cursor, pane, text, time: at + cursor })
+  /** What a row carries, by pane id, which is what collapsing is about: never a count. */
+  const carried = (groups: ConsoleGroup[]): string[][] =>
+    groups.map((group) => group.entries.map((entry) => entry.pane ?? ''))
+
+  it('is one row carrying three badges for the same message from three panes', () => {
+    const groups = collapseConsole([said(1, first.id), said(2, second.id), said(3, third.id)])
+
+    expect(carried(groups)).toEqual([[first.id, second.id, third.id]])
+    expect(consoleGroupRow(groups[0], panes).badges.map((badge) => badge.id)).toEqual([
+      first.id,
+      second.id,
+      third.id
+    ])
+  })
+
+  it('joins a matching entry arriving later to the existing row, across other messages', () => {
+    const before = collapseConsole([said(1, first.id), said(2, second.id, 'other')])
+    const after = collapseConsole([
+      said(1, first.id),
+      said(2, second.id, 'other'),
+      said(3, third.id)
+    ])
+
+    expect(carried(before)).toEqual([[first.id], [second.id]])
+    expect(carried(after)).toEqual([[first.id, third.id], [second.id]])
+    expect(after.map((group) => group.cursor)).toEqual([1, 2])
+  })
+
+  it('gives a pane saying the same thing twice a second row', () => {
+    expect(carried(collapseConsole([said(1, first.id), said(2, first.id)]))).toEqual([
+      [first.id],
+      [first.id]
+    ])
+  })
+
+  it('reads three panes reloading into one error twice as two rows of three, however they interleave', () => {
+    const groups = collapseConsole([
+      said(1, first.id),
+      said(2, second.id),
+      said(3, first.id),
+      said(4, third.id),
+      said(5, second.id),
+      said(6, third.id)
+    ])
+
+    expect(carried(groups)).toEqual([
+      [first.id, second.id, third.id],
+      [first.id, second.id, third.id]
+    ])
+    expect(groups[1].entries.map((entry) => entry.cursor)).toEqual([3, 5, 6])
+  })
+
+  it('collapses over what the window retains, so an evicted entry leaves its row', () => {
+    const groups = collapseConsole([said(2, second.id), said(3, third.id)])
+
+    expect(carried(groups)).toEqual([[second.id, third.id]])
+    expect(groups[0].cursor).toBe(2)
+  })
+
+  it('orders a row’s badges by the panes’ place in the project, not by arrival', () => {
+    const [group] = collapseConsole([said(1, third.id), said(2, 'gone'), said(3, first.id)])
+
+    expect(consoleGroupRow(group, panes).badges.map((badge) => badge.id)).toEqual([
+      first.id,
+      third.id,
+      'gone'
+    ])
+  })
+
+  it('draws two badges and counts the rest, as the prototype does', () => {
+    const [group] = collapseConsole([said(1, first.id), said(2, second.id), said(3, third.id)])
+    const { shown, more } = shownBadges(consoleGroupRow(group, panes).badges)
+
+    expect(shown.map((badge) => badge.id)).toEqual([first.id, second.id])
+    expect(more.map((badge) => badge.id)).toEqual([third.id])
+  })
+})
+
+describe('expanding a row', () => {
+  const said = (cursor: number, pane: string, text = 'same'): MessageEntry =>
+    message({ cursor, pane, text, time: at + cursor })
+  const groups = collapseConsole([
+    said(1, first.id),
+    said(2, second.id, 'other'),
+    said(3, second.id),
+    said(4, third.id)
+  ])
+
+  it('is one line per row while nothing is expanded', () => {
+    expect(consoleLines(groups, new Set()).map((line) => line.key)).toEqual(['g1', 'g2'])
+  })
+
+  it('shows each entry beneath its row, each with its own time and location', () => {
+    const lines = consoleLines(groups, new Set([1]))
+
+    expect(lines.map((line) => line.key)).toEqual(['g1', 'e1', 'e3', 'e4', 'g2'])
+    const shown = lines.flatMap((line) =>
+      line.kind === 'entry' ? [consoleRow(line.entry, panes)] : []
+    )
+    expect(shown.map((row) => [row.pane.id, row.time])).toEqual([
+      [first.id, '14:02:11.005'],
+      [second.id, '14:02:11.007'],
+      [third.id, '14:02:11.008']
+    ])
+  })
+
+  it('keeps every line of a row at the row’s cursor, so lines stay in cursor order', () => {
+    expect(consoleLines(groups, new Set([1])).map((line) => line.cursor)).toEqual([1, 1, 1, 1, 2])
+  })
+
+  it('stays open when the entry it was opened by is evicted', () => {
+    const [survivor] = collapseConsole([said(3, second.id), said(4, third.id)])
+
+    expect(isExpanded(survivor, new Set([1, 3]))).toBe(true)
+    expect(isExpanded(survivor, new Set([1]))).toBe(false)
+  })
+
+  it('never expands a row carrying one entry: there is nothing to separate', () => {
+    expect(consoleLines(groups, new Set([2])).map((line) => line.key)).toEqual(['g1', 'g2'])
+  })
+})
+
 describe('holding the reader’s place', () => {
   const H = CONSOLE_ROW_HEIGHT
-  const rows = (...cursors: number[]): ConsoleEntry[] =>
-    cursors.map((cursor) => message({ cursor }))
+  /** One pane saying the same thing again and again: a row per entry. */
+  const rows = (...cursors: number[]): ConsoleLine[] =>
+    consoleLines(collapseConsole(cursors.map((cursor) => message({ cursor }))), new Set())
 
   it('follows the newest entry while pinned to the bottom', () => {
     expect(scrollTarget(rows(1, 2, 3, 4, 5), null, 2 * H)).toBe(3 * H)
@@ -159,7 +356,7 @@ describe('holding the reader’s place', () => {
 
   it('moves up by exactly the rows evicted above, so the same entry stays in view', () => {
     const anchor = anchorAt(rows(1, 2, 3, 4, 5), 3 * H + 5)!
-    expect(anchor).toEqual({ cursor: 4, offset: 5 })
+    expect(anchor).toEqual({ key: 'g4', cursor: 4, offset: 5 })
 
     expect(scrollTarget(rows(3, 4, 5, 6), anchor, 2 * H)).toBe(H + 5)
   })
@@ -168,6 +365,27 @@ describe('holding the reader’s place', () => {
     const anchor = anchorAt(rows(1, 2, 3, 4, 5), 5)!
 
     expect(scrollTarget(rows(3, 4, 5), anchor, 2 * H)).toBe(0)
+  })
+
+  it('holds a line inside an expanded row while rows arrive and evict around it', () => {
+    const same = (cursor: number, pane: string): MessageEntry =>
+      message({ cursor, pane, text: 'same' })
+    const lines = (entries: MessageEntry[]): ConsoleLine[] =>
+      consoleLines(collapseConsole([message({ cursor: 1 }), ...entries]), new Set([2]))
+    const before = lines([same(2, first.id), same(3, second.id), same(4, third.id)])
+    const anchor = anchorAt(before, 3 * H + 5)!
+    expect(anchor).toMatchObject({ key: 'e3', cursor: 2 })
+
+    const after = consoleLines(
+      collapseConsole([
+        same(2, first.id),
+        same(3, second.id),
+        same(4, third.id),
+        message({ cursor: 9 })
+      ]),
+      new Set([2])
+    )
+    expect(scrollTarget(after, anchor, 2 * H)).toBe(2 * H + 5)
   })
 
   it('counts within half a row of the bottom as the bottom', () => {
