@@ -5,6 +5,7 @@ import { AppThemeControl } from '@renderer/components/app-theme'
 import { Canvas } from '@renderer/components/canvas'
 import { CanvasControls } from '@renderer/components/canvas-controls'
 import { CertificatePrompt } from '@renderer/components/certificate-prompt'
+import { CanvasWithPanel, PanelToggle } from '@renderer/components/canvas-with-panel'
 import { ProjectSwitcher } from '@renderer/components/project-switcher'
 import { TrustedCertificates } from '@renderer/components/trusted-certificates'
 import { Button } from '@renderer/components/ui/button'
@@ -157,6 +158,10 @@ export default function App(): React.JSX.Element {
                 certificate belongs to a host ([ADR-0012]) and the chrome is ours — so
                 both stay reachable with nothing open. Everything beside them is the open
                 project's and goes with it. */}
+            <PanelToggle
+              panel={snapshot.panel}
+              onToggle={(visible) => void invokeAction('app.setPanel', { visible })}
+            />
             <AppThemeControl theme={snapshot.theme} />
             <TrustedCertificates certificates={snapshot.certificates.trusted} />
             {project && (
@@ -189,32 +194,36 @@ export default function App(): React.JSX.Element {
       {snapshot && snapshot.certificates.waiting.length > 0 && (
         <CertificatePrompt waiting={snapshot.certificates.waiting} />
       )}
-      {project && snapshot ? (
-        <Canvas
-          project={project}
-          statuses={snapshot.panes}
-          theme={snapshot.theme}
-          zoomPreview={activeZoomPreview}
-          onZoom={setZoom}
-          onFocusPane={(pane) => setLayout({ layout: 'focus', focusedPane: pane })}
-        />
-      ) : (
-        <main className="bg-background text-foreground flex flex-1 flex-col items-center justify-center gap-4">
-          <div className="flex items-center gap-2">
-            <span
-              className="size-2 rounded-xs"
-              style={{ background: paneColorVar(0) }}
-              aria-hidden
-            />
-            <span className="font-mono text-[length:var(--bp-text-lg)]">breakpoint</span>
-          </div>
-          {!project && snapshot && (
-            <p className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
-              Type a URL above to see it in every pane.
-            </p>
-          )}
-        </main>
-      )}
+      {/* The panel is the app's, like the theme: it is docked whether or not anything is
+          open, and opening another project never moves it. */}
+      <CanvasWithPanel panel={snapshot.panel}>
+        {project ? (
+          <Canvas
+            project={project}
+            statuses={snapshot.panes}
+            theme={snapshot.theme}
+            zoomPreview={activeZoomPreview}
+            onZoom={setZoom}
+            onFocusPane={(pane) => setLayout({ layout: 'focus', focusedPane: pane })}
+          />
+        ) : (
+          <main className="bg-background text-foreground flex flex-1 flex-col items-center justify-center gap-4">
+            <div className="flex items-center gap-2">
+              <span
+                className="size-2 rounded-xs"
+                style={{ background: paneColorVar(0) }}
+                aria-hidden
+              />
+              <span className="font-mono text-[length:var(--bp-text-lg)]">breakpoint</span>
+            </div>
+            {!project && snapshot && (
+              <p className="text-[length:var(--bp-text-sm)] text-[color:var(--bp-ink-faint)]">
+                Type a URL above to see it in every pane.
+              </p>
+            )}
+          </main>
+        )}
+      </CanvasWithPanel>
     </div>
   )
 }

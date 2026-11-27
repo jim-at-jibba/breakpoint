@@ -1,3 +1,4 @@
+import { DEFAULT_PANEL } from './panel'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { ROUTE_NAMES } from './routes'
 import {
@@ -690,7 +691,8 @@ describe('the state as a terminal reads it', () => {
       panes,
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -710,7 +712,8 @@ describe('the state as a terminal reads it', () => {
           panes: {},
           certificates: { trusted: [], waiting: [] },
           theme: DARK,
-          switcher: { open: false }
+          switcher: { open: false },
+          panel: DEFAULT_PANEL
         }) ?? ''
       ).split('\n')
 
@@ -730,7 +733,8 @@ describe('the state as a terminal reads it', () => {
       panes,
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -751,7 +755,8 @@ describe('the state as a terminal reads it', () => {
       panes,
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -917,7 +922,8 @@ describe('certificate trust on the terminal', () => {
         panes: project ? paneStatusesFor(project, {}) : {},
         certificates: { trusted: [trusted], waiting: [waiting] },
         theme: DARK,
-        switcher: { open: false }
+        switcher: { open: false },
+        panel: DEFAULT_PANEL
       }
       expect((state?.render(snapshot) ?? '').split('\n')).toContain(
         'Certificates: 1 trusted, 1 waiting'
@@ -933,7 +939,8 @@ describe('certificate trust on the terminal', () => {
       panes: {},
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL
     }
     expect(state?.render(snapshot)).toBe(
       'No project is open. Run `breakpoint .` in a repo, or `breakpoint open <url>`.\nCursor 9'

@@ -1,3 +1,4 @@
+import { DEFAULT_PANEL } from '../../shared/panel'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -76,7 +77,8 @@ beforeEach(async () => {
     { list: () => ({ trusted: [], waiting: [] }) },
     {
       theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }),
-      switcher: () => ({ open: false })
+      switcher: () => ({ open: false }),
+      panel: () => DEFAULT_PANEL
     }
   )
 })

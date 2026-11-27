@@ -13,6 +13,7 @@ import type { CertificateKey, CertificateState } from './certificates'
 import type { Expansion } from './console'
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
+import type { PanelSetting, PanelState } from './panel'
 import type { PaneStatus, Size } from './panes'
 import type { Preset } from './presets'
 import type { Layout, Pane, Zoom } from './project'
@@ -26,6 +27,7 @@ export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 export const ROUTE_NAMES = [
   'app.focus',
   'app.quit',
+  'app.setPanel',
   'app.setSwitcher',
   'app.setTheme',
   'certificates.decide',
@@ -72,6 +74,13 @@ export interface RouteSignatures {
    */
   'app.focus': { params: undefined; payload: { focused: true } }
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Arranges the panel: docks it below or beside the canvas, sizes it on the side it is
+   * docked to, shows or hides it — any of them, at least one. An app setting rather than
+   * a project's, kept on this machine, so it survives a restart and does not move when a
+   * different project is opened. The payload is the arrangement as it now stands.
+   */
+  'app.setPanel': { params: PanelSetting; payload: PanelState }
   /**
    * Shows or hides the project switcher. A route rather than a message to the window,
    * because the menu accelerator, the toolbar button and Escape all cause it, and the

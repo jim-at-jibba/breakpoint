@@ -16,6 +16,7 @@ import {
   type Surface
 } from '../shared/routes'
 import { isThemePreference } from '../shared/theme'
+import { isPanelSide, isPanelSize } from '../shared/panel'
 import { expandUrl } from '../shared/urls'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
@@ -445,6 +446,39 @@ function expectThemeSetting(raw: unknown): ParamsOk<'app.setTheme'> | ParamsBad 
   return { ok: true, params: { preference } }
 }
 
+const PANEL_SHAPE =
+  'this route takes { side, visible, size }, at least one: side is bottom or right, visible is true or false, size is pixels'
+
+function expectPanelSetting(raw: unknown): ParamsOk<'app.setPanel'> | ParamsBad {
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: PANEL_SHAPE }
+  const unknown = unknownFields(setting, ['side', 'visible', 'size'])
+  if (unknown.length > 0) return { ok: false, message: `${PANEL_SHAPE}, not ${unknown.join(', ')}` }
+
+  const { side, visible, size } = setting
+  if (side === undefined && visible === undefined && size === undefined) {
+    return { ok: false, message: PANEL_SHAPE }
+  }
+  if (side !== undefined && !isPanelSide(side)) {
+    return { ok: false, message: 'side must be bottom or right' }
+  }
+  if (visible !== undefined && typeof visible !== 'boolean') {
+    return { ok: false, message: 'visible must be true or false' }
+  }
+  // A size smaller than the tab bar is clamped by the service, not refused here.
+  if (size !== undefined && !isPanelSize(size)) {
+    return { ok: false, message: 'size must be a positive number of pixels' }
+  }
+  return {
+    ok: true,
+    params: {
+      ...(side !== undefined && { side }),
+      ...(visible !== undefined && { visible }),
+      ...(size !== undefined && { size })
+    }
+  }
+}
+
 function expectSwitcherSetting(raw: unknown): ParamsOk<'app.setSwitcher'> | ParamsBad {
   const shape = 'this route takes { open }: whether the project switcher is showing'
   const setting = asParams(raw)
@@ -503,6 +537,10 @@ export function createRouteTable(services: Services): RouteTable {
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })
+    },
+    'app.setPanel': {
+      parseParams: expectPanelSetting,
+      handle: async (setting) => ({ payload: await services.app.setPanel(setting) })
     },
     'app.setSwitcher': {
       parseParams: expectSwitcherSetting,

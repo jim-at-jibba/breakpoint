@@ -1,3 +1,4 @@
+import { DEFAULT_PANEL } from '../../shared/panel'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
@@ -133,7 +134,10 @@ describe('the app theme', () => {
   })
 
   it('restores the override from the last run rather than the OS', async () => {
-    const { app, host } = harness({ status: 'loaded', settings: { theme: 'dark' } })
+    const { app, host } = harness({
+      status: 'loaded',
+      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+    })
     host.system = 'light'
 
     await app.load()
@@ -142,7 +146,10 @@ describe('the app theme', () => {
   })
 
   it('announces nothing at load: the snapshot every surface fetches already carries it', async () => {
-    const { app, patches } = harness({ status: 'loaded', settings: { theme: 'light' } })
+    const { app, patches } = harness({
+      status: 'loaded',
+      settings: { theme: 'light', panel: DEFAULT_PANEL }
+    })
 
     await app.load()
 
@@ -159,7 +166,7 @@ describe('the app theme', () => {
       active: 'light'
     })
 
-    expect(store.saved).toEqual([{ theme: 'light' }])
+    expect(store.saved).toEqual([{ theme: 'light', panel: DEFAULT_PANEL }])
     expect(patches).toEqual([
       {
         revision: 1,
@@ -218,7 +225,10 @@ describe('the app theme', () => {
   })
 
   it('keeps the override while announcing the OS change for system panes', async () => {
-    const { app, host, patches } = harness({ status: 'loaded', settings: { theme: 'dark' } })
+    const { app, host, patches } = harness({
+      status: 'loaded',
+      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+    })
     await app.load()
 
     host.setSystem('light')
@@ -281,6 +291,93 @@ describe('the app theme', () => {
 
     expect(patches).toEqual([])
     expect(app.theme()).toEqual({ preference: 'system', system: 'dark', active: 'dark' })
+  })
+})
+
+/**
+ * The panel's arrangement: an app setting beside the theme, so it survives a restart and
+ * does not belong to whichever project is open (#73).
+ */
+describe('the panel', () => {
+  it('starts at the default arrangement when nothing is stored', async () => {
+    const { app } = harness()
+    await app.load()
+
+    expect(app.panel()).toEqual(DEFAULT_PANEL)
+  })
+
+  it('restores the arrangement from the last run', async () => {
+    const panel = { side: 'right', visible: false, sizes: { bottom: 200, right: 512 } } as const
+    const { app } = harness({ status: 'loaded', settings: { theme: 'dark', panel } })
+
+    await app.load()
+
+    expect(app.panel()).toEqual(panel)
+  })
+
+  it('keeps a change with the theme, announces it, and answers with what it now is', async () => {
+    const { app, store, patches } = harness({
+      status: 'loaded',
+      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+    })
+    await app.load()
+
+    const answered = await app.setPanel({ side: 'right', size: 500 })
+
+    const expected = { side: 'right', visible: true, sizes: { bottom: 278, right: 500 } }
+    expect(answered).toEqual(expected)
+    expect(store.saved).toEqual([{ theme: 'dark', panel: expected }])
+    expect(patches.map(({ patch }) => patch)).toEqual([{ type: 'app.panel', panel: expected }])
+  })
+
+  it('keeps the panel when the theme is saved after it', async () => {
+    const { app, store } = harness()
+    await app.load()
+
+    await app.setPanel({ visible: false })
+    await app.setTheme('light')
+
+    expect(store.saved.at(-1)).toEqual({
+      theme: 'light',
+      panel: { ...DEFAULT_PANEL, visible: false }
+    })
+  })
+
+  it('says nothing and saves nothing when nothing moved', async () => {
+    const { app, store, patches } = harness()
+    await app.load()
+
+    await app.setPanel({ side: 'bottom', size: DEFAULT_PANEL.sizes.bottom })
+
+    expect(store.saved).toEqual([])
+    expect(patches).toEqual([])
+  })
+
+  it('refuses to arrange the panel over a settings file it could not read', async () => {
+    const { app, store, patches } = harness({
+      status: 'refused',
+      reason: 'corrupt',
+      message: 'the file is not JSON'
+    })
+    await app.load()
+
+    await expect(app.setPanel({ visible: false })).rejects.toMatchObject({
+      code: 'SETTINGS_UNREADABLE'
+    })
+    expect(store.saved).toEqual([])
+    expect(patches).toEqual([])
+    expect(app.panel()).toEqual(DEFAULT_PANEL)
+  })
+
+  it('does not announce an arrangement it could not keep', async () => {
+    const { app, store, patches } = harness()
+    await app.load()
+    store.save = (): Promise<void> => Promise.reject(new Error('disk full'))
+
+    await expect(app.setPanel({ size: 400 })).rejects.toThrow('disk full')
+
+    expect(patches).toEqual([])
+    expect(app.panel()).toEqual(DEFAULT_PANEL)
   })
 })
 

@@ -20,6 +20,7 @@ import type { LayoutSetting, LayoutState, Navigation, Surface } from '../../shar
 import { isOriginAllowed, normaliseOrigins, sameOrigins } from '../../shared/urls'
 import type { StateSnapshot, SwitcherState } from '../../shared/state'
 import type { ThemeState } from '../../shared/theme'
+import type { PanelState } from '../../shared/panel'
 import type { PaneCreation } from '../../shared/routes'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
@@ -48,14 +49,15 @@ export interface SnapshotCertificates {
 }
 
 /**
- * What the snapshot needs from the app itself: the theme, and whether the project
- * switcher is showing. Both are the app's and not a project's — the theme survives a
- * project closing and the switcher is how the next one is opened — so this service does
- * not own either. It only has to put them in the one snapshot every surface renders from.
+ * What the snapshot needs from the app itself: the theme, whether the project switcher
+ * is showing, and how the panel is arranged. All three are the app's and not a
+ * project's — the theme survives a project closing, the switcher is how the next one is
+ * opened, and the panel is how the developer works — so this service owns none of them. It only has to put them in the one snapshot every surface renders from.
  */
 export interface SnapshotApp {
   theme(): ThemeState
   switcher(): SwitcherState
+  panel(): PanelState
 }
 export class ProjectService {
   private current: Project | null = null
@@ -392,7 +394,8 @@ export class ProjectService {
       panes: this.panes.statuses(),
       certificates: this.certificates.list(),
       theme: this.appState.theme(),
-      switcher: this.appState.switcher()
+      switcher: this.appState.switcher(),
+      panel: this.appState.panel()
     }
   }
 }

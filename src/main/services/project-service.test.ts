@@ -1,3 +1,4 @@
+import { DEFAULT_PANEL } from '../../shared/panel'
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -60,7 +61,8 @@ beforeEach(async () => {
     { list: () => ({ trusted: [], waiting: [] }) },
     {
       theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }),
-      switcher: () => ({ open: false })
+      switcher: () => ({ open: false }),
+      panel: () => DEFAULT_PANEL
     }
   )
 })
@@ -152,7 +154,8 @@ describe('async project opens', () => {
       panes: {},
       certificates: { trusted: [], waiting: [] },
       theme: { preference: 'system', system: 'dark', active: 'dark' },
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL
     })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
@@ -183,7 +186,8 @@ describe('async project opens', () => {
       panes: before.panes,
       certificates: before.certificates,
       theme: before.theme,
-      switcher: before.switcher
+      switcher: before.switcher,
+      panel: before.panel
     })
     expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, shop])
   })

@@ -1,3 +1,4 @@
+import { DEFAULT_PANEL } from './panel'
 import { describe, expect, it } from 'vitest'
 import { foldPaneStatus, initialPaneStatus, type PaneStatus } from './panes'
 import { createProject } from './project'
@@ -18,7 +19,8 @@ const nothingOpen: StateSnapshot = {
   panes: {},
   certificates: { trusted: [], waiting: [] },
   theme: DARK,
-  switcher: { open: false }
+  switcher: { open: false },
+  panel: DEFAULT_PANEL
 }
 
 describe('applying a patch', () => {
@@ -39,7 +41,8 @@ describe('applying a patch', () => {
       // Certificate trust is the app's, not a project's: opening one leaves it alone.
       certificates: nothingOpen.certificates,
       theme: nothingOpen.theme,
-      switcher: nothingOpen.switcher
+      switcher: nothingOpen.switcher,
+      panel: nothingOpen.panel
     })
   })
 
@@ -284,7 +287,8 @@ describe('snapshotReadiness', () => {
       panes,
       certificates: nothingOpen.certificates,
       theme: nothingOpen.theme,
-      switcher: nothingOpen.switcher
+      switcher: nothingOpen.switcher,
+      panel: nothingOpen.panel
     }
   }
 
@@ -360,7 +364,8 @@ describe('snapshotReadiness', () => {
       panes: {},
       certificates: nothingOpen.certificates,
       theme: nothingOpen.theme,
-      switcher: nothingOpen.switcher
+      switcher: nothingOpen.switcher,
+      panel: nothingOpen.panel
     }
     expect(snapshotReadiness(empty)).toEqual({ ready: true })
   })
@@ -526,5 +531,15 @@ describe('the project switcher in the snapshot', () => {
 
     expect(closed.switcher).toEqual({ open: false })
     expect(opened.switcher).toEqual({ open: false })
+  })
+})
+
+describe('the panel in the snapshot', () => {
+  // The panel's arrangement is the app's: a project closing or opening never moves it.
+  it('lands whether or not a project is open', () => {
+    const panel = { ...nothingOpen.panel, side: 'right' as const }
+    const next = applyPatch(nothingOpen, { revision: 1, patch: { type: 'app.panel', panel } })
+
+    expect(next).toEqual({ ...nothingOpen, revision: 1, panel })
   })
 })

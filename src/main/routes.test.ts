@@ -303,6 +303,64 @@ describe('app.setTheme', () => {
   })
 })
 
+describe('app.setPanel', () => {
+  interface PanelDispatcher {
+    dispatch: Dispatch
+    setPanel: ReturnType<typeof vi.fn>
+  }
+
+  function panelDispatcher(): PanelDispatcher {
+    const setPanel = vi
+      .fn()
+      .mockResolvedValue({ side: 'bottom', visible: true, sizes: { bottom: 278, right: 460 } })
+    return {
+      dispatch: createDispatch(createRouteTable({ app: { setPanel } } as unknown as Services)),
+      setPanel
+    }
+  }
+
+  it.each([
+    { side: 'right' },
+    { visible: false },
+    { size: 320 },
+    { size: 4 },
+    { side: 'bottom', visible: true, size: 278.5 }
+  ])('hands %j to the service as it came', async (params) => {
+    const { dispatch, setPanel } = panelDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setPanel', params },
+      { surface: 'cli' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(setPanel).toHaveBeenCalledWith(params)
+  })
+
+  it.each([
+    undefined,
+    {},
+    { side: 'left' },
+    { side: 'top' },
+    { visible: 'no' },
+    { size: 0 },
+    { size: -10 },
+    { size: '300px' },
+    { size: Number.NaN },
+    { side: 'right', tab: 'console' }
+  ])('refuses %j without reaching the service', async (params) => {
+    const { dispatch, setPanel } = panelDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setPanel', params },
+      { surface: 'window' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(setPanel).not.toHaveBeenCalled()
+  })
+})
+
 describe('app.setSwitcher', () => {
   interface SwitcherDispatcher {
     dispatch: Dispatch

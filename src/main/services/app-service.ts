@@ -7,6 +7,13 @@ import {
   type ThemeState
 } from '../../shared/theme'
 import type { SwitcherState } from '../../shared/state'
+import {
+  applyPanelSetting,
+  DEFAULT_PANEL,
+  samePanel,
+  type PanelSetting,
+  type PanelState
+} from '../../shared/panel'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
@@ -40,6 +47,11 @@ export class AppService {
    */
   private switcherOpen = false
   private preference: ThemePreference = DEFAULT_THEME_PREFERENCE
+  /**
+   * The panel's arrangement. Stored with the theme, because it is the developer's way of
+   * working rather than any repo's: opening another project never moves it.
+   */
+  private panelState: PanelState = DEFAULT_PANEL
   private system: AppTheme = 'dark'
   /** What the feed has been told, so an OS event that changes nothing announces nothing. */
   private announced: ThemeState | undefined
@@ -117,6 +129,7 @@ export class AppService {
       this.unreadable = `${this.store.file}: ${loaded.message}`
     } else if (loaded.status === 'loaded') {
       this.preference = loaded.settings.theme
+      this.panelState = loaded.settings.panel
     }
     this.system = this.host.systemTheme()
     this.announced = this.theme()
@@ -141,11 +154,37 @@ export class AppService {
       this.requireReadable()
       if (preference !== this.preference) {
         // Saved first: a choice that could not be kept is not one the developer made.
-        await this.store.save({ theme: preference })
+        await this.store.save({ theme: preference, panel: this.panelState })
         this.preference = preference
       }
       this.announce()
       return this.theme()
+    })
+  }
+
+  /** The panel's arrangement; what the snapshot carries. */
+  panel(): PanelState {
+    return this.panelState
+  }
+
+  /**
+   * Docks, sizes, shows or hides the panel. Kept with the app's settings, so a resize
+   * survives a restart, and queued behind the theme so the two never save over each
+   * other. Silent when nothing moved: a drag released where it started is not a patch.
+   *
+   * Refused, like the theme, when the settings file is one this build will not read:
+   * saving the panel would write over the rest of it.
+   */
+  setPanel(setting: PanelSetting): Promise<PanelState> {
+    return this.enqueue(async () => {
+      this.requireReadable()
+      const next = applyPanelSetting(this.panelState, setting)
+      if (!samePanel(next, this.panelState)) {
+        await this.store.save({ theme: this.preference, panel: next })
+        this.panelState = next
+        this.feed.publish({ type: 'app.panel', panel: next })
+      }
+      return this.panelState
     })
   }
 

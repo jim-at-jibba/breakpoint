@@ -42,6 +42,11 @@
   --bp-zoom-label-w: 30px;    /* wide enough for 100%, so it never reflows  */
   --bp-toolbar-h: 44px;
   --bp-tabbar-h: 30px;
+  /* The panel: what it is before anyone resizes it, docked below and docked beside.
+     A setting, so src/shared/panel.ts mirrors both; it is never smaller than its tab bar. */
+  --bp-panel-h: 278px;
+  --bp-panel-w: 460px;
+  --bp-canvas-min: 120px;     /* the least the panel leaves the canvas        */
 
   /* ---- control widths --------------------------------------------------- */
   --bp-menu-w: 240px;         /* a popover list: presets, and menus like it */

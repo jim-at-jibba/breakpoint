@@ -1,4 +1,5 @@
 import type { CertificateState } from './certificates'
+import type { PanelState } from './panel'
 import { reconcilePaneStatuses, whyPaneIsNotReady, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
 import type { ThemeState } from './theme'
@@ -60,6 +61,12 @@ export interface StateSnapshot {
    * theme: the switcher is the way in with nothing open, so it outlives every project.
    */
   switcher: SwitcherState
+  /**
+   * The panel's arrangement: which side it docks to, its size on each side, and whether
+   * it is showing. The app's and not a project's, like the theme, so opening another
+   * repo leaves it where it was.
+   */
+  panel: PanelState
 }
 
 export type StatePatch =
@@ -100,6 +107,8 @@ export type StatePatch =
    * the shortcut down is not a patch per repeat.
    */
   | { type: 'app.switcher'; switcher: SwitcherState }
+  /** The panel's arrangement after a change, whichever surface made it. */
+  | { type: 'app.panel'; panel: PanelState }
 
 export interface RevisionedPatch {
   revision: number
@@ -184,6 +193,9 @@ export function applyPatch(
     // given something to open, so this one also lands whatever the project is.
     case 'app.switcher':
       return { ...before, revision, switcher: patch.switcher }
+    // How the window is divided is the app's, so this one lands whatever is open too.
+    case 'app.panel':
+      return { ...before, revision, panel: patch.panel }
   }
 }
 

@@ -1,3 +1,4 @@
+import { DEFAULT_PANEL } from '../../../shared/panel'
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { failure, success, type RouteResponse } from '../../../shared/protocol'
 import { createProject } from '../../../shared/project'
@@ -16,7 +17,8 @@ const snapshot: StateSnapshot = {
   panes: paneStatusesFor(shop, {}),
   certificates: { trusted: [], waiting: [] },
   theme: DARK,
-  switcher: { open: false }
+  switcher: { open: false },
+  panel: DEFAULT_PANEL
 }
 
 interface SnapshotHarness {
@@ -90,7 +92,8 @@ describe('snapshot recovery', () => {
           panes: paneStatusesFor(shop, {}),
           certificates: snapshot.certificates,
           theme: snapshot.theme,
-          switcher: snapshot.switcher
+          switcher: snapshot.switcher,
+          panel: snapshot.panel
         }
       })
       reader.close()
@@ -202,7 +205,8 @@ describe('snapshot recovery', () => {
       panes: paneStatusesFor(store, {}),
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL
     }
     h.fetchSnapshot.mockResolvedValueOnce(success('test', switched))
     reader.retry()
