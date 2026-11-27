@@ -15,6 +15,7 @@ import {
   type PanelSetting,
   type PanelState
 } from '../../../shared/panel'
+import type { ConsoleDisplay } from '../../../shared/console-floor'
 import type { Pane } from '../../../shared/project'
 
 /**
@@ -42,9 +43,12 @@ type TabId = (typeof TABS)[number]['id']
 export function CanvasWithPanel({
   panel,
   panes,
+  console: display,
   children
 }: {
   panel: PanelState
+  /** The Console's display floor and preserve-log, from the snapshot. */
+  console: ConsoleDisplay
   /** The open project's panes, in order: a console row's badge takes its pane's colour. */
   panes: readonly Pane[]
   children: ReactNode
@@ -134,7 +138,7 @@ export function CanvasWithPanel({
               className="flex min-h-0 flex-1 flex-col"
               data-testid="panel-body"
             >
-              {tab === 'console' && <ConsoleView panes={panes} />}
+              {tab === 'console' && <ConsoleView panes={panes} display={display} />}
             </div>
           </ResizablePanel>
         </>

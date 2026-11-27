@@ -1,4 +1,5 @@
 import { DEFAULT_PANEL } from '../../shared/panel'
+import { DEFAULT_CONSOLE_DISPLAY } from '../../shared/console-floor'
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -30,6 +31,8 @@ let service: ProjectService
 let panes: PaneService
 let log: EventLog
 let patches: RevisionedPatch[]
+/** The log positions the app was told the project navigated at, for the Console's floor. */
+let navigations: number[]
 
 beforeEach(async () => {
   root = await realpath(await mkdtemp(join(tmpdir(), 'bp-project-test-')))
@@ -43,6 +46,7 @@ beforeEach(async () => {
     patches.push(patch)
   })
   log = new EventLog()
+  navigations = []
   const presets = new PresetService(new PresetStore(join(root, 'presets.json')))
   panes = new PaneService(feed, log, {
     updatePane: (pane, changes) => service.updatePane(pane, changes),
@@ -62,7 +66,9 @@ beforeEach(async () => {
     {
       theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }),
       switcher: () => ({ open: false }),
-      panel: () => DEFAULT_PANEL
+      panel: () => DEFAULT_PANEL,
+      console: () => DEFAULT_CONSOLE_DISPLAY,
+      navigated: (position) => navigations.push(position)
     }
   )
 })
@@ -155,7 +161,8 @@ describe('async project opens', () => {
       certificates: { trusted: [], waiting: [] },
       theme: { preference: 'system', system: 'dark', active: 'dark' },
       switcher: { open: false },
-      panel: DEFAULT_PANEL
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     })
     expect(patches).toEqual([])
     expect(store.save).toHaveBeenCalledTimes(1)
@@ -187,7 +194,8 @@ describe('async project opens', () => {
       certificates: before.certificates,
       theme: before.theme,
       switcher: before.switcher,
-      panel: before.panel
+      panel: before.panel,
+      console: before.console
     })
     expect(patches.map((patch: RevisionedPatch) => openedRepo(patch))).toEqual([shop, shop])
   })
@@ -327,6 +335,30 @@ describe('navigation', () => {
         url: 'http://localhost:3000/checkout'
       })
     ])
+  })
+
+  // The app moves the Console's floor there when the log is not preserved ([ADR-0022]).
+  it('tells the app where in the log each navigation was recorded', async () => {
+    await service.open(shop)
+
+    await service.navigate('http://localhost:3000/a', 'window')
+    await service.navigate('http://localhost:3000/b', 'cli')
+
+    const recorded = log
+      .read()
+      .entries.filter((entry) => entry.type === 'project.navigated')
+      .map((entry) => entry.cursor)
+    expect(navigations).toEqual(recorded)
+    expect(recorded).toHaveLength(2)
+  })
+
+  it('does not tell the app of a navigation it refused', async () => {
+    await service.open(shop)
+
+    await expect(service.navigate('https://elsewhere.example/', 'cli')).rejects.toMatchObject({
+      code: 'ORIGIN_NOT_ALLOWED'
+    })
+    expect(navigations).toEqual([])
   })
 
   it('announces a navigation to the URL it already holds, because a pane may have wandered', async () => {

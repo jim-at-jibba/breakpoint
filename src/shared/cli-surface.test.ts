@@ -1,4 +1,5 @@
 import { DEFAULT_PANEL } from './panel'
+import { DEFAULT_CONSOLE_DISPLAY } from './console-floor'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { ROUTE_NAMES } from './routes'
 import {
@@ -692,7 +693,8 @@ describe('the state as a terminal reads it', () => {
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
       switcher: { open: false },
-      panel: DEFAULT_PANEL
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -713,7 +715,8 @@ describe('the state as a terminal reads it', () => {
           certificates: { trusted: [], waiting: [] },
           theme: DARK,
           switcher: { open: false },
-          panel: DEFAULT_PANEL
+          panel: DEFAULT_PANEL,
+          console: DEFAULT_CONSOLE_DISPLAY
         }) ?? ''
       ).split('\n')
 
@@ -734,7 +737,8 @@ describe('the state as a terminal reads it', () => {
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
       switcher: { open: false },
-      panel: DEFAULT_PANEL
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -756,7 +760,8 @@ describe('the state as a terminal reads it', () => {
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
       switcher: { open: false },
-      panel: DEFAULT_PANEL
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -923,7 +928,8 @@ describe('certificate trust on the terminal', () => {
         certificates: { trusted: [trusted], waiting: [waiting] },
         theme: DARK,
         switcher: { open: false },
-        panel: DEFAULT_PANEL
+        panel: DEFAULT_PANEL,
+        console: DEFAULT_CONSOLE_DISPLAY
       }
       expect((state?.render(snapshot) ?? '').split('\n')).toContain(
         'Certificates: 1 trusted, 1 waiting'
@@ -940,7 +946,8 @@ describe('certificate trust on the terminal', () => {
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
       switcher: { open: false },
-      panel: DEFAULT_PANEL
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
     expect(state?.render(snapshot)).toBe(
       'No project is open. Run `breakpoint .` in a repo, or `breakpoint open <url>`.\nCursor 9'

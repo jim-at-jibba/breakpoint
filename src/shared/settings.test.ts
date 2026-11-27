@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_CONSOLE_SETTINGS } from './console-floor'
 import { DEFAULT_PANEL, type PanelState } from './panel'
 import {
   DEFAULT_SETTINGS,
@@ -10,10 +11,18 @@ import {
 describe('reading the settings file', () => {
   it('round-trips what was written', () => {
     const panel: PanelState = { side: 'right', visible: false, sizes: { bottom: 200, right: 512 } }
-    const written = writeSettingsFile({ theme: 'light', panel })
+    const written = writeSettingsFile({ theme: 'light', panel, console: DEFAULT_CONSOLE_SETTINGS })
 
-    expect(written).toEqual({ version: SETTINGS_FILE_VERSION, theme: 'light', panel })
-    expect(readSettingsFile(written)).toEqual({ ok: true, settings: { theme: 'light', panel } })
+    expect(written).toEqual({
+      version: SETTINGS_FILE_VERSION,
+      theme: 'light',
+      panel,
+      console: DEFAULT_CONSOLE_SETTINGS
+    })
+    expect(readSettingsFile(written)).toEqual({
+      ok: true,
+      settings: { theme: 'light', panel, console: DEFAULT_CONSOLE_SETTINGS }
+    })
   })
 
   it('defaults a setting the file does not mention', () => {
@@ -30,7 +39,10 @@ describe('reading the settings file', () => {
       density: 'roomy'
     })
 
-    expect(read).toEqual({ ok: true, settings: { theme: 'dark', panel: DEFAULT_PANEL } })
+    expect(read).toEqual({
+      ok: true,
+      settings: { theme: 'dark', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
+    })
   })
 
   it('refuses a file written by a newer Breakpoint rather than reading past it', () => {
@@ -63,7 +75,7 @@ describe('the panel in the settings file', () => {
   it('reads a file from before the panel was a setting as the default arrangement', () => {
     expect(readSettingsFile({ version: SETTINGS_FILE_VERSION, theme: 'dark' })).toEqual({
       ok: true,
-      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+      settings: { theme: 'dark', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
     })
   })
 
@@ -74,8 +86,33 @@ describe('the panel in the settings file', () => {
       ok: true,
       settings: {
         theme: DEFAULT_SETTINGS.theme,
-        panel: { ...DEFAULT_PANEL, sizes: { ...DEFAULT_PANEL.sizes, right: 600 } }
+        panel: { ...DEFAULT_PANEL, sizes: { ...DEFAULT_PANEL.sizes, right: 600 } },
+        console: DEFAULT_CONSOLE_SETTINGS
       }
+    })
+  })
+})
+
+describe('the console in the settings file', () => {
+  it('keeps preserve-log through a write and a read', () => {
+    const settings = { ...DEFAULT_SETTINGS, console: { preserveLog: false } }
+    expect(readSettingsFile(writeSettingsFile(settings))).toEqual({ ok: true, settings })
+  })
+
+  it('preserves the log when the file is from before the console', () => {
+    expect(readSettingsFile({ version: SETTINGS_FILE_VERSION, theme: 'dark' })).toMatchObject({
+      ok: true,
+      settings: { console: { preserveLog: true } }
+    })
+  })
+
+  it('refuses a preserve-log that is not true or false', () => {
+    expect(
+      readSettingsFile({ version: SETTINGS_FILE_VERSION, console: { preserveLog: 'yes' } })
+    ).toEqual({
+      ok: false,
+      reason: 'corrupt',
+      message: 'console.preserveLog must be true or false'
     })
   })
 })

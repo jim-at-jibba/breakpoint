@@ -1,3 +1,8 @@
+import {
+  DEFAULT_CONSOLE_SETTINGS,
+  readConsoleSettings,
+  type ConsoleSettings
+} from './console-floor'
 import { DEFAULT_PANEL, readPanel, type PanelState } from './panel'
 import type { RefusalReason } from './project'
 import { DEFAULT_THEME_PREFERENCE, isThemePreference, type ThemePreference } from './theme'
@@ -5,7 +10,7 @@ import { DEFAULT_THEME_PREFERENCE, isThemePreference, type ThemePreference } fro
 /**
  * App settings: the choices that belong to the developer and this machine rather than to
  * any project. The app theme is the first of them ([#18]) and the panel's arrangement
- * the second ([#73]); density, the canvas grid and the rest of PRD 8.2's Appearance panel
+ * the second ([#73]), the Console's preserve-log the third ([#77]); density, the canvas grid and the rest of PRD 8.2's Appearance panel
  * join them here.
  *
  * A setting the file does not mention takes its default, so a file written by an older
@@ -29,6 +34,12 @@ export interface AppSettings {
    * not a property of a repo: switching repos never rearranges the window.
    */
   panel: PanelState
+  /**
+   * Whether the Console keeps its entries when the project navigates ([ADR-0022]). How a
+   * developer reads, not a property of a repo, so it is the app's like the panel. The
+   * display floor itself is not stored: the log it points into does not outlive a run.
+   */
+  console: ConsoleSettings
 }
 
 export interface SettingsFile extends AppSettings {
@@ -37,14 +48,20 @@ export interface SettingsFile extends AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: DEFAULT_THEME_PREFERENCE,
-  panel: DEFAULT_PANEL
+  panel: DEFAULT_PANEL,
+  console: DEFAULT_CONSOLE_SETTINGS
 }
 
 export type ReadSettingsResult =
   { ok: true; settings: AppSettings } | { ok: false; reason: RefusalReason; message: string }
 
 export function writeSettingsFile(settings: AppSettings): SettingsFile {
-  return { version: SETTINGS_FILE_VERSION, theme: settings.theme, panel: settings.panel }
+  return {
+    version: SETTINGS_FILE_VERSION,
+    theme: settings.theme,
+    panel: settings.panel,
+    console: settings.console
+  }
 }
 
 export function readSettingsFile(raw: unknown): ReadSettingsResult {
@@ -67,11 +84,14 @@ export function readSettingsFile(raw: unknown): ReadSettingsResult {
   }
   const panel = readPanel(file.panel)
   if (!panel.ok) return corrupt(panel.message)
+  const consoleSettings = readConsoleSettings(file.console)
+  if (!consoleSettings.ok) return corrupt(consoleSettings.message)
   return {
     ok: true,
     settings: {
       theme: isThemePreference(file.theme) ? file.theme : DEFAULT_SETTINGS.theme,
-      panel: panel.panel
+      panel: panel.panel,
+      console: consoleSettings.console
     }
   }
 }

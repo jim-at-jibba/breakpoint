@@ -1,4 +1,5 @@
 import { DEFAULT_PANEL } from '../../shared/panel'
+import { DEFAULT_CONSOLE_DISPLAY } from '../../shared/console-floor'
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -78,7 +79,9 @@ beforeEach(async () => {
     {
       theme: () => ({ preference: 'system', system: 'dark', active: 'dark' }),
       switcher: () => ({ open: false }),
-      panel: () => DEFAULT_PANEL
+      panel: () => DEFAULT_PANEL,
+      console: () => DEFAULT_CONSOLE_DISPLAY,
+      navigated: () => {}
     }
   )
 })

@@ -198,7 +198,11 @@ export default function App(): React.JSX.Element {
       )}
       {/* The panel is the app's, like the theme: it is docked whether or not anything is
           open, and opening another project never moves it. */}
-      <CanvasWithPanel panel={snapshot.panel} panes={project?.panes ?? NO_PANES}>
+      <CanvasWithPanel
+        panel={snapshot.panel}
+        console={snapshot.console}
+        panes={project?.panes ?? NO_PANES}
+      >
         {project ? (
           <Canvas
             project={project}

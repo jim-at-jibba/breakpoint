@@ -491,6 +491,19 @@ function expectSwitcherSetting(raw: unknown): ParamsOk<'app.setSwitcher'> | Para
   return { ok: true, params: { open } }
 }
 
+function expectPreserveLogSetting(raw: unknown): ParamsOk<'app.setPreserveLog'> | ParamsBad {
+  const shape =
+    'this route takes { preserveLog }: whether the Console keeps its entries across navigation'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, ['preserveLog'])
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { preserveLog } = setting
+  if (typeof preserveLog !== 'boolean') return { ok: false, message: shape }
+  return { ok: true, params: { preserveLog } }
+}
+
 function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
   const shape = 'this route takes { zoom }: a number of percent, or "fit"'
   const setting = asParams(raw)
@@ -530,6 +543,12 @@ export interface Services {
 
 export function createRouteTable(services: Services): RouteTable {
   return {
+    // The floor is the log's last position as this call sees it: everything the log
+    // holds now is what the developer has seen and cleared.
+    'app.clearConsole': {
+      parseParams: expectNoParams,
+      handle: () => ({ payload: services.app.clearConsole(services.log.cursor) })
+    },
     'app.focus': {
       parseParams: expectNoParams,
       handle: () => ({ payload: services.app.focus() })
@@ -541,6 +560,12 @@ export function createRouteTable(services: Services): RouteTable {
     'app.setPanel': {
       parseParams: expectPanelSetting,
       handle: async (setting) => ({ payload: await services.app.setPanel(setting) })
+    },
+    'app.setPreserveLog': {
+      parseParams: expectPreserveLogSetting,
+      handle: async ({ preserveLog }) => ({
+        payload: await services.app.setPreserveLog(preserveLog)
+      })
     },
     'app.setSwitcher': {
       parseParams: expectSwitcherSetting,

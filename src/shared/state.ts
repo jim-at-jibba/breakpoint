@@ -1,4 +1,5 @@
 import type { CertificateState } from './certificates'
+import type { ConsoleDisplay } from './console-floor'
 import type { PanelState } from './panel'
 import { reconcilePaneStatuses, whyPaneIsNotReady, type PaneStatus } from './panes'
 import type { Layout, Pane, Project, Zoom } from './project'
@@ -67,6 +68,12 @@ export interface StateSnapshot {
    * repo leaves it where it was.
    */
   panel: PanelState
+  /**
+   * The Console's display floor and whether the log is preserved across navigation
+   * ([ADR-0022]). Here so a reloaded window restores what it had cleared; the window's
+   * own view, never a filter any read applies, so a script can ignore it.
+   */
+  console: ConsoleDisplay
 }
 
 export type StatePatch =
@@ -109,6 +116,8 @@ export type StatePatch =
   | { type: 'app.switcher'; switcher: SwitcherState }
   /** The panel's arrangement after a change, whichever surface made it. */
   | { type: 'app.panel'; panel: PanelState }
+  /** The Console's floor or preserve-log after a Clear, a navigation or a change of setting. */
+  | { type: 'app.console'; console: ConsoleDisplay }
 
 export interface RevisionedPatch {
   revision: number
@@ -196,6 +205,9 @@ export function applyPatch(
     // How the window is divided is the app's, so this one lands whatever is open too.
     case 'app.panel':
       return { ...before, revision, panel: patch.panel }
+    // The floor is the window's, not the project's: it lands whatever is open.
+    case 'app.console':
+      return { ...before, revision, console: patch.console }
   }
 }
 

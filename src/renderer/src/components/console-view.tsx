@@ -1,6 +1,9 @@
+import { Button } from '@renderer/components/ui/button'
 import { useConsole } from '@renderer/hooks/use-console'
 import { useVirtualizer } from '@tanstack/react-virtual'
+import { BanIcon } from 'lucide-react'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { aboveFloor, type ConsoleDisplay } from '../../../shared/console-floor'
 import {
   anchorAt,
   collapseConsole,
@@ -29,6 +32,7 @@ import {
 import { CONSOLE_LEVELS, type ConsoleLevel } from '../../../shared/event-log'
 import { paneColorVar } from '../../../shared/pane-palette'
 import type { Pane } from '../../../shared/project'
+import type { RouteParams } from '../../../shared/routes'
 
 /** Rows drawn beyond each edge of the viewport, so a fast scroll is never blank. */
 const OVERSCAN = 20
@@ -47,13 +51,29 @@ const OVERSCAN = 20
  *
  * Filtered by pane, level and text, before collapsing, so a row carries only the badges
  * of panes still in view. A filter changes what this window draws and nothing else.
+ *
+ * Clear sets the display floor ([ADR-0022]): entries at or below it are not drawn, and the
+ * log, every other reader of it and every pane's error count are untouched. The floor is
+ * the snapshot's, so a reloaded window draws from where it was cleared.
  */
-export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.Element {
+export function ConsoleView({
+  panes,
+  display
+}: {
+  panes: readonly Pane[]
+  /** The display floor and preserve-log, as the snapshot carries them. */
+  display: ConsoleDisplay
+}): React.JSX.Element {
   const { history, ...state } = useConsole()
-  const entries = history.entries
+  const entries = useMemo(
+    () => aboveFloor(history.entries, display.floor),
+    [history.entries, display.floor]
+  )
   const lookup = useMemo(() => consolePanes(panes), [panes])
   /** This window's filter: what it shows, and nothing else ([#76]). */
   const [filter, setFilter] = useState<ConsoleFilter>(NO_CONSOLE_FILTER)
+  /** Why the last Clear or preserve-log change was refused, if it was. */
+  const [refused, setRefused] = useState<string | null>(null)
   const inView = useMemo(() => filterConsole(entries, filter), [entries, filter])
   const groups = useMemo(() => collapseConsole(inView), [inView])
   /** The cursors of the rows the reader expanded; a row is open while any entry of it is. */
@@ -92,6 +112,18 @@ export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.El
       : anchorAt(latest.current, element.scrollTop)
   }
 
+  async function call<N extends 'app.clearConsole' | 'app.setPreserveLog'>(
+    route: N,
+    params: RouteParams<N>
+  ): Promise<void> {
+    try {
+      const response = await window.breakpoint.invoke(route, params)
+      setRefused(response.ok ? null : response.error.message)
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   function toggle(group: ConsoleGroup): void {
     setExpanded((current) => {
       const next = new Set(current)
@@ -125,14 +157,21 @@ export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.El
           ))}
         </div>
       </div>
-      <ConsoleFilterBar panes={panes} filter={filter} onChange={setFilter} />
-      {state.status === 'error' && (
+      <ConsoleFilterBar
+        panes={panes}
+        filter={filter}
+        onChange={setFilter}
+        preserveLog={display.preserveLog}
+        onClear={() => void call('app.clearConsole', undefined)}
+        onPreserveLog={(preserveLog) => void call('app.setPreserveLog', { preserveLog })}
+      />
+      {(state.status === 'error' || refused !== null) && (
         <p
           role="alert"
           data-testid="console-error"
           className="flex-none truncate px-[var(--bp-space-3)] text-[length:var(--bp-text-sm)] text-[color:var(--bp-error)]"
         >
-          {state.message}
+          {refused ?? (state.status === 'error' ? state.message : null)}
         </p>
       )}
     </div>
@@ -331,11 +370,17 @@ const CHIP_OFF = 'border-[var(--bp-border)] bg-transparent text-[color:var(--bp-
 function ConsoleFilterBar({
   panes,
   filter,
-  onChange
+  onChange,
+  preserveLog,
+  onClear,
+  onPreserveLog
 }: {
   panes: readonly Pane[]
   filter: ConsoleFilter
   onChange: (filter: ConsoleFilter) => void
+  preserveLog: boolean
+  onClear: () => void
+  onPreserveLog: (preserveLog: boolean) => void
 }): React.JSX.Element {
   const paneIds = panes.map((pane) => pane.id)
   return (
@@ -344,6 +389,16 @@ function ConsoleFilterBar({
       data-testid="console-filters"
       data-filtering={isFiltering(filter)}
     >
+      <Button
+        size="icon-xs"
+        variant="ghost"
+        title="Clear console"
+        aria-label="Clear console"
+        data-testid="console-clear"
+        onClick={onClear}
+      >
+        <BanIcon />
+      </Button>
       <span className="flex-none text-[color:var(--bp-accent)]" aria-hidden>
         ›
       </span>
@@ -421,6 +476,20 @@ function ConsoleFilterBar({
           clear
         </button>
       )}
+      <span
+        className="h-[var(--bp-badge-h)] w-[var(--bp-stroke)] flex-none bg-[var(--bp-border)]"
+        aria-hidden
+      />
+      <button
+        type="button"
+        aria-pressed={preserveLog}
+        className={`${CHIP} ${preserveLog ? CHIP_ON : CHIP_OFF}`}
+        onClick={() => onPreserveLog(!preserveLog)}
+        title="Keep entries when the project navigates"
+        data-testid="console-preserve-log"
+      >
+        preserve log
+      </button>
     </div>
   )
 }

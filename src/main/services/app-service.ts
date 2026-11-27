@@ -14,6 +14,13 @@ import {
   type PanelSetting,
   type PanelState
 } from '../../shared/panel'
+import {
+  clearConsole,
+  DEFAULT_CONSOLE_DISPLAY,
+  navigatedConsole,
+  type ConsoleDisplay
+} from '../../shared/console-floor'
+import type { AppSettings } from '../../shared/settings'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
@@ -52,6 +59,13 @@ export class AppService {
    * working rather than any repo's: opening another project never moves it.
    */
   private panelState: PanelState = DEFAULT_PANEL
+  /**
+   * The Console's display floor and preserve-log ([ADR-0022]). The floor is held here for
+   * the life of the app, so a reloaded window restores what it cleared, and never stored:
+   * the log positions it names do not outlive the run. Preserve-log is stored with the
+   * theme, because it is how the developer reads rather than any repo's.
+   */
+  private consoleState: ConsoleDisplay = DEFAULT_CONSOLE_DISPLAY
   private system: AppTheme = 'dark'
   /** What the feed has been told, so an OS event that changes nothing announces nothing. */
   private announced: ThemeState | undefined
@@ -130,6 +144,7 @@ export class AppService {
     } else if (loaded.status === 'loaded') {
       this.preference = loaded.settings.theme
       this.panelState = loaded.settings.panel
+      this.consoleState = { ...this.consoleState, ...loaded.settings.console }
     }
     this.system = this.host.systemTheme()
     this.announced = this.theme()
@@ -154,7 +169,7 @@ export class AppService {
       this.requireReadable()
       if (preference !== this.preference) {
         // Saved first: a choice that could not be kept is not one the developer made.
-        await this.store.save({ theme: preference, panel: this.panelState })
+        await this.store.save({ ...this.settings(), theme: preference })
         this.preference = preference
       }
       this.announce()
@@ -180,12 +195,67 @@ export class AppService {
       this.requireReadable()
       const next = applyPanelSetting(this.panelState, setting)
       if (!samePanel(next, this.panelState)) {
-        await this.store.save({ theme: this.preference, panel: next })
+        await this.store.save({ ...this.settings(), panel: next })
         this.panelState = next
         this.feed.publish({ type: 'app.panel', panel: next })
       }
       return this.panelState
     })
+  }
+
+  /** The Console's floor and preserve-log; what the snapshot carries. */
+  console(): ConsoleDisplay {
+    return this.consoleState
+  }
+
+  /**
+   * Clear: hides everything up to `head`, the log's last position, from the window's
+   * Console ([ADR-0022]). The log is untouched, so `breakpoint logs --since 0` returns what
+   * it did before, and no pane's error count moves. Held in memory, not saved, so it needs
+   * no queue and is not refused over a settings file this build will not read.
+   */
+  clearConsole(head: number): ConsoleDisplay {
+    this.moveConsole(clearConsole(this.consoleState, head))
+    return this.consoleState
+  }
+
+  /**
+   * The project navigated, at `position` in the log. With the log preserved, the default,
+   * nothing happens; otherwise the floor moves there and nothing else does.
+   */
+  navigated(position: number): void {
+    this.moveConsole(navigatedConsole(this.consoleState, position))
+  }
+
+  /**
+   * Whether the Console keeps its entries when the project navigates. Kept with the app's
+   * settings, queued behind the theme and panel, and refused like them over a settings
+   * file this build will not read. Silent when it did not change.
+   */
+  setPreserveLog(preserveLog: boolean): Promise<ConsoleDisplay> {
+    return this.enqueue(async () => {
+      this.requireReadable()
+      if (preserveLog !== this.consoleState.preserveLog) {
+        await this.store.save({ ...this.settings(), console: { preserveLog } })
+        this.moveConsole({ ...this.consoleState, preserveLog })
+      }
+      return this.consoleState
+    })
+  }
+
+  private moveConsole(next: ConsoleDisplay): void {
+    if (next === this.consoleState) return
+    this.consoleState = next
+    this.feed.publish({ type: 'app.console', console: next })
+  }
+
+  /** What is stored, as it stands: each save changes one field of it. */
+  private settings(): AppSettings {
+    return {
+      theme: this.preference,
+      panel: this.panelState,
+      console: { preserveLog: this.consoleState.preserveLog }
+    }
   }
 
   /**

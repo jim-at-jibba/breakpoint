@@ -11,6 +11,7 @@
 
 import type { CertificateKey, CertificateState } from './certificates'
 import type { Expansion } from './console'
+import type { ConsoleDisplay } from './console-floor'
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
 import type { PanelSetting, PanelState } from './panel'
@@ -25,9 +26,11 @@ import type { ThemePreference, ThemeState } from './theme'
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
 export const ROUTE_NAMES = [
+  'app.clearConsole',
   'app.focus',
   'app.quit',
   'app.setPanel',
+  'app.setPreserveLog',
   'app.setSwitcher',
   'app.setTheme',
   'certificates.decide',
@@ -68,6 +71,17 @@ export type Surface = 'window' | 'cli'
  */
 export interface RouteSignatures {
   /**
+   * Clears the window's Console by setting its display floor to the log's last position
+   * ([ADR-0022]): the window shows nothing at or below it. The log is untouched, so
+   * `breakpoint logs --since 0` returns exactly what it did before, no pane's error count
+   * moves, and an agent part-way through reading the log is never disturbed. No read
+   * consults the floor; the CLI's equivalent is the `--since` it passes.
+   *
+   * Held for the life of the app and carried in the snapshot, so a reloaded window
+   * restores it, as `app.setSwitcher` is. The payload is the floor as it now stands.
+   */
+  'app.clearConsole': { params: undefined; payload: ConsoleDisplay }
+  /**
    * Brings the app's window forward and gives it focus. What `breakpoint .` does after
    * handing a repo to a running app, and what `--background` is the way to skip. Creates
    * a window first when the app is alive without one on macOS.
@@ -81,6 +95,13 @@ export interface RouteSignatures {
    * different project is opened. The payload is the arrangement as it now stands.
    */
   'app.setPanel': { params: PanelSetting; payload: PanelState }
+  /**
+   * Whether the Console keeps its entries when the project navigates. On, the default,
+   * keeps them, which costs nothing because keeping is what the log does. Off moves the
+   * display floor to each navigation and changes nothing else ([ADR-0022]). An app
+   * setting, kept on this machine like the theme.
+   */
+  'app.setPreserveLog': { params: { preserveLog: boolean }; payload: ConsoleDisplay }
   /**
    * Shows or hides the project switcher. A route rather than a message to the window,
    * because the menu accelerator, the toolbar button and Escape all cause it, and the

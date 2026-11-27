@@ -1,4 +1,5 @@
 import { DEFAULT_PANEL } from '../../shared/panel'
+import { DEFAULT_CONSOLE_SETTINGS } from '../../shared/console-floor'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { StateFeed } from '../state-feed'
 import type { ThemeHost } from '../theme-host'
@@ -136,7 +137,7 @@ describe('the app theme', () => {
   it('restores the override from the last run rather than the OS', async () => {
     const { app, host } = harness({
       status: 'loaded',
-      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+      settings: { theme: 'dark', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
     })
     host.system = 'light'
 
@@ -148,7 +149,7 @@ describe('the app theme', () => {
   it('announces nothing at load: the snapshot every surface fetches already carries it', async () => {
     const { app, patches } = harness({
       status: 'loaded',
-      settings: { theme: 'light', panel: DEFAULT_PANEL }
+      settings: { theme: 'light', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
     })
 
     await app.load()
@@ -166,7 +167,9 @@ describe('the app theme', () => {
       active: 'light'
     })
 
-    expect(store.saved).toEqual([{ theme: 'light', panel: DEFAULT_PANEL }])
+    expect(store.saved).toEqual([
+      { theme: 'light', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
+    ])
     expect(patches).toEqual([
       {
         revision: 1,
@@ -227,7 +230,7 @@ describe('the app theme', () => {
   it('keeps the override while announcing the OS change for system panes', async () => {
     const { app, host, patches } = harness({
       status: 'loaded',
-      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+      settings: { theme: 'dark', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
     })
     await app.load()
 
@@ -308,7 +311,10 @@ describe('the panel', () => {
 
   it('restores the arrangement from the last run', async () => {
     const panel = { side: 'right', visible: false, sizes: { bottom: 200, right: 512 } } as const
-    const { app } = harness({ status: 'loaded', settings: { theme: 'dark', panel } })
+    const { app } = harness({
+      status: 'loaded',
+      settings: { theme: 'dark', panel, console: DEFAULT_CONSOLE_SETTINGS }
+    })
 
     await app.load()
 
@@ -318,7 +324,7 @@ describe('the panel', () => {
   it('keeps a change with the theme, announces it, and answers with what it now is', async () => {
     const { app, store, patches } = harness({
       status: 'loaded',
-      settings: { theme: 'dark', panel: DEFAULT_PANEL }
+      settings: { theme: 'dark', panel: DEFAULT_PANEL, console: DEFAULT_CONSOLE_SETTINGS }
     })
     await app.load()
 
@@ -326,7 +332,9 @@ describe('the panel', () => {
 
     const expected = { side: 'right', visible: true, sizes: { bottom: 278, right: 500 } }
     expect(answered).toEqual(expected)
-    expect(store.saved).toEqual([{ theme: 'dark', panel: expected }])
+    expect(store.saved).toEqual([
+      { theme: 'dark', panel: expected, console: DEFAULT_CONSOLE_SETTINGS }
+    ])
     expect(patches.map(({ patch }) => patch)).toEqual([{ type: 'app.panel', panel: expected }])
   })
 
@@ -339,7 +347,8 @@ describe('the panel', () => {
 
     expect(store.saved.at(-1)).toEqual({
       theme: 'light',
-      panel: { ...DEFAULT_PANEL, visible: false }
+      panel: { ...DEFAULT_PANEL, visible: false },
+      console: DEFAULT_CONSOLE_SETTINGS
     })
   })
 
@@ -444,5 +453,155 @@ describe('the project switcher', () => {
       { revision: 1, type: 'app.switcher' },
       { revision: 2, type: 'app.theme' }
     ])
+  })
+})
+
+/**
+ * The Console's display floor and preserve-log ([ADR-0022], #77). The floor is held for the
+ * life of the app and never stored; preserve-log is stored with the theme and panel.
+ */
+describe('the console', () => {
+  it('hides nothing and preserves the log until told otherwise', async () => {
+    const { app } = harness()
+    await app.load()
+
+    expect(app.console()).toEqual({ floor: 0, preserveLog: true })
+  })
+
+  it('restores preserve-log from the last run, but never a floor', async () => {
+    const { app } = harness({
+      status: 'loaded',
+      settings: { theme: 'dark', panel: DEFAULT_PANEL, console: { preserveLog: false } }
+    })
+    await app.load()
+
+    expect(app.console()).toEqual({ floor: 0, preserveLog: false })
+  })
+
+  it('clears to the position it is given, announces it, and stores nothing', async () => {
+    const { app, store, patches } = harness()
+    await app.load()
+
+    expect(app.clearConsole(42)).toEqual({ floor: 42, preserveLog: true })
+
+    expect(app.console()).toEqual({ floor: 42, preserveLog: true })
+    expect(store.saved).toEqual([])
+    expect(patches.map(({ patch }) => patch)).toEqual([
+      { type: 'app.console', console: { floor: 42, preserveLog: true } }
+    ])
+  })
+
+  it('says nothing when a Clear does not move the floor', async () => {
+    const { app, patches } = harness()
+    await app.load()
+    app.clearConsole(42)
+
+    expect(app.clearConsole(42)).toEqual({ floor: 42, preserveLog: true })
+    expect(app.clearConsole(10)).toEqual({ floor: 42, preserveLog: true })
+
+    expect(patches).toHaveLength(1)
+  })
+
+  // Nothing is written, so an unreadable settings file does not cost the developer Clear.
+  it('clears over a settings file this build will not read', async () => {
+    const { app } = harness({ status: 'refused', reason: 'corrupt', message: 'not JSON' })
+    await app.load()
+
+    expect(app.clearConsole(7)).toEqual({ floor: 7, preserveLog: true })
+  })
+
+  it('leaves the floor where it is when the project navigates and the log is preserved', async () => {
+    const { app, patches } = harness()
+    await app.load()
+
+    app.navigated(30)
+
+    expect(app.console()).toEqual({ floor: 0, preserveLog: true })
+    expect(patches).toEqual([])
+  })
+
+  it('moves the floor to a navigation when the log is not preserved, and nothing else', async () => {
+    const { app, store, patches } = harness()
+    await app.load()
+    await app.setPreserveLog(false)
+    store.saved.length = 0
+    patches.length = 0
+
+    app.navigated(30)
+
+    expect(app.console()).toEqual({ floor: 30, preserveLog: false })
+    expect(store.saved).toEqual([])
+    expect(patches.map(({ patch }) => patch)).toEqual([
+      { type: 'app.console', console: { floor: 30, preserveLog: false } }
+    ])
+  })
+
+  it('keeps preserve-log with the theme and panel, and announces it', async () => {
+    const { app, store, patches } = harness({
+      status: 'loaded',
+      settings: { theme: 'light', panel: DEFAULT_PANEL, console: { preserveLog: true } }
+    })
+    await app.load()
+    app.clearConsole(5)
+    patches.length = 0
+
+    expect(await app.setPreserveLog(false)).toEqual({ floor: 5, preserveLog: false })
+
+    expect(store.saved).toEqual([
+      { theme: 'light', panel: DEFAULT_PANEL, console: { preserveLog: false } }
+    ])
+    expect(patches.map(({ patch }) => patch)).toEqual([
+      { type: 'app.console', console: { floor: 5, preserveLog: false } }
+    ])
+  })
+
+  it('keeps preserve-log when the theme is saved after it', async () => {
+    const { app, store } = harness()
+    await app.load()
+    await app.setPreserveLog(false)
+
+    await app.setTheme('light')
+
+    expect(store.saved.at(-1)).toEqual({
+      theme: 'light',
+      panel: DEFAULT_PANEL,
+      console: { preserveLog: false }
+    })
+  })
+
+  it('says nothing and saves nothing when preserve-log did not change', async () => {
+    const { app, store, patches } = harness()
+    await app.load()
+
+    expect(await app.setPreserveLog(true)).toEqual({ floor: 0, preserveLog: true })
+
+    expect(store.saved).toEqual([])
+    expect(patches).toEqual([])
+  })
+
+  it('refuses preserve-log over a settings file it could not read', async () => {
+    const { app, store, patches } = harness({
+      status: 'refused',
+      reason: 'corrupt',
+      message: 'the file is not JSON'
+    })
+    await app.load()
+
+    await expect(app.setPreserveLog(false)).rejects.toMatchObject({
+      code: 'SETTINGS_UNREADABLE'
+    })
+    expect(store.saved).toEqual([])
+    expect(patches).toEqual([])
+  })
+
+  it('does not announce a preserve-log it could not keep', async () => {
+    const { app, store, patches } = harness()
+    await app.load()
+    store.save = (): Promise<void> => Promise.reject(new Error('disk full'))
+
+    await expect(app.setPreserveLog(false)).rejects.toThrow('disk full')
+
+    expect(patches).toEqual([])
+    expect(app.console()).toEqual({ floor: 0, preserveLog: true })
   })
 })
