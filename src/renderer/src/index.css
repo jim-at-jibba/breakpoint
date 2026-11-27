@@ -107,6 +107,12 @@
   --bp-panel-h: 278px;
   --bp-panel-w: 460px;
   --bp-canvas-min: 120px;     /* the least the panel leaves the canvas        */
+  /* The console's fixed columns, so a row is placed and drawn without measuring. The
+     message takes what is left; its location sizes to its text. */
+  --bp-console-level-w: 10px; /* the level glyph                              */
+  --bp-console-pane-w: 100px; /* the pane badges                              */
+  --bp-console-time-w: 82px;  /* 14:02:11.004 in mono at text-sm              */
+  --bp-badge-h: 14px;         /* a pane badge, inside a 22px row               */
 
   /* ---- control widths --------------------------------------------------- */
   --bp-menu-w: 240px;         /* a popover list: presets, and menus like it */

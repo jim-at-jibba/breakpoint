@@ -14,8 +14,10 @@ import { useSnapshot } from '@renderer/hooks/use-snapshot'
 import { useState } from 'react'
 import { MAX_ZOOM } from '../../shared/canvas'
 import { paneColorVar } from '../../shared/pane-palette'
-import type { Project, Zoom } from '../../shared/project'
+import type { Pane, Project, Zoom } from '../../shared/project'
 import type { LayoutSetting, RouteName, RouteParams } from '../../shared/routes'
+
+const NO_PANES: readonly Pane[] = []
 
 interface ZoomPreview {
   project: Project
@@ -196,7 +198,7 @@ export default function App(): React.JSX.Element {
       )}
       {/* The panel is the app's, like the theme: it is docked whether or not anything is
           open, and opening another project never moves it. */}
-      <CanvasWithPanel panel={snapshot.panel}>
+      <CanvasWithPanel panel={snapshot.panel} panes={project?.panes ?? NO_PANES}>
         {project ? (
           <Canvas
             project={project}

@@ -1,3 +1,4 @@
+import type { ConsoleBatch } from './console-feed'
 import type { RouteResponse } from './protocol'
 import type { RouteName, RouteParams, RoutePayload } from './routes'
 import type { PatchBatch } from './state'
@@ -16,6 +17,13 @@ export const ROUTE_CHANNEL = 'breakpoint:route'
 export const PATCH_CHANNEL = 'breakpoint:patch'
 
 /**
+ * The console's push channel, main to renderer. Batches of console entries arrive here,
+ * numbered by the log's cursor rather than the snapshot's revision: one patch per entry
+ * would spin the revision at the rate a page logs ([#49]).
+ */
+export const CONSOLE_CHANNEL = 'breakpoint:console'
+
+/**
  * What the preload exposes on `window.breakpoint`. The only thing the renderer can ask
  * for is a route the shared module declares, and what comes back is the same envelope
  * the CLI reads off the socket.
@@ -27,4 +35,6 @@ export interface BreakpointBridge {
   ): Promise<RouteResponse<RoutePayload<N>>>
   /** Returns the unsubscribe. */
   onPatches(listener: (batch: PatchBatch) => void): () => void
+  /** Returns the unsubscribe. */
+  onConsole(listener: (batch: ConsoleBatch) => void): () => void
 }

@@ -1,3 +1,4 @@
+import { ConsoleView } from '@renderer/components/console-view'
 import { Button } from '@renderer/components/ui/button'
 import {
   ResizableHandle,
@@ -14,6 +15,7 @@ import {
   type PanelSetting,
   type PanelState
 } from '../../../shared/panel'
+import type { Pane } from '../../../shared/project'
 
 /**
  * The tabs the panel can show. One today; Phase 4's Layout tab and the rest join this
@@ -39,9 +41,12 @@ type TabId = (typeof TABS)[number]['id']
  */
 export function CanvasWithPanel({
   panel,
+  panes,
   children
 }: {
   panel: PanelState
+  /** The open project's panes, in order: a console row's badge takes its pane's colour. */
+  panes: readonly Pane[]
   children: ReactNode
 }): React.JSX.Element {
   const panelRef = usePanelRef()
@@ -126,9 +131,11 @@ export function CanvasWithPanel({
               role="tabpanel"
               id={`panel-tab-${tab}`}
               aria-labelledby={`panel-tab-${tab}-label`}
-              className="min-h-0 flex-1 overflow-auto"
+              className="flex min-h-0 flex-1 flex-col"
               data-testid="panel-body"
-            />
+            >
+              {tab === 'console' && <ConsoleView panes={panes} />}
+            </div>
           </ResizablePanel>
         </>
       )}

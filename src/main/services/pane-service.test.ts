@@ -747,6 +747,23 @@ describe("hearing a pane's console", () => {
     stack: []
   } as const
 
+  it('moves no snapshot revision per entry: entries reach the window on their own channel', async () => {
+    const [mobile] = await openShop()
+    const { revision } = projects.snapshot()
+
+    for (let n = 0; n < 200; n += 1) {
+      await panes.console(
+        mobile.id,
+        { ...message, level: 'log', text: `entry ${n}` },
+        PAGE,
+        offline
+      )
+    }
+
+    expect(patches).toEqual([])
+    expect(projects.snapshot().revision).toBe(revision)
+  })
+
   it('records what the page said against the pane', async () => {
     const [mobile] = await openShop()
     const { cursor } = projects.snapshot()
