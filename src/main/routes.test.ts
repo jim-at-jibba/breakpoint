@@ -541,6 +541,48 @@ describe('panes.evaluate', () => {
   })
 })
 
+describe('panes.openDevTools', () => {
+  function opener(): { dispatch: Dispatch; openDevTools: ReturnType<typeof vi.fn> } {
+    const openDevTools = vi.fn().mockReturnValue({ opened: true })
+    const panes = { openDevTools }
+    return {
+      dispatch: createDispatch(createRouteTable({ panes } as unknown as Services)),
+      openDevTools
+    }
+  }
+
+  it('opens it on the pane named, from the window or the socket', async () => {
+    for (const surface of ['window', 'cli'] as const) {
+      const { dispatch, openDevTools } = opener()
+
+      const { response } = await dispatch(
+        { id: '1', route: 'panes.openDevTools', params: { pane: 'pane-1' } },
+        { surface }
+      )
+
+      expect(openDevTools).toHaveBeenCalledWith('pane-1')
+      expect(response).toEqual({ id: '1', ok: true, data: { opened: true } })
+    }
+  })
+
+  it.each([
+    ['nothing', undefined],
+    ['an empty pane', { pane: '' }],
+    ['a pane that is not a string', { pane: 2 }],
+    ['a field it does not take', { pane: 'pane-1', mode: 'bottom' }]
+  ])('refuses %s', async (_, params) => {
+    const { dispatch, openDevTools } = opener()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.openDevTools', params },
+      { surface: 'cli' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(openDevTools).not.toHaveBeenCalled()
+  })
+})
+
 describe('panes.expand', () => {
   function expander(): { dispatch: Dispatch; expand: ReturnType<typeof vi.fn> } {
     const expand = vi.fn().mockResolvedValue({ live: false })

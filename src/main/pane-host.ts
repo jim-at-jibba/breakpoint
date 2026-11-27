@@ -296,7 +296,11 @@ export class PaneHost {
       this.panes.guestDestroyed({ pane, current: wasCurrent })
     })
 
-    this.panes.guestCreated(pane, src)
+    // Detached: a guest has no window of its own to dock into. DevTools is a second CDP
+    // client beside our attachment, never in place of it ([ADR-0003]).
+    this.panes.guestCreated(pane, src, () => {
+      if (current() && !guest.isDestroyed()) guest.openDevTools({ mode: 'detach' })
+    })
     void this.attach({ pane, guest, attempt: 1 }).then(() => {
       this.allowLoads.get(guest)?.()
       const url = this.pendingNavigations.get(pane)

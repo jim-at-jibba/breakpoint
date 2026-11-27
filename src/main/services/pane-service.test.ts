@@ -1495,3 +1495,80 @@ describe('evaluating in panes', () => {
     expect(log.read({ since: cursor }).entries).toEqual([])
   })
 })
+
+describe('opening DevTools on a pane', () => {
+  it('opens it on the pane named, and on no other', async () => {
+    const [mobile, tablet] = await openShop()
+    const inMobile = vi.fn()
+    const inTablet = vi.fn()
+    panes.guestCreated(mobile.id, 'http://localhost:3000/', inMobile)
+    panes.guestCreated(tablet.id, 'http://localhost:3000/', inTablet)
+
+    expect(panes.openDevTools(mobile.id)).toEqual({ opened: true })
+
+    expect(inMobile).toHaveBeenCalledTimes(1)
+    expect(inTablet).not.toHaveBeenCalled()
+  })
+
+  it('needs a page rather than our attachment, so a detached pane still opens', async () => {
+    const [mobile] = await openShop()
+    const open = vi.fn()
+    panes.guestCreated(mobile.id, 'http://localhost:3000/', open)
+
+    panes.detached(mobile.id, 'target closed')
+
+    expect(panes.openDevTools(mobile.id)).toEqual({ opened: true })
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('says it did not open while the pane has no page, or once its page has gone', async () => {
+    const [mobile, tablet] = await openShop()
+    const open = vi.fn()
+    panes.guestCreated(tablet.id, 'http://localhost:3000/', open)
+
+    panes.guestDestroyed({ pane: tablet.id, current: true })
+
+    expect(panes.openDevTools(mobile.id)).toEqual({ opened: false })
+    expect(panes.openDevTools(tablet.id)).toEqual({ opened: false })
+    expect(open).not.toHaveBeenCalled()
+  })
+
+  it('opens on the guest that replaced the one before it', async () => {
+    const [mobile] = await openShop()
+    const before = vi.fn()
+    const after = vi.fn()
+    panes.guestCreated(mobile.id, 'http://localhost:3000/', before)
+    panes.guestCreated(mobile.id, 'http://localhost:3000/', after)
+
+    panes.openDevTools(mobile.id)
+
+    expect(before).not.toHaveBeenCalled()
+    expect(after).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses a pane the project does not have', async () => {
+    await openShop()
+
+    expect(() => panes.openDevTools('nope')).toThrow(
+      expect.objectContaining({ code: 'PANE_NOT_FOUND' })
+    )
+  })
+
+  it('changes nothing observed: no entry, no status, and the error count still moves', async () => {
+    const [mobile] = await openShop()
+    panes.guestCreated(mobile.id, 'http://localhost:3000/', vi.fn())
+    panes.attached(mobile.id, 1)
+    const { cursor } = log.read()
+    const status = panes.statuses()[mobile.id]
+    patches.length = 0
+
+    panes.openDevTools(mobile.id)
+
+    expect(log.read({ since: cursor }).entries).toEqual([])
+    expect(panes.statuses()[mobile.id]).toEqual(status)
+    expect(patches).toEqual([])
+
+    panes.loadFailed({ pane: mobile.id, url: 'http://x/', code: -102, message: 'refused' })
+    expect(panes.statuses()[mobile.id].errors).toBe(status.errors + 1)
+  })
+})

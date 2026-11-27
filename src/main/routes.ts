@@ -253,7 +253,7 @@ function rejectUnknown(
 
 const PANE_SHAPE = 'this route takes { pane }'
 
-function expectPaneOnly<N extends 'panes.remove' | 'panes.rotate'>(
+function expectPaneOnly<N extends 'panes.openDevTools' | 'panes.remove' | 'panes.rotate'>(
   raw: unknown
 ): ParamsOk<N> | ParamsBad {
   const named = expectPane(raw, PANE_SHAPE)
@@ -626,6 +626,10 @@ export function createRouteTable(services: Services): RouteTable {
     'panes.list': {
       parseParams: expectNoParams,
       handle: () => ({ payload: services.panes.list() })
+    },
+    'panes.openDevTools': {
+      parseParams: expectPaneOnly,
+      handle: async ({ pane }) => ({ payload: services.panes.openDevTools(pane) })
     },
     'panes.remove': {
       parseParams: expectPaneOnly,

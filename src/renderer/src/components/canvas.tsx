@@ -4,6 +4,7 @@ import {
   readStripGap,
   readStripHeight
 } from '@renderer/lib/canvas-chrome'
+import { CodeXmlIcon } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {
   fitZoom,
@@ -418,8 +419,9 @@ function frameSize(pane: Pane, zoom: number, chrome: CanvasChrome): Size {
  * declares: a field whose capability is not in force is marked and keeps its number, so a
  * pane cannot quietly claim a viewport the override was refused for.
  *
- * The size fields, rotate and remove are the developer's end of `panes.resize`,
- * `panes.rotate` and `panes.remove` — no route here the terminal cannot reach
+ * The size fields, rotate, DevTools and remove are the developer's end of `panes.resize`,
+ * `panes.rotate`, `panes.openDevTools` and `panes.remove` — no route here the terminal
+ * cannot reach
  * ([ADR-0005]).
  */
 function PaneHeader({
@@ -518,6 +520,22 @@ function PaneHeader({
               }
             >
               ⤢
+            </PaneAction>
+            <PaneAction
+              label="Open DevTools"
+              testId="pane-devtools"
+              pane={pane.id}
+              onClick={() =>
+                void runAction(async () => {
+                  const response = await window.breakpoint.invoke('panes.openDevTools', {
+                    pane: pane.id
+                  })
+                  if (!response.ok || response.data.opened) return response
+                  return { ok: false, error: { message: 'no page to open DevTools on yet' } }
+                })
+              }
+            >
+              <CodeXmlIcon className="size-[var(--bp-text-micro)]" />
             </PaneAction>
             <PaneAction
               label="Remove"

@@ -112,6 +112,13 @@ export const MAX_HELD_PER_PANE = 1_000
 export type Evaluator = (expression: string) => Promise<unknown>
 
 /**
+ * How real DevTools is opened on a pane's page. Bound by the pane host to the guest it was
+ * made for, and held for as long as that guest is the pane's: DevTools needs a page, not
+ * our attachment, so a pane that is degraded can still be opened ([ADR-0003]).
+ */
+export type DevToolsOpener = () => void
+
+/**
  * How long one pane's evaluation is waited for. Long enough for an `await` on a fetch;
  * short enough that a promise that never settles answers rather than holding the REPL.
  */
@@ -165,6 +172,8 @@ export class PaneService {
   private held = new Map<string, HandleTable>()
   /** Per pane, the way to evaluate in its page, while it has an attachment to do it over. */
   private evaluators = new Map<string, Evaluator>()
+  /** Per pane, the way to open DevTools on its page, while it has a page to open it on. */
+  private devTools = new Map<string, DevToolsOpener>()
 
   constructor(
     private readonly feed: StateFeed,
@@ -185,6 +194,7 @@ export class PaneService {
     this.current = paneStatusesFor(project, this.current)
     for (const pane of this.held.keys()) if (!this.has(pane)) this.forget(pane)
     for (const pane of this.evaluators.keys()) if (!this.has(pane)) this.evaluators.delete(pane)
+    for (const pane of this.devTools.keys()) if (!this.has(pane)) this.devTools.delete(pane)
   }
 
   statuses(): Record<string, PaneStatus> {
@@ -230,6 +240,7 @@ export class PaneService {
     const removed = await this.projects.removePane(pane)
     this.forget(pane)
     this.evaluators.delete(pane)
+    this.devTools.delete(pane)
     this.record(pane, { type: 'pane.removed' })
     return removed
   }
@@ -255,10 +266,15 @@ export class PaneService {
     return { pane: { ...update.pane, status: this.current[pane] } }
   }
 
-  /** A new guest is a new page: nothing the one before it minted can be asked about. */
-  guestCreated(pane: string, url: string): void {
+  /**
+   * A new guest is a new page: nothing the one before it minted can be asked about.
+   * `openDevTools` opens DevTools on this guest, until another replaces it or it goes.
+   */
+  guestCreated(pane: string, url: string, openDevTools?: DevToolsOpener): void {
     this.forget(pane)
     this.evaluators.delete(pane)
+    if (openDevTools && this.has(pane)) this.devTools.set(pane, openDevTools)
+    else this.devTools.delete(pane)
     this.record(pane, { type: 'pane.created', url })
     this.observe(pane, { type: 'guestCreated' })
   }
@@ -381,6 +397,19 @@ export class PaneService {
     }
   }
 
+  /**
+   * Opens real DevTools on the pane's page. Nothing is recorded and nothing observed
+   * changes: DevTools is a second CDP client beside ours, not a replacement for it
+   * ([ADR-0003]). `opened` is false while the pane has no page to open it on.
+   */
+  openDevTools(pane: string): { opened: boolean } {
+    if (!this.has(pane)) throw noSuchPane(pane)
+    const open = this.devTools.get(pane)
+    if (!open) return { opened: false }
+    open()
+    return { opened: true }
+  }
+
   loaded(pane: string, url: string): void {
     this.record(pane, { type: 'pane.loaded', url })
     this.observe(pane, { type: 'loaded' })
@@ -406,6 +435,7 @@ export class PaneService {
     if (!current) return
     this.forget(pane)
     this.evaluators.delete(pane)
+    this.devTools.delete(pane)
     this.observe(pane, { type: 'guestDestroyed' })
   }
 

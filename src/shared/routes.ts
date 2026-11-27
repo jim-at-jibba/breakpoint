@@ -41,6 +41,7 @@ export const ROUTE_NAMES = [
   'panes.evaluate',
   'panes.expand',
   'panes.list',
+  'panes.openDevTools',
   'panes.remove',
   'panes.reportGeometry',
   'panes.resize',
@@ -180,6 +181,15 @@ export interface RouteSignatures {
   'panes.expand': { params: ExpansionRequest; payload: Expansion }
   /** The open project's panes, each with what is observed of it. Empty with nothing open. */
   'panes.list': { params: undefined; payload: { panes: PaneListing[] } }
+  /**
+   * Opens real Chromium DevTools on one pane's page, in a window of its own, for
+   * everything Breakpoint does not reimplement. It sits beside our attachment rather than
+   * replacing it: CDP multiplexes per client, so the pane's console still reaches the log
+   * and its error count still moves, and closing it changes nothing ([ADR-0003]).
+   * `opened` is false when the pane has no page to open it on yet. Naming a pane the
+   * project does not have is `PANE_NOT_FOUND`.
+   */
+  'panes.openDevTools': { params: { pane: string }; payload: { opened: boolean } }
   /** Takes a pane out of the open project, leaving every other pane as it was. */
   'panes.remove': { params: { pane: string }; payload: { pane: Pane } }
   /**

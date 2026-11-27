@@ -132,6 +132,7 @@ describe("a pane's console", () => {
       getURL: () => 'http://localhost:3000/',
       isDestroyed: () => destroyed,
       loadURL: vi.fn().mockResolvedValue(undefined),
+      openDevTools: vi.fn(),
       session: { fetch: vi.fn(() => Promise.resolve(new Response('bundled()'))) }
     }) as unknown as WebContents
     return { guest, attachment, calls, markDestroyed: () => (destroyed = true) }
@@ -141,6 +142,7 @@ describe("a pane's console", () => {
     pane: string
     panes: Record<
       | 'attached'
+      | 'guestCreated'
       | 'emulated'
       | 'console'
       | 'consoleFailed'
@@ -250,6 +252,38 @@ describe("a pane's console", () => {
       ownProperties: true,
       generatePreview: true
     })
+  })
+
+  it('opens DevTools detached on the guest it bound, beside its attachment and not in place of it', async () => {
+    const { guest, attachment, calls } = attachedGuest()
+    const { pane, panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    expect(panes.guestCreated).toHaveBeenCalledWith(pane, expect.any(String), expect.any(Function))
+    const open = panes.guestCreated.mock.calls[0][2] as () => void
+    const before = calls.length
+    const attaches = (attachment as unknown as { attach: ReturnType<typeof vi.fn> }).attach.mock
+      .calls.length
+    open()
+
+    expect(guest.openDevTools).toHaveBeenCalledWith({ mode: 'detach' })
+    // Nothing is sent, detached or reattached over our own attachment to make room for it.
+    expect(calls.slice(before)).toEqual([])
+    expect(
+      (attachment as unknown as { attach: ReturnType<typeof vi.fn> }).attach.mock.calls.length
+    ).toBe(attaches)
+    expect(panes.detached).not.toHaveBeenCalled()
+  })
+
+  it('opens nothing on a guest that has gone', async () => {
+    const { guest, markDestroyed } = attachedGuest()
+    const { panes } = hostFor(guest)
+    await vi.waitFor(() => expect(panes.emulated).toHaveBeenCalled())
+
+    markDestroyed()
+    ;(panes.guestCreated.mock.calls[0][2] as () => void)()
+
+    expect(guest.openDevTools).not.toHaveBeenCalled()
   })
 
   it('evaluates over the attachment it made, in REPL mode, and lets go of the result', async () => {

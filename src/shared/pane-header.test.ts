@@ -65,9 +65,9 @@ describe('the header degradation ladder', () => {
 })
 
 describe('the header actions', () => {
-  // What two tab-height buttons, the gap between them and the gap before them occupy,
+  // What three tab-height buttons, the gaps between them and the gap before them occupy,
   // as the renderer measures it off the tokens they are drawn with.
-  const actions = 12 * 2 + 2 + 4
+  const actions = 12 * 3 + 2 * 2 + 4
 
   test('come off before the ladder starts shedding what the header says', () => {
     const widest = PANE_HEADER_TIERS[0].minWidth
