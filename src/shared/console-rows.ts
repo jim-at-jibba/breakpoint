@@ -63,7 +63,7 @@ export function consoleRow(entry: ConsoleEntry, panes: ConsolePanes): ConsoleRow
   const location = entry.location
   return {
     key: entry.cursor,
-    level: entry.type === 'console.message' ? entry.level : 'error',
+    level: entryLevel(entry),
     pane: known ? { id, label: known.name, color: known.index } : { id, label: id, color: null },
     time: formatTime(entry.time),
     message: oneLine(entry.text),
@@ -177,6 +177,89 @@ export function collapseConsole(entries: readonly ConsoleEntry[]): ConsoleGroup[
     }
   }
   return groups
+}
+
+/**
+ * Filters ([#76]): by pane, level and text, so a failure that happens at one width can be
+ * isolated. A filter is a property of this window's view and nothing else: it changes no
+ * entry, no count and nothing another surface reads.
+ *
+ * Applied to the entries before they collapse, so a collapsed row carries only the badges
+ * of panes still in view and is placed where its first entry in view arrived.
+ */
+export interface ConsoleFilter {
+  /** The panes in view, by id, or `null` for every pane, including ones since removed. */
+  readonly panes: ReadonlySet<string> | null
+  /** The levels in view, or `null` for every level. */
+  readonly levels: ReadonlySet<ConsoleLevel> | null
+  /** Text the message must contain, ignoring case; empty matches everything. */
+  readonly text: string
+}
+
+export const NO_CONSOLE_FILTER: ConsoleFilter = Object.freeze({
+  panes: null,
+  levels: null,
+  text: ''
+})
+
+/** Whether a filter narrows anything, which is when clearing it has something to do. */
+export function isFiltering(filter: ConsoleFilter): boolean {
+  return filter.panes !== null || filter.levels !== null || filter.text.trim() !== ''
+}
+
+/** The level an entry is drawn at: an uncaught exception is an error. */
+export function entryLevel(entry: ConsoleEntry): ConsoleLevel {
+  return entry.type === 'console.message' ? entry.level : 'error'
+}
+
+export function matchesPane(entry: ConsoleEntry, panes: ConsoleFilter['panes']): boolean {
+  return panes === null || panes.has(entry.pane ?? '')
+}
+
+export function matchesLevel(entry: ConsoleEntry, levels: ConsoleFilter['levels']): boolean {
+  return levels === null || levels.has(entryLevel(entry))
+}
+
+/**
+ * Whether the message contains the text, ignoring case and surrounding space. Matched
+ * against the message as a person reads it, all of it, not the one line a row clamps it to.
+ */
+export function matchesText(entry: ConsoleEntry, text: string): boolean {
+  const needle = text.trim().toLowerCase()
+  return needle === '' || entry.text.toLowerCase().includes(needle)
+}
+
+export function matchesFilter(entry: ConsoleEntry, filter: ConsoleFilter): boolean {
+  return (
+    matchesPane(entry, filter.panes) &&
+    matchesLevel(entry, filter.levels) &&
+    matchesText(entry, filter.text)
+  )
+}
+
+/** The entries in view, in cursor order. The same array when nothing is filtered. */
+export function filterConsole(
+  entries: readonly ConsoleEntry[],
+  filter: ConsoleFilter
+): readonly ConsoleEntry[] {
+  if (!isFiltering(filter)) return entries
+  return entries.filter((entry) => matchesFilter(entry, filter))
+}
+
+/**
+ * A set with one value added or taken away, where `null` means everything: taking one
+ * value from everything leaves the rest of `all`, and a set back to everything is `null`
+ * again, so the filter that shows all is always the same filter.
+ */
+export function toggleInSet<T>(
+  current: ReadonlySet<T> | null,
+  value: T,
+  all: readonly T[]
+): ReadonlySet<T> | null {
+  const next = new Set(current ?? all)
+  if (next.has(value)) next.delete(value)
+  else next.add(value)
+  return all.every((item) => next.has(item)) && next.size === all.length ? null : next
 }
 
 /** A collapsed row: its first entry's columns, and every pane it carries. */

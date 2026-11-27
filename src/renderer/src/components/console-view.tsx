@@ -9,19 +9,24 @@ import {
   consolePanes,
   consoleRow,
   consoleRowHeight,
+  filterConsole,
   isAtBottom,
+  isFiltering,
+  NO_CONSOLE_FILTER,
+  toggleInSet,
   isExpandable,
   isExpanded,
   scrollTarget,
   shownBadges,
   type ConsoleAnchor,
+  type ConsoleFilter,
   type ConsoleGroup,
   type ConsoleLine,
   type ConsolePaneBadge,
   type ConsolePanes,
   type ConsoleRow
 } from '../../../shared/console-rows'
-import type { ConsoleLevel } from '../../../shared/event-log'
+import { CONSOLE_LEVELS, type ConsoleLevel } from '../../../shared/event-log'
 import { paneColorVar } from '../../../shared/pane-palette'
 import type { Pane } from '../../../shared/project'
 
@@ -39,12 +44,18 @@ const OVERSCAN = 20
  * viewport where it is while entries arrive below and old ones are evicted above: the
  * scroll position is recomputed from that line's index before the frame is painted, so
  * nothing jumps. Lines have one height, so that position is arithmetic.
+ *
+ * Filtered by pane, level and text, before collapsing, so a row carries only the badges
+ * of panes still in view. A filter changes what this window draws and nothing else.
  */
 export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.Element {
   const { history, ...state } = useConsole()
   const entries = history.entries
   const lookup = useMemo(() => consolePanes(panes), [panes])
-  const groups = useMemo(() => collapseConsole(entries), [entries])
+  /** This window's filter: what it shows, and nothing else ([#76]). */
+  const [filter, setFilter] = useState<ConsoleFilter>(NO_CONSOLE_FILTER)
+  const inView = useMemo(() => filterConsole(entries, filter), [entries, filter])
+  const groups = useMemo(() => collapseConsole(inView), [inView])
   /** The cursors of the rows the reader expanded; a row is open while any entry of it is. */
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
   const lines = useMemo(() => consoleLines(groups, expanded), [groups, expanded])
@@ -114,6 +125,7 @@ export function ConsoleView({ panes }: { panes: readonly Pane[] }): React.JSX.El
           ))}
         </div>
       </div>
+      <ConsoleFilterBar panes={panes} filter={filter} onChange={setFilter} />
       {state.status === 'error' && (
         <p
           role="alert"
@@ -299,5 +311,116 @@ function Badge({
     >
       {label}
     </span>
+  )
+}
+
+/** Levels as the filter offers them, most severe first, which is the order a reader narrows in. */
+const FILTER_LEVELS: readonly ConsoleLevel[] = [...CONSOLE_LEVELS].reverse()
+
+const CHIP =
+  'inline-flex h-[var(--bp-chip-h)] flex-none items-center gap-[var(--bp-space-2)] rounded-[var(--bp-radius-xs)] border px-[var(--bp-space-2)] font-mono text-[length:var(--bp-text-micro)] cursor-pointer'
+const CHIP_ON =
+  'border-[var(--bp-accent)] bg-[var(--bp-accent-wash)] text-[color:var(--bp-accent-ink)]'
+const CHIP_OFF = 'border-[var(--bp-border)] bg-transparent text-[color:var(--bp-ink-muted)]'
+
+/**
+ * The filter strip beneath the list, as the prototype places it: a text field, then a chip
+ * per level and per pane, each on until turned off. With everything on a dimension does not
+ * filter at all, so an entry from a pane since removed still shows until panes are narrowed.
+ */
+function ConsoleFilterBar({
+  panes,
+  filter,
+  onChange
+}: {
+  panes: readonly Pane[]
+  filter: ConsoleFilter
+  onChange: (filter: ConsoleFilter) => void
+}): React.JSX.Element {
+  const paneIds = panes.map((pane) => pane.id)
+  return (
+    <div
+      className="flex h-[var(--bp-row)] flex-none items-center gap-[var(--bp-space-2)] overflow-hidden border-t border-[var(--bp-border)] px-[var(--bp-space-3)] font-mono text-[length:var(--bp-text-sm)]"
+      data-testid="console-filters"
+      data-filtering={isFiltering(filter)}
+    >
+      <span className="flex-none text-[color:var(--bp-accent)]" aria-hidden>
+        ›
+      </span>
+      <input
+        type="search"
+        value={filter.text}
+        onChange={(event) => onChange({ ...filter, text: event.target.value })}
+        placeholder="filter…"
+        aria-label="Filter messages"
+        data-testid="console-filter-text"
+        className="h-full min-w-0 flex-1 bg-transparent text-[color:var(--bp-ink)] outline-none placeholder:text-[color:var(--bp-ink-faint)]"
+      />
+      <span role="group" aria-label="Levels" className="flex flex-none gap-[var(--bp-space-1)]">
+        {FILTER_LEVELS.map((level) => {
+          const on = filter.levels === null || filter.levels.has(level)
+          return (
+            <button
+              key={level}
+              type="button"
+              aria-pressed={on}
+              className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+              onClick={() =>
+                onChange({ ...filter, levels: toggleInSet(filter.levels, level, FILTER_LEVELS) })
+              }
+              data-testid="console-filter-level"
+              data-level={level}
+            >
+              {level}
+            </button>
+          )
+        })}
+      </span>
+      <span
+        className="h-[var(--bp-badge-h)] w-[var(--bp-stroke)] flex-none bg-[var(--bp-border)]"
+        aria-hidden
+      />
+      <span
+        role="group"
+        aria-label="Panes"
+        className="flex min-w-0 flex-none gap-[var(--bp-space-1)] overflow-hidden"
+      >
+        {panes.map((pane, index) => {
+          const on = filter.panes === null || filter.panes.has(pane.id)
+          return (
+            <button
+              key={pane.id}
+              type="button"
+              aria-pressed={on}
+              title={pane.name}
+              className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF}`}
+              onClick={() =>
+                onChange({ ...filter, panes: toggleInSet(filter.panes, pane.id, paneIds) })
+              }
+              data-testid="console-filter-pane"
+              data-pane={pane.id}
+            >
+              <span
+                className="h-[var(--bp-pane-tab-h)] w-[var(--bp-pane-tab-w)] flex-none rounded-[var(--bp-radius-xs)]"
+                style={{ background: paneColorVar(index) }}
+                aria-hidden
+              />
+              {pane.name}
+            </button>
+          )
+        })}
+      </span>
+      {isFiltering(filter) && (
+        <button
+          type="button"
+          className={`${CHIP} ${CHIP_OFF}`}
+          onClick={() => onChange(NO_CONSOLE_FILTER)}
+          title="Clear filters"
+          data-testid="console-filter-clear"
+        >
+          clear
+        </button>
+      )}
+    </div>
   )
 }

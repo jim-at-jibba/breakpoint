@@ -53,6 +53,7 @@
   --bp-console-pane-w: 100px; /* the pane badges                              */
   --bp-console-time-w: 82px;  /* 14:02:11.004 in mono at text-sm              */
   --bp-badge-h: 14px;         /* a pane badge, inside a 22px row               */
+  --bp-chip-h: 18px;          /* a filter chip, inside a 24px strip            */
 
   /* ---- control widths --------------------------------------------------- */
   --bp-menu-w: 240px;         /* a popover list: presets, and menus like it */

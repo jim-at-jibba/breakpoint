@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { ConsoleEntry } from './console-feed'
+import type { ConsoleLevel } from './event-log'
 import {
   anchorAt,
   collapseConsole,
@@ -12,10 +13,15 @@ import {
   consolePanes,
   consoleRow,
   consoleRowHeight,
+  filterConsole,
   isAtBottom,
+  isFiltering,
+  NO_CONSOLE_FILTER,
   isExpanded,
   scrollTarget,
   shownBadges,
+  toggleInSet,
+  type ConsoleFilter,
   type ConsoleGroup,
   type ConsoleLine
 } from './console-rows'
@@ -392,5 +398,106 @@ describe('holding the reader’s place', () => {
     expect(isAtBottom(100, 200, 100)).toBe(true)
     expect(isAtBottom(100 - H / 2, 200, 100)).toBe(true)
     expect(isAtBottom(100 - H, 200, 100)).toBe(false)
+  })
+})
+
+describe('filtering by pane, level and text', () => {
+  const entries: ConsoleEntry[] = [
+    message({ cursor: 1, pane: first.id, level: 'error', text: 'Failed to fetch /api/rates' }),
+    message({ cursor: 2, pane: second.id, level: 'error', text: 'Failed to fetch /api/rates' }),
+    message({ cursor: 3, pane: third.id, level: 'error', text: 'Failed to fetch /api/rates' }),
+    message({ cursor: 4, pane: first.id, level: 'log', text: 'ready' }),
+    message({ cursor: 5, pane: second.id, level: 'warn', text: 'Slow image' }),
+    {
+      cursor: 6,
+      time: at,
+      pane: third.id,
+      type: 'console.exception',
+      rejection: false,
+      text: 'Uncaught TypeError: menu is null',
+      error: 'TypeError: menu is null',
+      location: null,
+      stack: []
+    }
+  ]
+  const cursors = (filter: Partial<ConsoleFilter>): number[] =>
+    filterConsole(entries, { ...NO_CONSOLE_FILTER, ...filter }).map((entry) => entry.cursor)
+
+  it('shows every entry with no filter, as the same array', () => {
+    expect(isFiltering(NO_CONSOLE_FILTER)).toBe(false)
+    expect(filterConsole(entries, NO_CONSOLE_FILTER)).toBe(entries)
+  })
+
+  it('narrows by pane on its own', () => {
+    expect(cursors({ panes: new Set([first.id]) })).toEqual([1, 4])
+  })
+
+  it('narrows by level on its own, counting an exception as an error', () => {
+    expect(cursors({ levels: new Set(['error']) })).toEqual([1, 2, 3, 6])
+    expect(cursors({ levels: new Set(['warn', 'log']) })).toEqual([4, 5])
+  })
+
+  it('narrows by text on its own, ignoring case and surrounding space', () => {
+    expect(cursors({ text: '  FAILED to ' })).toEqual([1, 2, 3])
+    expect(cursors({ text: 'menu' })).toEqual([6])
+  })
+
+  it('matches text anywhere in the message, not only the line a row shows', () => {
+    const long = [message({ cursor: 9, text: 'first line\nsecond line' })]
+    expect(filterConsole(long, { ...NO_CONSOLE_FILTER, text: 'second' })).toHaveLength(1)
+  })
+
+  it('combines the three, each narrowing what the others leave', () => {
+    expect(cursors({ panes: new Set([third.id]), levels: new Set(['error']) })).toEqual([3, 6])
+    expect(
+      cursors({ panes: new Set([third.id]), levels: new Set(['error']), text: 'fetch' })
+    ).toEqual([3])
+    expect(cursors({ panes: new Set([first.id]), levels: new Set(['warn']) })).toEqual([])
+  })
+
+  it('treats blank text as no filter', () => {
+    expect(isFiltering({ ...NO_CONSOLE_FILTER, text: '   ' })).toBe(false)
+    expect(cursors({ text: '   ' })).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('lets a pane filter hide a pane no longer in the project, and no filter show it', () => {
+    const gone = [message({ cursor: 1, pane: 'gone' })]
+    expect(filterConsole(gone, { ...NO_CONSOLE_FILTER, panes: new Set([first.id]) })).toEqual([])
+    expect(filterConsole(gone, NO_CONSOLE_FILTER)).toEqual(gone)
+  })
+
+  it('gives a collapsed row only the badges of panes still in view', () => {
+    const filter = { ...NO_CONSOLE_FILTER, panes: new Set([second.id, third.id]) }
+    const [row] = collapseConsole(filterConsole(entries, filter)).map((group) =>
+      consoleGroupRow(group, panes)
+    )
+
+    expect(row.badges.map((badge) => badge.id)).toEqual([second.id, third.id])
+    expect(row.key).toBe(2)
+  })
+
+  it('brings back every retained entry, collapsed as before, once cleared', () => {
+    const narrowed = { panes: new Set([first.id]), levels: new Set<ConsoleLevel>(['log']), text: 'r' }
+    expect(cursors(narrowed)).toEqual([4])
+    expect(collapseConsole(filterConsole(entries, NO_CONSOLE_FILTER))).toEqual(
+      collapseConsole(entries)
+    )
+  })
+})
+
+describe('toggling one value of a filter', () => {
+  const all = ['a', 'b', 'c']
+
+  it('takes one value from everything, leaving the rest', () => {
+    expect(toggleInSet(null, 'b', all)).toEqual(new Set(['a', 'c']))
+  })
+
+  it('adds a value back, and is everything again once all are back', () => {
+    expect(toggleInSet(new Set(['a']), 'c', all)).toEqual(new Set(['a', 'c']))
+    expect(toggleInSet(new Set(['a', 'c']), 'b', all)).toBeNull()
+  })
+
+  it('can take away the last value, which shows nothing rather than everything', () => {
+    expect(toggleInSet(new Set(['a']), 'a', all)).toEqual(new Set())
   })
 })

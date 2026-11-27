@@ -248,3 +248,55 @@ test('the same message from several panes is one row carrying each of their badg
   await row.click()
   await expect(entries).toHaveCount(0)
 })
+
+test('filters by pane, level and text narrow the view alone and together, and clear', async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await attached(shop)
+  const [one, two, three] = shop.panes
+
+  for (const pane of shop.panes) await inPane(page, pane.id, `console.error('broken at width'); 0`)
+  await inPane(page, two.id, `console.warn('slow image'); 0`)
+  await inPane(page, three.id, `console.log('ready'); 0`)
+  await expect.poll(async () => (await consoleEntries()).length).toBe(5)
+
+  const broken = rows(page).filter({ hasText: 'broken at width' })
+  await expect(broken).toHaveAttribute('data-panes', `${one.id} ${two.id} ${three.id}`)
+
+  const pane = (id: string): Locator =>
+    page.locator(`[data-testid="console-filter-pane"][data-pane="${id}"]`)
+  const level = (name: string): Locator =>
+    page.locator(`[data-testid="console-filter-level"][data-level="${name}"]`)
+
+  // Pane alone: the collapsed row carries only the badges still in view.
+  await pane(one.id).click()
+  await expect(pane(one.id)).toHaveAttribute('aria-pressed', 'false')
+  await expect(broken).toHaveAttribute('data-panes', `${two.id} ${three.id}`)
+  await expect(broken.getByTestId('console-more-badge')).toHaveCount(0)
+  await expect(rows(page).filter({ hasText: 'slow image' })).toHaveCount(1)
+
+  // Level combined with it.
+  await level('warn').click()
+  await level('log').click()
+  await expect(rows(page).filter({ hasText: 'slow image' })).toHaveCount(0)
+  await expect(rows(page).filter({ hasText: 'ready' })).toHaveCount(0)
+  await expect(broken).toHaveCount(1)
+
+  // Text combined with both, then on its own.
+  await page.getByTestId('console-filter-text').fill('nothing says this')
+  await expect(rows(page)).toHaveCount(0)
+  await page.getByTestId('console-filter-clear').click()
+  await expect(page.getByTestId('console-filter-text')).toHaveValue('')
+  await page.getByTestId('console-filter-text').fill('SLOW')
+  await expect(rows(page)).toHaveCount(1)
+  await expect(rows(page)).toHaveAttribute('data-panes', two.id)
+
+  // Clearing brings back every retained entry; the log never moved.
+  await page.getByTestId('console-filter-clear').click()
+  await expect(broken).toHaveAttribute('data-panes', `${one.id} ${two.id} ${three.id}`)
+  await expect(rows(page).filter({ hasText: 'slow image' })).toHaveCount(1)
+  await expect(rows(page).filter({ hasText: 'ready' })).toHaveCount(1)
+  expect(await consoleEntries()).toHaveLength(5)
+})
