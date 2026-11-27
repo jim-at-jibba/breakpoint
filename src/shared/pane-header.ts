@@ -111,6 +111,42 @@ export function describeErrors(errors: number): string {
   return `${errors} ${errors === 1 ? 'error' : 'errors'}`
 }
 
+/**
+ * Whether a pane's header is flashing, folded over the error counts the window sees for
+ * that pane. `flashes` numbers the flashes begun, so a view can start each one afresh.
+ */
+export interface ErrorFlash {
+  /** The last count seen: what the next count is compared against. */
+  count: number
+  flashing: boolean
+  flashes: number
+}
+
+/**
+ * Where a header starts: from the count it first sees, not from zero. A window that opens
+ * onto a pane already carrying errors learns a number; nothing rose, so nothing flashes.
+ */
+export function initialErrorFlash(errors: number): ErrorFlash {
+  return { count: errors, flashing: false, flashes: 0 }
+}
+
+/**
+ * A rise in the count starts a flash, and only when none is running. A burst — any number
+ * of rises while a flash runs — is absorbed by the flash already running, so errors
+ * arriving faster than one flash lasts can never stack into a strobe. A fall is a pane
+ * navigating, which says nothing went wrong: it moves the baseline and nothing else.
+ */
+export function foldErrorFlash(state: ErrorFlash, errors: number): ErrorFlash {
+  if (errors === state.count) return state
+  if (errors < state.count || state.flashing) return { ...state, count: errors }
+  return { count: errors, flashing: true, flashes: state.flashes + 1 }
+}
+
+/** The flash has run its course; the next rise may start another. */
+export function endErrorFlash(state: ErrorFlash): ErrorFlash {
+  return state.flashing ? { ...state, flashing: false } : state
+}
+
 export type HeaderField = 'viewport' | 'dpr' | 'scheme'
 
 const FIELD_CAPABILITY = {

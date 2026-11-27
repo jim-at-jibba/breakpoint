@@ -17,7 +17,10 @@ import {
 import {
   describeErrors,
   describeFieldState,
+  endErrorFlash,
+  foldErrorFlash,
   formatDpr,
+  initialErrorFlash,
   PANE_HEADER_TIERS,
   paneFieldState,
   paneHeaderHasActions,
@@ -447,6 +450,10 @@ function PaneHeader({
   const reasons = degraded.map(describeDegradation).join('\n')
   const [message, setMessage] = useState<string | null>(null)
   const actionVersion = useRef(0)
+  // Folded during render rather than in an effect: a rise in the count is something this
+  // render learned, and the flash belongs to the frame that first shows the new number.
+  const [flash, setFlash] = useState(() => initialErrorFlash(errors))
+  if (flash.count !== errors) setFlash(foldErrorFlash(flash, errors))
 
   async function runAction(
     action: () => Promise<{ ok: true } | { ok: false; error: { message: string } }>
@@ -469,12 +476,13 @@ function PaneHeader({
 
   return (
     <div
-      className="flex h-[var(--bp-row)] items-center gap-[var(--bp-space-2)] overflow-hidden pr-[var(--bp-space-2)]"
+      className="relative flex h-[var(--bp-row)] items-center gap-[var(--bp-space-2)] overflow-hidden pr-[var(--bp-space-2)]"
       // Exactly the pane's drawn width and no more: the clipping is what binds the header
       // to the pane, and a header wider than its pane would claim ground we do not own.
       style={{ width }}
       data-testid="pane-header"
       data-tier={PANE_HEADER_TIERS.indexOf(tier)}
+      data-flashing={flash.flashing ? 'true' : undefined}
       // Everything the ladder took away is still here, which is what makes shedding it safe.
       title={describePane(pane, errors, reasons)}
     >
@@ -561,6 +569,18 @@ function PaneHeader({
           </span>
         )}
       </div>
+      {/* The error flash, as the design prototype draws it: a wash and a stroke over the
+          header's own box and nowhere else. The header is ground we own and clips what it
+          holds, so the flash can never reach the page beneath. One flash at a time; a
+          burst rides the one already running (`foldErrorFlash`). */}
+      {flash.flashing && (
+        <span
+          aria-hidden
+          data-testid="pane-error-flash"
+          className="pointer-events-none absolute inset-0 animate-[bp-flash_var(--bp-dur-flash)_var(--bp-ease)_3] bg-[var(--bp-error-wash)] shadow-[inset_0_0_0_var(--bp-stroke)_var(--bp-error)]"
+          onAnimationEnd={() => setFlash(endErrorFlash)}
+        />
+      )}
     </div>
   )
 }

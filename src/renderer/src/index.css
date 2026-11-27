@@ -372,6 +372,13 @@ body { user-select: none; -webkit-user-select: none; }
 a { color: var(--bp-accent-ink); text-underline-offset: 2px; }
 a:hover { color: var(--bp-accent); }
 
+/* A pane header's error flash, as the design prototype draws it: full on, decaying to
+   nothing over --bp-dur-flash. */
+@keyframes bp-flash {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 1ms !important; transition-duration: 1ms !important; }
 }

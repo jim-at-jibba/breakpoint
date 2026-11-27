@@ -368,6 +368,92 @@ test('a pane whose page will not load counts the error, and keeps counting it at
   await expect(header.getByTestId('pane-width')).toHaveCount(0)
 })
 
+test("an error flashes its own pane's header once, inside the header, and a burst does not strobe", async () => {
+  launched = await launchApp(sandbox)
+  const page = await launched.app.firstWindow()
+  const shop = makeRepo('shop')
+  await open(shop)
+  await settled(shop)
+
+  const [mobile, ...others] = shop.panes
+  // Whatever the fixture's own load raised has had its flash; start from quiet headers.
+  await expect(page.locator('[data-testid="pane-header"][data-flashing]')).toHaveCount(0, {
+    timeout: 10_000
+  })
+
+  // Every flash the window ever draws, by pane, counted as it is mounted.
+  await page.evaluate(() => {
+    const seen: Record<string, number> = {}
+    ;(window as unknown as { flashes: Record<string, number> }).flashes = seen
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement) || node.dataset.testid !== 'pane-error-flash') continue
+          const pane = node.closest('[data-testid="pane"]')?.getAttribute('data-pane') ?? '?'
+          seen[pane] = (seen[pane] ?? 0) + 1
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true })
+  })
+  const flashes = (): Promise<Record<string, number>> =>
+    page.evaluate(() => ({ ...(window as unknown as { flashes: Record<string, number> }).flashes }))
+
+  const before = (await state()).panes[mobile.id]?.errors ?? 0
+  // A burst: errors arriving well inside one flash's length, one at a time.
+  const response = await sendRaw(
+    sandbox.socketPath,
+    requestLine('panes.evaluate', {
+      pane: mobile.id,
+      expression: `new Promise((done) => {
+        let n = 0
+        const tick = setInterval(() => {
+          console.error('burst', n)
+          if (++n === 40) { clearInterval(tick); done(n) }
+        }, 10)
+      })`
+    })
+  )
+  expect(response.ok).toBe(true)
+
+  const flash = headerOf(page, mobile.id).getByTestId('pane-error-flash')
+  await expect(flash).toHaveCount(1)
+  await expect.poll(async () => (await state()).panes[mobile.id]?.errors ?? 0).toBe(before + 40)
+
+  // Drawn on the header's own ground: inside the header box, above the page, never over it.
+  const [flashBox, headerBox, pageBox] = await Promise.all([
+    flash.boundingBox(),
+    headerOf(page, mobile.id).boundingBox(),
+    paneOf(page, mobile.id).locator('webview').boundingBox()
+  ])
+  expect(flashBox && headerBox && pageBox).toBeTruthy()
+  expect(flashBox!.y).toBeGreaterThanOrEqual(headerBox!.y)
+  expect(flashBox!.y + flashBox!.height).toBeLessThanOrEqual(headerBox!.y + headerBox!.height)
+  expect(flashBox!.y + flashBox!.height).toBeLessThanOrEqual(pageBox!.y)
+
+  // In the error tokens and nothing else.
+  const drawn = await flash.evaluate((element) => {
+    const probe = document.createElement('span')
+    document.body.append(probe)
+    const resolve = (token: string): string => {
+      probe.style.color = `var(${token})`
+      return getComputedStyle(probe).color
+    }
+    const tokens = { wash: resolve('--bp-error-wash'), stroke: resolve('--bp-error') }
+    probe.remove()
+    const style = getComputedStyle(element)
+    return { background: style.backgroundColor, shadow: style.boxShadow, tokens }
+  })
+  expect(drawn.background).toBe(drawn.tokens.wash)
+  expect(drawn.shadow).toContain(drawn.tokens.stroke)
+
+  // The flash runs its course and is gone: one flash for forty errors, and none elsewhere.
+  await expect(flash).toHaveCount(0, { timeout: 10_000 })
+  expect(await flashes()).toEqual({ [mobile.id]: 1 })
+  for (const other of others) {
+    await expect(headerOf(page, other.id)).not.toHaveAttribute('data-flashing')
+  }
+})
+
 test('every pane takes its colour from the generated palette and nothing picks one another way', async () => {
   launched = await launchApp(sandbox)
   const page = await launched.app.firstWindow()
