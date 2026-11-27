@@ -453,7 +453,7 @@ test('a production bundle resolves through its generated map to the files it was
     1
   )
   // Minified onto one line: no URL arithmetic reaches the repo, only the map.
-  const script = `${fixture.a}${(await bundle()).entry}`
+  const script = `${fixture.a}${(await bundle()).entries.main}`
 
   for (const pane of shop.panes) {
     const [thrown] = exceptions(entries, pane.id)
