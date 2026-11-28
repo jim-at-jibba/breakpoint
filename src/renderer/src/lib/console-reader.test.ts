@@ -159,6 +159,26 @@ describe('the console reader', () => {
     expect(log.read({ pane: 'mobile' }).entries.map((entry) => entry.cursor)).toEqual([2, 3])
   })
 
+  it('joins the channel without waiting for a busy log to return an empty read', async () => {
+    const { log, read, start, frame, settle, latest, texts } = harness()
+    log.append('mobile', said('before'))
+    frame()
+    read.mockImplementation(async (params) => {
+      if (read.mock.calls.length > 3) return failure('read', 'INTERNAL_ERROR', 'never joined')
+      const response = success('read', log.read(params))
+      log.append('mobile', said('during'))
+      frame()
+      return response
+    })
+    const reader = start()
+    await settle()
+
+    expect(latest().status).toBe('live')
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(texts()).toEqual(['before', 'during'])
+    reader.close()
+  })
+
   it('says so when the log cannot be read, and keeps what it last showed', async () => {
     vi.useFakeTimers()
     try {

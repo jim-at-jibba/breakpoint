@@ -61,7 +61,8 @@ export function createConsoleReader({
     history = EMPTY_CONSOLE_HISTORY
     onChange({ status: 'fetching', history: shown })
     try {
-      // Page through until a read from where the last one ended finds nothing new.
+      // Once a held batch joins this history, the channel carries the rest. Waiting
+      // for an empty read would never finish on a page that logs between every read.
       for (;;) {
         const response = await read({ since: history.cursor })
         if (closed) return
@@ -69,6 +70,7 @@ export function createConsoleReader({
         const before = history.cursor
         history = foldConsoleRead(history, response.data)
         if (response.data.entries.length === 0 || history.cursor === before) break
+        if (held.length > 0 && held[0].after <= history.cursor) break
       }
     } catch (error) {
       if (closed) return
