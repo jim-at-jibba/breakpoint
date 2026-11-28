@@ -16,6 +16,7 @@ import {
   type Surface
 } from '../shared/routes'
 import { isThemePreference } from '../shared/theme'
+import { isPanelSide, isPanelSize } from '../shared/panel'
 import { expandUrl } from '../shared/urls'
 import { RouteError } from './route-error'
 import { AppService } from './services/app-service'
@@ -141,6 +142,26 @@ function expectLogRead(raw: unknown): ParamsOk<'log.read'> | ParamsBad {
   return { ok: true, params }
 }
 
+const EVALUATION_SHAPE = 'this route takes { expression } and optionally { pane }'
+
+function expectEvaluation(raw: unknown): ParamsOk<'panes.evaluate'> | ParamsBad {
+  const request = asParams(raw)
+  if (!request) return { ok: false, message: EVALUATION_SHAPE }
+  const unknown = unknownFields(request, ['expression', 'pane'])
+  if (unknown.length > 0) {
+    return { ok: false, message: `${EVALUATION_SHAPE}, not ${unknown.join(', ')}` }
+  }
+  const { expression, pane } = request
+  if (typeof expression !== 'string' || expression.trim() === '') {
+    return { ok: false, message: 'expression must be a string with something in it' }
+  }
+  if (pane === undefined) return { ok: true, params: { expression } }
+  if (typeof pane !== 'string' || pane.length === 0) {
+    return { ok: false, message: 'pane must be a non-empty string' }
+  }
+  return { ok: true, params: { expression, pane } }
+}
+
 const EXPANSION_SHAPE = 'this route takes { cursor } and optionally { arg }'
 
 function expectExpansion(raw: unknown): ParamsOk<'panes.expand'> | ParamsBad {
@@ -232,7 +253,7 @@ function rejectUnknown(
 
 const PANE_SHAPE = 'this route takes { pane }'
 
-function expectPaneOnly<N extends 'panes.remove' | 'panes.rotate'>(
+function expectPaneOnly<N extends 'panes.openDevTools' | 'panes.remove' | 'panes.rotate'>(
   raw: unknown
 ): ParamsOk<N> | ParamsBad {
   const named = expectPane(raw, PANE_SHAPE)
@@ -445,6 +466,39 @@ function expectThemeSetting(raw: unknown): ParamsOk<'app.setTheme'> | ParamsBad 
   return { ok: true, params: { preference } }
 }
 
+const PANEL_SHAPE =
+  'this route takes { side, visible, size }, at least one: side is bottom or right, visible is true or false, size is pixels'
+
+function expectPanelSetting(raw: unknown): ParamsOk<'app.setPanel'> | ParamsBad {
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: PANEL_SHAPE }
+  const unknown = unknownFields(setting, ['side', 'visible', 'size'])
+  if (unknown.length > 0) return { ok: false, message: `${PANEL_SHAPE}, not ${unknown.join(', ')}` }
+
+  const { side, visible, size } = setting
+  if (side === undefined && visible === undefined && size === undefined) {
+    return { ok: false, message: PANEL_SHAPE }
+  }
+  if (side !== undefined && !isPanelSide(side)) {
+    return { ok: false, message: 'side must be bottom or right' }
+  }
+  if (visible !== undefined && typeof visible !== 'boolean') {
+    return { ok: false, message: 'visible must be true or false' }
+  }
+  // A size smaller than the tab bar is clamped by the service, not refused here.
+  if (size !== undefined && !isPanelSize(size)) {
+    return { ok: false, message: 'size must be a positive number of pixels' }
+  }
+  return {
+    ok: true,
+    params: {
+      ...(side !== undefined && { side }),
+      ...(visible !== undefined && { visible }),
+      ...(size !== undefined && { size })
+    }
+  }
+}
+
 function expectSwitcherSetting(raw: unknown): ParamsOk<'app.setSwitcher'> | ParamsBad {
   const shape = 'this route takes { open }: whether the project switcher is showing'
   const setting = asParams(raw)
@@ -455,6 +509,19 @@ function expectSwitcherSetting(raw: unknown): ParamsOk<'app.setSwitcher'> | Para
   const { open } = setting
   if (typeof open !== 'boolean') return { ok: false, message: shape }
   return { ok: true, params: { open } }
+}
+
+function expectPreserveLogSetting(raw: unknown): ParamsOk<'app.setPreserveLog'> | ParamsBad {
+  const shape =
+    'this route takes { preserveLog }: whether the Console keeps its entries across navigation'
+  const setting = asParams(raw)
+  if (!setting) return { ok: false, message: shape }
+  const unknown = unknownFields(setting, ['preserveLog'])
+  if (unknown.length > 0) return { ok: false, message: `${shape}, not ${unknown.join(', ')}` }
+
+  const { preserveLog } = setting
+  if (typeof preserveLog !== 'boolean') return { ok: false, message: shape }
+  return { ok: true, params: { preserveLog } }
 }
 
 function expectZoomSetting(raw: unknown): ParamsOk<'project.setZoom'> | ParamsBad {
@@ -496,6 +563,12 @@ export interface Services {
 
 export function createRouteTable(services: Services): RouteTable {
   return {
+    // The floor is the log's last position as this call sees it: everything the log
+    // holds now is what the developer has seen and cleared.
+    'app.clearConsole': {
+      parseParams: expectNoParams,
+      handle: () => ({ payload: services.app.clearConsole(services.log.cursor) })
+    },
     'app.focus': {
       parseParams: expectNoParams,
       handle: () => ({ payload: services.app.focus() })
@@ -503,6 +576,16 @@ export function createRouteTable(services: Services): RouteTable {
     'app.quit': {
       parseParams: expectNoParams,
       handle: () => ({ payload: { quitting: true }, afterRespond: () => services.app.quit() })
+    },
+    'app.setPanel': {
+      parseParams: expectPanelSetting,
+      handle: async (setting) => ({ payload: await services.app.setPanel(setting) })
+    },
+    'app.setPreserveLog': {
+      parseParams: expectPreserveLogSetting,
+      handle: async ({ preserveLog }) => ({
+        payload: await services.app.setPreserveLog(preserveLog)
+      })
     },
     'app.setSwitcher': {
       parseParams: expectSwitcherSetting,
@@ -532,6 +615,10 @@ export function createRouteTable(services: Services): RouteTable {
       parseParams: expectPaneCreation,
       handle: async (creation) => ({ payload: await services.panes.add(creation) })
     },
+    'panes.evaluate': {
+      parseParams: expectEvaluation,
+      handle: async (request) => ({ payload: await services.panes.evaluate(request) })
+    },
     'panes.expand': {
       parseParams: expectExpansion,
       handle: async (request) => ({ payload: await services.panes.expand(request) })
@@ -539,6 +626,10 @@ export function createRouteTable(services: Services): RouteTable {
     'panes.list': {
       parseParams: expectNoParams,
       handle: () => ({ payload: services.panes.list() })
+    },
+    'panes.openDevTools': {
+      parseParams: expectPaneOnly,
+      handle: async ({ pane }) => ({ payload: services.panes.openDevTools(pane) })
     },
     'panes.remove': {
       parseParams: expectPaneOnly,

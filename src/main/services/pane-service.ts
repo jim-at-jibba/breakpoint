@@ -1,7 +1,9 @@
 import { stat } from 'node:fs/promises'
 import {
+  evaluationOf,
   isConsoleError,
   propertiesOf,
+  type Evaluation,
   type Expansion,
   type HeardHandles
 } from '../../shared/console'
@@ -17,6 +19,7 @@ import type { Pane, PaneChanges, Project } from '../../shared/project'
 import { resolveEntry, type FetchText, type IsFile } from '../../shared/resolution'
 import type {
   EmulationSetting,
+  EvaluationRequest,
   ExpansionRequest,
   GeometryReport,
   PaneCreation,
@@ -101,6 +104,26 @@ interface PendingHandleCapture {
  */
 export const MAX_HELD_PER_PANE = 1_000
 
+/**
+ * How a pane's page is asked to evaluate an expression: over its attachment, answering
+ * with what CDP answered. The pane host binds it to the guest it attached to, so it can
+ * only ever reach the page that attachment is on.
+ */
+export type Evaluator = (expression: string) => Promise<unknown>
+
+/**
+ * How real DevTools is opened on a pane's page. Bound by the pane host to the guest it was
+ * made for, and held for as long as that guest is the pane's: DevTools needs a page, not
+ * our attachment, so a pane that is degraded can still be opened ([ADR-0003]).
+ */
+export type DevToolsOpener = () => void
+
+/**
+ * How long one pane's evaluation is waited for. Long enough for an `await` on a fetch;
+ * short enough that a promise that never settles answers rather than holding the REPL.
+ */
+export const EVALUATION_TIMEOUT_MS = 10_000
+
 /** A pane after a change, and which of the asked-for values were actually different. */
 export interface PaneUpdate {
   pane: Pane
@@ -147,12 +170,17 @@ export class PaneService {
    * page is, so an entry still resolving when that happens finds its table gone.
    */
   private held = new Map<string, HandleTable>()
+  /** Per pane, the way to evaluate in its page, while it has an attachment to do it over. */
+  private evaluators = new Map<string, Evaluator>()
+  /** Per pane, the way to open DevTools on its page, while it has a page to open it on. */
+  private devTools = new Map<string, DevToolsOpener>()
 
   constructor(
     private readonly feed: StateFeed,
     private readonly log: EventLog,
     private readonly projects: PaneProjects,
-    private readonly isFile: IsFile = isFileOnDisk
+    private readonly isFile: IsFile = isFileOnDisk,
+    private readonly evaluationTimeout = EVALUATION_TIMEOUT_MS
   ) {}
 
   /**
@@ -165,6 +193,8 @@ export class PaneService {
     this.project = project
     this.current = paneStatusesFor(project, this.current)
     for (const pane of this.held.keys()) if (!this.has(pane)) this.forget(pane)
+    for (const pane of this.evaluators.keys()) if (!this.has(pane)) this.evaluators.delete(pane)
+    for (const pane of this.devTools.keys()) if (!this.has(pane)) this.devTools.delete(pane)
   }
 
   statuses(): Record<string, PaneStatus> {
@@ -209,6 +239,8 @@ export class PaneService {
     if (!this.has(pane)) throw noSuchPane(pane)
     const removed = await this.projects.removePane(pane)
     this.forget(pane)
+    this.evaluators.delete(pane)
+    this.devTools.delete(pane)
     this.record(pane, { type: 'pane.removed' })
     return removed
   }
@@ -234,14 +266,22 @@ export class PaneService {
     return { pane: { ...update.pane, status: this.current[pane] } }
   }
 
-  /** A new guest is a new page: nothing the one before it minted can be asked about. */
-  guestCreated(pane: string, url: string): void {
+  /**
+   * A new guest is a new page: nothing the one before it minted can be asked about.
+   * `openDevTools` opens DevTools on this guest, until another replaces it or it goes.
+   */
+  guestCreated(pane: string, url: string, openDevTools?: DevToolsOpener): void {
     this.forget(pane)
+    this.evaluators.delete(pane)
+    if (openDevTools && this.has(pane)) this.devTools.set(pane, openDevTools)
+    else this.devTools.delete(pane)
     this.record(pane, { type: 'pane.created', url })
     this.observe(pane, { type: 'guestCreated' })
   }
 
-  attached(pane: string, attempt: 1 | 2): void {
+  /** `evaluate` reaches the page over the attachment just made, for the REPL. */
+  attached(pane: string, attempt: 1 | 2, evaluate?: Evaluator): void {
+    if (evaluate && this.has(pane)) this.evaluators.set(pane, evaluate)
     this.record(pane, { type: 'pane.attached', attempt })
     this.observe(pane, { type: 'attached' })
   }
@@ -255,6 +295,7 @@ export class PaneService {
   detached(pane: string, reason: string): void {
     const message = `debugger detached: ${reason}`
     this.forget(pane)
+    this.evaluators.delete(pane)
     this.record(pane, { type: 'pane.detached', reason })
     this.observe(pane, { type: 'attachFailed', message })
   }
@@ -322,6 +363,53 @@ export class PaneService {
     return { live: false }
   }
 
+  /**
+   * An expression evaluated in one pane's page, or in every pane's, each answering on its
+   * own and in the project's order. A pane that threw, has no attachment or did not answer
+   * in time says so in its result, so one pane cannot cost the others theirs.
+   */
+  async evaluate({ expression, pane }: EvaluationRequest): Promise<{ results: Evaluation[] }> {
+    if (pane !== undefined && !this.has(pane)) throw noSuchPane(pane)
+    const panes = pane !== undefined ? [pane] : (this.project?.panes ?? []).map((each) => each.id)
+    const results = await Promise.all(panes.map((id) => this.evaluateIn(id, expression)))
+    return { results }
+  }
+
+  private async evaluateIn(pane: string, expression: string): Promise<Evaluation> {
+    const evaluate = this.evaluators.get(pane)
+    if (!evaluate) {
+      return { pane, outcome: 'failed', text: 'not attached: this pane cannot be evaluated in' }
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`no answer within ${this.evaluationTimeout / 1000}s`)),
+        this.evaluationTimeout
+      )
+    })
+    try {
+      return { pane, ...evaluationOf(await Promise.race([evaluate(expression), deadline])) }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { pane, outcome: 'failed', text: message }
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
+  /**
+   * Opens real DevTools on the pane's page. Nothing is recorded and nothing observed
+   * changes: DevTools is a second CDP client beside ours, not a replacement for it
+   * ([ADR-0003]). `opened` is false while the pane has no page to open it on.
+   */
+  openDevTools(pane: string): { opened: boolean } {
+    if (!this.has(pane)) throw noSuchPane(pane)
+    const open = this.devTools.get(pane)
+    if (!open) return { opened: false }
+    open()
+    return { opened: true }
+  }
+
   loaded(pane: string, url: string): void {
     this.record(pane, { type: 'pane.loaded', url })
     this.observe(pane, { type: 'loaded' })
@@ -346,6 +434,8 @@ export class PaneService {
     this.record(pane, { type: 'pane.destroyed' })
     if (!current) return
     this.forget(pane)
+    this.evaluators.delete(pane)
+    this.devTools.delete(pane)
     this.observe(pane, { type: 'guestDestroyed' })
   }
 

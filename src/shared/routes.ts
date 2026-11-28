@@ -10,9 +10,11 @@
  */
 
 import type { CertificateKey, CertificateState } from './certificates'
-import type { Expansion } from './console'
+import type { Evaluation, Expansion } from './console'
+import type { ConsoleDisplay } from './console-floor'
 import type { EmulationChanges } from './emulation'
 import type { LogRead, ReadParams } from './event-log'
+import type { PanelSetting, PanelState } from './panel'
 import type { PaneStatus, Size } from './panes'
 import type { Preset } from './presets'
 import type { Layout, Pane, Zoom } from './project'
@@ -24,8 +26,11 @@ import type { ThemePreference, ThemeState } from './theme'
 export const ROUTE_NAME_PATTERN = /^[a-z][a-z0-9]*\.[a-z][a-zA-Z0-9]*$/
 
 export const ROUTE_NAMES = [
+  'app.clearConsole',
   'app.focus',
   'app.quit',
+  'app.setPanel',
+  'app.setPreserveLog',
   'app.setSwitcher',
   'app.setTheme',
   'certificates.decide',
@@ -33,8 +38,10 @@ export const ROUTE_NAMES = [
   'certificates.list',
   'log.read',
   'panes.add',
+  'panes.evaluate',
   'panes.expand',
   'panes.list',
+  'panes.openDevTools',
   'panes.remove',
   'panes.reportGeometry',
   'panes.resize',
@@ -66,12 +73,37 @@ export type Surface = 'window' | 'cli'
  */
 export interface RouteSignatures {
   /**
+   * Clears the window's Console by setting its display floor to the log's last position
+   * ([ADR-0022]): the window shows nothing at or below it. The log is untouched, so
+   * `breakpoint logs --since 0` returns exactly what it did before, no pane's error count
+   * moves, and an agent part-way through reading the log is never disturbed. No read
+   * consults the floor; the CLI's equivalent is the `--since` it passes.
+   *
+   * Held for the life of the app and carried in the snapshot, so a reloaded window
+   * restores it, as `app.setSwitcher` is. The payload is the floor as it now stands.
+   */
+  'app.clearConsole': { params: undefined; payload: ConsoleDisplay }
+  /**
    * Brings the app's window forward and gives it focus. What `breakpoint .` does after
    * handing a repo to a running app, and what `--background` is the way to skip. Creates
    * a window first when the app is alive without one on macOS.
    */
   'app.focus': { params: undefined; payload: { focused: true } }
   'app.quit': { params: undefined; payload: { quitting: true } }
+  /**
+   * Arranges the panel: docks it below or beside the canvas, sizes it on the side it is
+   * docked to, shows or hides it — any of them, at least one. An app setting rather than
+   * a project's, kept on this machine, so it survives a restart and does not move when a
+   * different project is opened. The payload is the arrangement as it now stands.
+   */
+  'app.setPanel': { params: PanelSetting; payload: PanelState }
+  /**
+   * Whether the Console keeps its entries when the project navigates. On, the default,
+   * keeps them, which costs nothing because keeping is what the log does. Off moves the
+   * display floor to each navigation and changes nothing else ([ADR-0022]). An app
+   * setting, kept on this machine like the theme.
+   */
+  'app.setPreserveLog': { params: { preserveLog: boolean }; payload: ConsoleDisplay }
   /**
    * Shows or hides the project switcher. A route rather than a message to the window,
    * because the menu accelerator, the toolbar button and Escape all cause it, and the
@@ -127,6 +159,18 @@ export interface RouteSignatures {
    */
   'panes.add': { params: PaneCreation; payload: { pane: PaneListing; index: number } }
   /**
+   * Evaluates an expression in one pane's page, or in every pane's, which is what the
+   * Console's REPL sends. Top-level `await` resolves. Every pane asked answers, in the
+   * project's order, so widths can be compared side by side: a value, what the expression
+   * threw, or why it could not be asked — none of them fails the call. Naming a pane the
+   * project does not have is `PANE_NOT_FOUND`.
+   *
+   * Nothing is written to the log: what the page logs while it runs is heard like
+   * anything else it logs. No command reaches it in this phase; `breakpoint eval` waits for
+   * the Evaluate tier that governs it ([ADR-0025]).
+   */
+  'panes.evaluate': { params: EvaluationRequest; payload: { results: Evaluation[] } }
+  /**
    * The properties of an object a pane's page logged, named by the cursor of the entry
    * that logged it and which of its arguments it was. The entry keeps only a preview,
    * which is as true after the page has gone as before; the object behind it lives only
@@ -137,6 +181,15 @@ export interface RouteSignatures {
   'panes.expand': { params: ExpansionRequest; payload: Expansion }
   /** The open project's panes, each with what is observed of it. Empty with nothing open. */
   'panes.list': { params: undefined; payload: { panes: PaneListing[] } }
+  /**
+   * Opens real Chromium DevTools on one pane's page, in a window of its own, for
+   * everything Breakpoint does not reimplement. It sits beside our attachment rather than
+   * replacing it: CDP multiplexes per client, so the pane's console still reaches the log
+   * and its error count still moves, and closing it changes nothing ([ADR-0003]).
+   * `opened` is false when the pane has no page to open it on yet. Naming a pane the
+   * project does not have is `PANE_NOT_FOUND`.
+   */
+  'panes.openDevTools': { params: { pane: string }; payload: { opened: boolean } }
   /** Takes a pane out of the open project, leaving every other pane as it was. */
   'panes.remove': { params: { pane: string }; payload: { pane: Pane } }
   /**
@@ -246,6 +299,12 @@ export interface GeometryReport {
 }
 
 export type EmulationSetting = EmulationChanges & { pane: string }
+
+/** An expression, and the pane to evaluate it in; every pane when none is named. */
+export interface EvaluationRequest {
+  expression: string
+  pane?: string
+}
 
 /** An entry by its cursor, and one of its arguments: the first, unless another is named. */
 export interface ExpansionRequest {

@@ -1,3 +1,5 @@
+import { DEFAULT_PANEL } from './panel'
+import { DEFAULT_CONSOLE_DISPLAY } from './console-floor'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import { ROUTE_NAMES } from './routes'
 import {
@@ -41,6 +43,13 @@ describe('the declared surface', () => {
     for (const command of CLI_COMMANDS) {
       expect(ROUTE_NAMES).toContain(command.route)
     }
+  })
+
+  it('publishes no command for panes.evaluate: eval waits for the Evaluate tier (ADR-0025)', () => {
+    expect(ROUTE_NAMES).toContain('panes.evaluate')
+    expect(CLI_COMMANDS.map((command) => command.route)).not.toContain('panes.evaluate')
+    expect(CLI_COMMANDS.map((command) => command.name)).not.toContain('eval')
+    expect(parseArgv(['eval', '1'], '/cwd').kind).not.toBe('command')
   })
 
   it('names every flag with a double dash', () => {
@@ -690,7 +699,9 @@ describe('the state as a terminal reads it', () => {
       panes,
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -710,7 +721,9 @@ describe('the state as a terminal reads it', () => {
           panes: {},
           certificates: { trusted: [], waiting: [] },
           theme: DARK,
-          switcher: { open: false }
+          switcher: { open: false },
+          panel: DEFAULT_PANEL,
+          console: DEFAULT_CONSOLE_DISPLAY
         }) ?? ''
       ).split('\n')
 
@@ -730,7 +743,9 @@ describe('the state as a terminal reads it', () => {
       panes,
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -751,7 +766,9 @@ describe('the state as a terminal reads it', () => {
       panes,
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
 
     const lines = (state?.render(snapshot) ?? '').split('\n')
@@ -917,7 +934,9 @@ describe('certificate trust on the terminal', () => {
         panes: project ? paneStatusesFor(project, {}) : {},
         certificates: { trusted: [trusted], waiting: [waiting] },
         theme: DARK,
-        switcher: { open: false }
+        switcher: { open: false },
+        panel: DEFAULT_PANEL,
+        console: DEFAULT_CONSOLE_DISPLAY
       }
       expect((state?.render(snapshot) ?? '').split('\n')).toContain(
         'Certificates: 1 trusted, 1 waiting'
@@ -933,7 +952,9 @@ describe('certificate trust on the terminal', () => {
       panes: {},
       certificates: { trusted: [], waiting: [] },
       theme: DARK,
-      switcher: { open: false }
+      switcher: { open: false },
+      panel: DEFAULT_PANEL,
+      console: DEFAULT_CONSOLE_DISPLAY
     }
     expect(state?.render(snapshot)).toBe(
       'No project is open. Run `breakpoint .` in a repo, or `breakpoint open <url>`.\nCursor 9'

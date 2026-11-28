@@ -623,7 +623,7 @@ first thirteen come back from the app; the rest are raised by the command itself
 | `ORIGIN_NOT_ALLOWED` | `1` | `breakpoint open` named an origin the project does not allow. `details.url` is the expanded URL and `details.allowedOrigins` is the list it was checked against. Nothing moved |
 | `CERTIFICATES_UNREADABLE` | `1` | The stored certificate decisions are on disk but this build will not read them. `details.file` is the path. The file is left exactly as it was, so nothing is trusted and nothing new can be stored until it is fixed or deleted |
 | `CERTIFICATE_NOT_FOUND` | `1` | No certificate is waiting on that host and fingerprint, and none is stored for it. `details.host` and `details.fingerprint` are what was named |
-| `SETTINGS_UNREADABLE` | `1` | The app's settings file is on disk but this build will not read it. `details.file` is the path. `app.setTheme` refuses rather than overwrite it |
+| `SETTINGS_UNREADABLE` | `1` | The app's settings file is on disk but this build will not read it. `details.file` is the path. `app.setTheme`, `app.setPanel` and `app.setPreserveLog` refuse rather than overwrite it |
 | `INVALID_USAGE` | `2` | The arguments could not be parsed |
 | `APP_NOT_RUNNING` | `3` | Nothing is listening, and `--no-launch` was passed |
 | `LAUNCH_FAILED` | `1` | The app could not be started, or never opened its socket |
@@ -637,8 +637,11 @@ Every route is reachable from every surface; there is no window-only behaviour.
 
 | Route | Params | Payload | Reached by |
 | --- | --- | --- | --- |
+| `app.clearConsole` | none | `{ "floor": n, "preserveLog": true }`: the window's Console shows nothing at or below `floor`, the log's last position when it was cleared. The log is untouched, so `breakpoint logs --since 0` returns what it did before, and no pane's `errors` moves | the window, the socket |
 | `app.focus` | none | `{ "focused": true }`; creates a window first if the app is alive without one | `breakpoint .`, unless `--background` |
 | `app.quit` | none | `{ "quitting": true }` | `breakpoint quit` |
+| `app.setPanel` | `{ "side": "right", "visible": true, "size": 460 }`, any of them and at least one: `side` is `bottom` or `right`, `size` is CSS pixels on the side it ends up docked to, and is never smaller than the tab bar | `{ "side", "visible", "sizes": { "bottom", "right" } }`: the arrangement as it now stands | the window, the socket |
+| `app.setPreserveLog` | `{ "preserveLog": false }` | `{ "floor": n, "preserveLog": false }`, as it now stands. Off moves the Console's floor to each navigation of the project and changes nothing else; on, the default, keeps entries across navigation | the window, the socket |
 | `app.setSwitcher` | `{ "open": true }` | `{ "open": true }`, as it now stands | the window, the socket |
 | `app.setTheme` | `{ "preference": "dark" }`: `system`, `light` or `dark` | `{ "preference", "system", "active" }`: the preference and the theme it resolves to | the window, the socket |
 | `certificates.decide` | `{ "host": "staging.example.com", "fingerprint": "sha256/…", "trusted": true }` | `{ "trusted": [ … ], "waiting": [ … ] }` | the window, the socket |
@@ -646,8 +649,10 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `certificates.list` | none | the same | the socket |
 | `log.read` | `{ "since": 12, "within": 300000, "pane": id, "level": "warn", "errors": true, "changes": true }`, each optional; none for the whole log. `within` is milliseconds; `errors` refuses `level` beside it; `changes` reads only changes, and narrows the others rather than replacing them | `{ "entries": [], "cursor": n, "droppedBefore"? }` | `breakpoint logs`, `breakpoint changes` |
 | `panes.add` | `{ "preset": "mobile" }`, or `{ "width": 390, "height": 844 }` | `{ "pane": { … }, "index": n }`: the pane with its `status`, and where it was put | the window, the socket |
+| `panes.evaluate` | `{ "expression": "innerWidth", "pane": id }`; `pane` is optional, and without it every pane is asked. Top-level `await` resolves | `{ "results": [{ "pane", "outcome", "text" }] }`: one per pane asked, in the project's order. `outcome` is `value`, `thrown` when the expression threw, or `failed` when the pane could not be asked, such as with no attachment or no answer within 10 seconds; none of them fails the call. `text` is the answer as the console prints it. Nothing is written to the log. No command reaches it yet: `breakpoint eval` arrives with the Evaluate tier | the window, the socket |
 | `panes.expand` | `{ "cursor": 12, "arg": 1 }`: an entry's cursor, and which of its arguments; `arg` is `0` if left out | `{ "live": true, "properties": [{ "name", "value" }], "truncated": false }`, or `{ "live": false }` once the page that logged it has gone | the socket |
 | `panes.list` | none | `{ "panes": [ … ] }`: each pane with its `status` | the socket |
+| `panes.openDevTools` | `{ "pane": id }` | `{ "opened": true }`; `false` when the pane has no page to open it on yet. Opens real Chromium DevTools on the pane's page, in a window of its own. It sits beside Breakpoint's attachment rather than replacing it: the pane's console still reaches the log while it is open, and closing it changes nothing. No command reaches it | the window, the socket |
 | `panes.remove` | `{ "pane": id }` | `{ "pane": { … } }`: the pane that was removed | the window, the socket |
 | `panes.reportGeometry` | `{ "pane": id, "expected": { "width", "height" }, "measured": { "width", "height" } }` | `{ "status": … }` | the window |
 | `panes.resize` | `{ "pane": id, "width": 390 }`, with `width`, `height` or both | `{ "pane": { … } }`, with its `status` | the window, the socket |
@@ -663,7 +668,7 @@ Every route is reachable from every surface; there is no window-only behaviour.
 | `project.state` | none | the state snapshot | `breakpoint state` |
 
 The state snapshot is
-`{ "revision": n, "cursor": n, "project": …, "panes": { … }, "certificates": { … }, "theme": { … }, "switcher": { … } }`,
+`{ "revision": n, "cursor": n, "project": …, "panes": { … }, "certificates": { … }, "theme": { … }, "switcher": { … }, "panel": { … }, "console": { … } }`,
 where `project` is `null` until one is opened, and otherwise carries `name`, `repoPath`,
 `startUrl` — where the panes are pointed now, which a navigation moves — `allowedOrigins`,
 `panes`, `layout`, `zoom` and `sessions`. Each pane has an
@@ -671,8 +676,13 @@ where `project` is `null` until one is opened, and otherwise carries `name`, `re
 `preset` it was made from. `revision` counts the changes the app has announced to its
 window; a script can ignore it. `cursor` is the event log position the snapshot was
 taken at.
-`theme` is what `app.setTheme` answers and `switcher` is what `app.setSwitcher` answers;
-both are the window's, and a script can ignore them.
+`theme` is what `app.setTheme` answers, `switcher` is what `app.setSwitcher` answers,
+`panel` is what `app.setPanel` answers and `console` is what `app.clearConsole` and
+`app.setPreserveLog` answer; all four are the window's, and a script can ignore them. The
+panel's arrangement and preserve-log are kept with the app's settings rather than with
+any project, so opening another repo never moves them. The Console's floor is held while
+the app runs and never stored. No read consults it: a script's equivalent is the
+`--since` it passes.
 
 The top-level `panes` is what is observed of each pane while the app runs, keyed by pane
 `id`, and empty when nothing is open. It is never stored:

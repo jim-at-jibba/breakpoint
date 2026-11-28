@@ -1,3 +1,5 @@
+import { DEFAULT_PANEL } from './panel'
+import { DEFAULT_CONSOLE_DISPLAY } from './console-floor'
 import { describe, expect, it } from 'vitest'
 import { createProject } from './project'
 import { startProjection, receiveBatch, receiveSnapshot, type Projection } from './projection'
@@ -25,7 +27,9 @@ function snap(revision: number, project: StateSnapshot['project'], cursor = 12):
     panes: project ? paneStatusesFor(project, {}) : {},
     certificates: { trusted: [], waiting: [] },
     theme: DARK,
-    switcher: { open: false }
+    switcher: { open: false },
+    panel: DEFAULT_PANEL,
+    console: DEFAULT_CONSOLE_DISPLAY
   }
 }
 

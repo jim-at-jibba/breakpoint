@@ -30,6 +30,7 @@ import { bundle, BUNDLE_ENTRIES, BUNDLE_PATH, type BundleEntry } from './bundle'
  * `/bundled` loads a production-style bundle, served with its map beneath it: see `bundle`.
  * `/bundled?entry=responsive` loads the bundle's other entry, which throws only in a pane
  * narrower than 640 CSS px and asks the other origin for something it will not share.
+ * `/flood` logs 2,000 entries in one second: see `FLOOD`.
  *
  * Every request either origin answers is recorded with its headers, which is what a
  * server doing device detection would see.
@@ -216,6 +217,40 @@ ${Object.keys(RESOLUTION_SCRIPTS)
 `
 
 /**
+ * `/flood`, PRD §10's load: `FLOOD.entries` console entries spread evenly over
+ * `FLOOD.milliseconds`, starting as the page loads. Each says `flood <n>`, so none
+ * collapses into another and every one is a row. `window.flooded` resolves with how long
+ * the page took to say them all, so a test can check the rate it was held to.
+ */
+export const FLOOD_PATH = '/flood'
+export const FLOOD = { entries: 2_000, milliseconds: 1_000 } as const
+
+const FLOOD_PAGE = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>flood</title>
+<script>
+  window.flooded = new Promise((resolve) => {
+    const total = ${FLOOD.entries};
+    const span = ${FLOOD.milliseconds};
+    const start = performance.now();
+    let sent = 0;
+    function tick() {
+      const due = Math.min(total, Math.ceil(((performance.now() - start) / span) * total));
+      while (sent < due) console.log('flood ' + sent++);
+      if (sent < total) setTimeout(tick, 4);
+      else resolve(performance.now() - start);
+    }
+    tick();
+  });
+</script>
+</head>
+<body><p>flood</p></body>
+</html>
+`
+
+/**
  * The other origin rides on the document, because a module script has no `currentScript`.
  * The viewport is the device's, as a responsive site declares it: without it a pane with
  * the mobile flag lays out at Chromium's 980 CSS px whatever its width.
@@ -263,6 +298,14 @@ function respond(
         'cache-control': 'no-store'
       })
       response.end(script ? CONSOLE_SCRIPT : consolePage(other()))
+      return
+    }
+    if (target.pathname === FLOOD_PATH) {
+      response.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'no-store'
+      })
+      response.end(FLOOD_PAGE)
       return
     }
     if (target.pathname === '/resolution') {

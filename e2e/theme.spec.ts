@@ -18,6 +18,7 @@ import {
 } from '../src/shared/project'
 import { ROUTE_CHANNEL } from '../src/shared/ipc'
 import type { StateSnapshot } from '../src/shared/state'
+import { DEFAULT_PANEL } from '../src/shared/panel'
 import { APP_THEME_BACKGROUND, type AppTheme, type ThemePreference } from '../src/shared/theme'
 import { startFixture, type Fixture } from './fixture'
 import {
@@ -192,7 +193,7 @@ test('an override takes the chrome away from the desktop, and the window with it
   // The window's own colour moves with it, so the next window it opens is not the
   // colour the last theme was.
   expect(await windowColour(launched)).toBe(APP_THEME_BACKGROUND[away])
-  expect(storedSettings()).toEqual({ version: 1, theme: away })
+  expect(storedSettings()).toEqual({ version: 1, theme: away, panel: DEFAULT_PANEL })
 })
 
 test('an override survives a restart, and the window never starts the wrong colour', async () => {
@@ -291,7 +292,7 @@ test('going back to system hands the chrome to the desktop again', async () => {
     active: started.theme.active
   })
   await expect.poll(() => themeClass(page)).toBe(started.theme.active)
-  expect(storedSettings()).toEqual({ version: 1, theme: 'system' })
+  expect(storedSettings()).toEqual({ version: 1, theme: 'system', panel: DEFAULT_PANEL })
 })
 
 test('the theme reaches the window in the snapshot, as a patch and not a channel of its own', async () => {

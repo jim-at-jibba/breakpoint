@@ -11,6 +11,7 @@ import {
 } from '../shared/paths'
 import { installAppMenu } from './app-menu'
 import { registerIpcAdapter } from './adapters/ipc'
+import { createConsoleAdapter, type ConsoleAdapter } from './adapters/console'
 import { createPatchAdapter, type PatchAdapter } from './adapters/patches'
 import { startSocketAdapter, type SocketAdapter } from './adapters/socket'
 import { EventLog } from '../shared/event-log'
@@ -46,6 +47,7 @@ const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 let socketAdapter: SocketAdapter | undefined
 let patchAdapter: PatchAdapter | undefined
+let consoleAdapter: ConsoleAdapter | undefined
 let dispatch: Dispatch | undefined
 let paneHost: PaneHost | undefined
 let launchReady = false
@@ -261,6 +263,7 @@ if (!hasSingleInstanceLock) {
     installAppMenu({ showSwitcher: () => showSwitcher() })
     registerIpcAdapter(dispatch)
     patchAdapter = createPatchAdapter(feed)
+    consoleAdapter = createConsoleAdapter(log)
 
     const socketPath = resolveSocketPath(pathEnvironment)
     try {
@@ -305,6 +308,8 @@ app.on('will-quit', () => {
   socketAdapter = undefined
   patchAdapter?.close()
   patchAdapter = undefined
+  consoleAdapter?.close()
+  consoleAdapter = undefined
 })
 
 // Quit when all windows are closed, except on macOS. There, it's common

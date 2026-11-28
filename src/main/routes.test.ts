@@ -303,6 +303,146 @@ describe('app.setTheme', () => {
   })
 })
 
+describe('app.setPanel', () => {
+  interface PanelDispatcher {
+    dispatch: Dispatch
+    setPanel: ReturnType<typeof vi.fn>
+  }
+
+  function panelDispatcher(): PanelDispatcher {
+    const setPanel = vi
+      .fn()
+      .mockResolvedValue({ side: 'bottom', visible: true, sizes: { bottom: 278, right: 460 } })
+    return {
+      dispatch: createDispatch(createRouteTable({ app: { setPanel } } as unknown as Services)),
+      setPanel
+    }
+  }
+
+  it.each([
+    { side: 'right' },
+    { visible: false },
+    { size: 320 },
+    { size: 4 },
+    { side: 'bottom', visible: true, size: 278.5 }
+  ])('hands %j to the service as it came', async (params) => {
+    const { dispatch, setPanel } = panelDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setPanel', params },
+      { surface: 'cli' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(setPanel).toHaveBeenCalledWith(params)
+  })
+
+  it.each([
+    undefined,
+    {},
+    { side: 'left' },
+    { side: 'top' },
+    { visible: 'no' },
+    { size: 0 },
+    { size: -10 },
+    { size: '300px' },
+    { size: Number.NaN },
+    { side: 'right', tab: 'console' }
+  ])('refuses %j without reaching the service', async (params) => {
+    const { dispatch, setPanel } = panelDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setPanel', params },
+      { surface: 'window' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(setPanel).not.toHaveBeenCalled()
+  })
+})
+
+describe('app.clearConsole', () => {
+  // The floor is the log's last position as the call sees it, not one the caller names.
+  it('clears to the log head, leaving the log as it was', async () => {
+    const log = new EventLog()
+    log.append(null, { type: 'project.navigated', url: 'http://localhost:3000/' })
+    log.append(null, { type: 'project.zoomChanged', zoom: 50 })
+    const clearConsole = vi.fn().mockReturnValue({ floor: 2, preserveLog: true })
+    const dispatch = createDispatch(
+      createRouteTable({ app: { clearConsole }, log } as unknown as Services)
+    )
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.clearConsole', params: undefined },
+      { surface: 'window' }
+    )
+
+    expect(response).toEqual({ id: '1', ok: true, data: { floor: 2, preserveLog: true } })
+    expect(clearConsole).toHaveBeenCalledWith(2)
+    expect(log.read().entries).toHaveLength(2)
+  })
+
+  it.each([{ floor: 0 }, { through: 12 }])(
+    'refuses %j without reaching the service',
+    async (params) => {
+      const clearConsole = vi.fn()
+      const dispatch = createDispatch(
+        createRouteTable({ app: { clearConsole }, log: new EventLog() } as unknown as Services)
+      )
+
+      const { response } = await dispatch(
+        { id: '1', route: 'app.clearConsole', params },
+        { surface: 'cli' }
+      )
+
+      expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+      expect(clearConsole).not.toHaveBeenCalled()
+    }
+  )
+})
+
+describe('app.setPreserveLog', () => {
+  function preserveDispatcher(): { dispatch: Dispatch; setPreserveLog: ReturnType<typeof vi.fn> } {
+    const setPreserveLog = vi.fn().mockResolvedValue({ floor: 0, preserveLog: false })
+    return {
+      dispatch: createDispatch(
+        createRouteTable({ app: { setPreserveLog } } as unknown as Services)
+      ),
+      setPreserveLog
+    }
+  }
+
+  it.each([true, false])('hands %j to the service', async (preserveLog) => {
+    const { dispatch, setPreserveLog } = preserveDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setPreserveLog', params: { preserveLog } },
+      { surface: 'cli' }
+    )
+
+    expect(response.ok).toBe(true)
+    expect(setPreserveLog).toHaveBeenCalledWith(preserveLog)
+  })
+
+  it.each([
+    undefined,
+    {},
+    { preserveLog: 'false' },
+    { preserveLog: 0 },
+    { preserveLog: true, floor: 3 }
+  ])('refuses %j without reaching the service', async (params) => {
+    const { dispatch, setPreserveLog } = preserveDispatcher()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'app.setPreserveLog', params },
+      { surface: 'window' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(setPreserveLog).not.toHaveBeenCalled()
+  })
+})
+
 describe('app.setSwitcher', () => {
   interface SwitcherDispatcher {
     dispatch: Dispatch
@@ -349,6 +489,97 @@ describe('app.setSwitcher', () => {
 
     expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
     expect(setSwitcher).not.toHaveBeenCalled()
+  })
+})
+
+describe('panes.evaluate', () => {
+  function evaluator(): { dispatch: Dispatch; evaluate: ReturnType<typeof vi.fn> } {
+    const evaluate = vi.fn().mockResolvedValue({ results: [] })
+    const panes = { evaluate }
+    return {
+      dispatch: createDispatch(createRouteTable({ panes } as unknown as Services)),
+      evaluate
+    }
+  }
+
+  it.each([
+    [{ expression: 'innerWidth' }, { expression: 'innerWidth' }],
+    [
+      { expression: 'await fetch("/")', pane: 'pane-1' },
+      { expression: 'await fetch("/")', pane: 'pane-1' }
+    ]
+  ])('takes %j and answers with what the pane service says', async (params, asked) => {
+    const { dispatch, evaluate } = evaluator()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.evaluate', params },
+      { surface: 'window' }
+    )
+
+    expect(evaluate).toHaveBeenCalledWith(asked)
+    expect(response).toEqual({ id: '1', ok: true, data: { results: [] } })
+  })
+
+  it.each([
+    ['nothing', undefined],
+    ['no expression', { pane: 'pane-1' }],
+    ['an expression that is not a string', { expression: 1 }],
+    ['an empty expression', { expression: '  ' }],
+    ['an empty pane', { expression: '1', pane: '' }],
+    ['a pane that is not a string', { expression: '1', pane: 2 }],
+    ['a field it does not take', { expression: '1', panes: ['pane-1'] }]
+  ])('refuses %s', async (_, params) => {
+    const { dispatch, evaluate } = evaluator()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.evaluate', params },
+      { surface: 'cli' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(evaluate).not.toHaveBeenCalled()
+  })
+})
+
+describe('panes.openDevTools', () => {
+  function opener(): { dispatch: Dispatch; openDevTools: ReturnType<typeof vi.fn> } {
+    const openDevTools = vi.fn().mockReturnValue({ opened: true })
+    const panes = { openDevTools }
+    return {
+      dispatch: createDispatch(createRouteTable({ panes } as unknown as Services)),
+      openDevTools
+    }
+  }
+
+  it('opens it on the pane named, from the window or the socket', async () => {
+    for (const surface of ['window', 'cli'] as const) {
+      const { dispatch, openDevTools } = opener()
+
+      const { response } = await dispatch(
+        { id: '1', route: 'panes.openDevTools', params: { pane: 'pane-1' } },
+        { surface }
+      )
+
+      expect(openDevTools).toHaveBeenCalledWith('pane-1')
+      expect(response).toEqual({ id: '1', ok: true, data: { opened: true } })
+    }
+  })
+
+  it.each([
+    ['nothing', undefined],
+    ['an empty pane', { pane: '' }],
+    ['a pane that is not a string', { pane: 2 }],
+    ['a field it does not take', { pane: 'pane-1', mode: 'bottom' }]
+  ])('refuses %s', async (_, params) => {
+    const { dispatch, openDevTools } = opener()
+
+    const { response } = await dispatch(
+      { id: '1', route: 'panes.openDevTools', params },
+      { surface: 'cli' }
+    )
+
+    expect(response).toMatchObject({ ok: false, error: { code: 'INVALID_PARAMS' } })
+    expect(openDevTools).not.toHaveBeenCalled()
   })
 })
 

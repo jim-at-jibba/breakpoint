@@ -20,6 +20,8 @@ import type { LayoutSetting, LayoutState, Navigation, Surface } from '../../shar
 import { isOriginAllowed, normaliseOrigins, sameOrigins } from '../../shared/urls'
 import type { StateSnapshot, SwitcherState } from '../../shared/state'
 import type { ThemeState } from '../../shared/theme'
+import type { ConsoleDisplay } from '../../shared/console-floor'
+import type { PanelState } from '../../shared/panel'
 import type { PaneCreation } from '../../shared/routes'
 import { RouteError } from '../route-error'
 import type { StateFeed } from '../state-feed'
@@ -48,14 +50,22 @@ export interface SnapshotCertificates {
 }
 
 /**
- * What the snapshot needs from the app itself: the theme, and whether the project
- * switcher is showing. Both are the app's and not a project's — the theme survives a
- * project closing and the switcher is how the next one is opened — so this service does
- * not own either. It only has to put them in the one snapshot every surface renders from.
+ * What the snapshot needs from the app itself: the theme, whether the project switcher
+ * is showing, how the panel is arranged and where the Console's floor is. All three are the app's and not a
+ * project's — the theme survives a project closing, the switcher is how the next one is
+ * opened, and the panel is how the developer works — so this service owns none of them. It only has to put them in the one snapshot every surface renders from.
  */
 export interface SnapshotApp {
   theme(): ThemeState
   switcher(): SwitcherState
+  panel(): PanelState
+  /** The Console's display floor, and whether navigating moves it. */
+  console(): ConsoleDisplay
+  /**
+   * The project navigated, recorded in the log at `position`. Moves the Console's floor
+   * there when the log is not preserved, and does nothing else ([ADR-0022]).
+   */
+  navigated(position: number): void
 }
 export class ProjectService {
   private current: Project | null = null
@@ -333,7 +343,8 @@ export class ProjectService {
     // panes, and a pane that followed a link is somewhere else even when the project's
     // URL has not moved.
     if (project.startUrl !== url) await this.save({ ...project, startUrl: url })
-    this.log.append(null, { type: 'project.navigated', url })
+    const navigated = this.log.append(null, { type: 'project.navigated', url })
+    this.appState.navigated(navigated.cursor)
     // Reset readiness before announcing the navigation. Waiting callers can poll as soon
     // as the route answers, before Electron has emitted did-start-loading for each guest.
     for (const pane of project.panes) this.panes.loading(pane.id)
@@ -351,7 +362,8 @@ export class ProjectService {
     const { presets } = await this.presets.list()
     const project = createAdHocProject(url, presets)
     this.adopt(project)
-    this.log.append(null, { type: 'project.navigated', url })
+    const navigated = this.log.append(null, { type: 'project.navigated', url })
+    this.appState.navigated(navigated.cursor)
     return { url, panes: project.panes.map((pane) => pane.id) }
   }
 
@@ -392,7 +404,9 @@ export class ProjectService {
       panes: this.panes.statuses(),
       certificates: this.certificates.list(),
       theme: this.appState.theme(),
-      switcher: this.appState.switcher()
+      switcher: this.appState.switcher(),
+      panel: this.appState.panel(),
+      console: this.appState.console()
     }
   }
 }

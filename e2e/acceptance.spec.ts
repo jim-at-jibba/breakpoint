@@ -239,6 +239,10 @@ test('three panes render localhost at 50%, drawn, clickable to the bottom edge, 
 
   // `breakpoint . --wait --json` prints the pane set.
   launched = await launchApp(sandbox)
+  // The panes are under test, not the panel: hidden, so every pane is drawn whole on the
+  // canvas and its swatch is on screen once its bottom edge is. An app setting, so it
+  // stays hidden across the restart below.
+  await route('app.setPanel', { visible: false })
   const first = await openAndWait()
   expect(first.project?.repoPath).toBe(repo)
   expect(first.project?.panes).toEqual(stored.panes)

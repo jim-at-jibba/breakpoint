@@ -1,3 +1,5 @@
+import { DEFAULT_PANEL } from './panel'
+import { DEFAULT_CONSOLE_DISPLAY } from './console-floor'
 import { describe, expect, it } from 'vitest'
 import { foldPaneStatus, initialPaneStatus, type PaneStatus } from './panes'
 import { createProject } from './project'
@@ -18,7 +20,9 @@ const nothingOpen: StateSnapshot = {
   panes: {},
   certificates: { trusted: [], waiting: [] },
   theme: DARK,
-  switcher: { open: false }
+  switcher: { open: false },
+  panel: DEFAULT_PANEL,
+  console: DEFAULT_CONSOLE_DISPLAY
 }
 
 describe('applying a patch', () => {
@@ -39,7 +43,9 @@ describe('applying a patch', () => {
       // Certificate trust is the app's, not a project's: opening one leaves it alone.
       certificates: nothingOpen.certificates,
       theme: nothingOpen.theme,
-      switcher: nothingOpen.switcher
+      switcher: nothingOpen.switcher,
+      panel: nothingOpen.panel,
+      console: nothingOpen.console
     })
   })
 
@@ -284,7 +290,9 @@ describe('snapshotReadiness', () => {
       panes,
       certificates: nothingOpen.certificates,
       theme: nothingOpen.theme,
-      switcher: nothingOpen.switcher
+      switcher: nothingOpen.switcher,
+      panel: nothingOpen.panel,
+      console: nothingOpen.console
     }
   }
 
@@ -360,7 +368,9 @@ describe('snapshotReadiness', () => {
       panes: {},
       certificates: nothingOpen.certificates,
       theme: nothingOpen.theme,
-      switcher: nothingOpen.switcher
+      switcher: nothingOpen.switcher,
+      panel: nothingOpen.panel,
+      console: nothingOpen.console
     }
     expect(snapshotReadiness(empty)).toEqual({ ready: true })
   })
@@ -526,5 +536,38 @@ describe('the project switcher in the snapshot', () => {
 
     expect(closed.switcher).toEqual({ open: false })
     expect(opened.switcher).toEqual({ open: false })
+  })
+})
+
+describe('the panel in the snapshot', () => {
+  // The panel's arrangement is the app's: a project closing or opening never moves it.
+  it('lands whether or not a project is open', () => {
+    const panel = { ...nothingOpen.panel, side: 'right' as const }
+    const next = applyPatch(nothingOpen, { revision: 1, patch: { type: 'app.panel', panel } })
+
+    expect(next).toEqual({ ...nothingOpen, revision: 1, panel })
+  })
+})
+
+describe('the console in the snapshot', () => {
+  // The floor is the window's, not a project's: it lands whatever is open ([ADR-0022]).
+  it('lands whether or not a project is open', () => {
+    const console = { floor: 12, preserveLog: false }
+    const next = applyPatch(nothingOpen, { revision: 1, patch: { type: 'app.console', console } })
+
+    expect(next).toEqual({ ...nothingOpen, revision: 1, console })
+  })
+
+  it('leaves every pane status alone, so no error count moves on Clear', () => {
+    const before = applyPatch(nothingOpen, {
+      revision: 1,
+      patch: { type: 'project.opened', project: shop }
+    })
+    const console = { floor: 40, preserveLog: true }
+
+    const after = applyPatch(before, { revision: 2, patch: { type: 'app.console', console } })
+
+    expect(after.panes).toBe(before.panes)
+    expect(after.project).toBe(before.project)
   })
 })

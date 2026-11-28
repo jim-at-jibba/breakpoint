@@ -829,3 +829,36 @@ describe('console entries', () => {
     expect(log.read().entries[0]).toBe(stored)
   })
 })
+
+describe('listening to appends', () => {
+  const said = {
+    type: 'console.message',
+    level: 'log',
+    source: 'console',
+    text: 'hi',
+    args: ['hi'],
+    url: null,
+    location: null,
+    stack: []
+  } as const
+
+  it('hears each entry as it is appended, with the entry its ring evicted', () => {
+    const log = new EventLog({ limit: 1 })
+    const heard: Array<[number, number | null]> = []
+    const unsubscribe = log.subscribe(({ entry, evicted }) =>
+      heard.push([entry.cursor, evicted?.cursor ?? null])
+    )
+
+    log.append('mobile', said)
+    log.append('tablet', said)
+    log.append('mobile', said)
+    unsubscribe()
+    log.append('mobile', said)
+
+    expect(heard).toEqual([
+      [1, null],
+      [2, null],
+      [3, 1]
+    ])
+  })
+})

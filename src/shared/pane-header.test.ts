@@ -2,7 +2,10 @@ import { describe, expect, test } from 'vitest'
 import {
   describeErrors,
   describeFieldState,
+  endErrorFlash,
+  foldErrorFlash,
   formatDpr,
+  initialErrorFlash,
   PANE_HEADER_TIERS,
   paneFieldState,
   paneHeaderHasActions,
@@ -10,6 +13,7 @@ import {
   paneHeaderTier,
   schemeDiffersFromApp,
   schemeGlyph,
+  type ErrorFlash,
   type PaneHeaderTier
 } from './pane-header'
 import { foldPaneStatus, initialPaneStatus, type PaneStatus } from './panes'
@@ -65,9 +69,9 @@ describe('the header degradation ladder', () => {
 })
 
 describe('the header actions', () => {
-  // What two tab-height buttons, the gap between them and the gap before them occupy,
+  // What three tab-height buttons, the gaps between them and the gap before them occupy,
   // as the renderer measures it off the tokens they are drawn with.
-  const actions = 12 * 2 + 2 + 4
+  const actions = 12 * 3 + 2 * 2 + 4
 
   test('come off before the ladder starts shedding what the header says', () => {
     const widest = PANE_HEADER_TIERS[0].minWidth
@@ -155,5 +159,51 @@ describe('a field against the emulation actually applied', () => {
     expect(describeFieldState('viewport', 'failed')).toBe('viewport declared but not emulated')
     expect(describeFieldState('scheme', 'applied')).toBe('colour scheme emulated as declared')
     expect(describeFieldState('dpr', 'pending')).toBe('DPR not yet emulated')
+  })
+})
+
+describe('the error flash', () => {
+  const fold = (counts: number[], from = 0): ErrorFlash =>
+    counts.reduce(foldErrorFlash, initialErrorFlash(from))
+
+  test('starts when the count rises', () => {
+    const state = fold([1])
+    expect(state.flashing).toBe(true)
+    expect(state.flashes).toBe(1)
+  })
+
+  test('does not start for a count the window was already showing when it opened', () => {
+    expect(initialErrorFlash(4).flashing).toBe(false)
+    expect(fold([4], 4).flashing).toBe(false)
+  })
+
+  test('absorbs a burst into the flash already running rather than stacking', () => {
+    const state = fold([1, 2, 3, 40, 2000])
+    expect(state.flashing).toBe(true)
+    expect(state.flashes).toBe(1)
+    expect(state.count).toBe(2000)
+  })
+
+  test('flashes again for a rise after the last flash has ended', () => {
+    const ended = endErrorFlash(fold([1, 2]))
+    expect(ended.flashing).toBe(false)
+    expect(foldErrorFlash(ended, 2)).toBe(ended)
+    const again = foldErrorFlash(ended, 3)
+    expect(again.flashing).toBe(true)
+    expect(again.flashes).toBe(2)
+  })
+
+  test('does not flash when the count falls, which is the pane navigating', () => {
+    const ended = endErrorFlash(fold([5]))
+    const reset = foldErrorFlash(ended, 0)
+    expect(reset.flashing).toBe(false)
+    expect(reset.count).toBe(0)
+    // And the next error on the new page is a rise again.
+    expect(foldErrorFlash(reset, 1).flashing).toBe(true)
+  })
+
+  test('ending a flash that is not running changes nothing', () => {
+    const state = initialErrorFlash(0)
+    expect(endErrorFlash(state)).toBe(state)
   })
 })

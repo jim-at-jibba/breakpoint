@@ -419,6 +419,16 @@ export interface ReadParams {
   changes?: true
 }
 
+/**
+ * One append, as a listener hears it: the entry, and the entry its ring evicted to make
+ * room, if it evicted one. The window mirrors what the log retains from these alone, so an
+ * eviction is told rather than left for a reader to infer from a ring size it cannot see.
+ */
+export interface Appended {
+  readonly entry: Entry
+  readonly evicted: Entry | null
+}
+
 export interface EventLogOptions {
   /** Entries per pane before the oldest is evicted. Lowered in tests. */
   limit?: number
@@ -447,6 +457,7 @@ export class EventLog {
   private readonly rings = new Map<string | null, Ring>()
   private readonly limit: number
   private readonly now: () => number
+  private readonly listeners = new Set<(appended: Appended) => void>()
 
   constructor({ limit = ENTRIES_PER_PANE, now = () => Date.now() }: EventLogOptions = {}) {
     this.limit = limit
@@ -470,13 +481,25 @@ export class EventLog {
 
     const ring = this.ringFor(pane)
     ring.entries.push(entry)
+    let evicted: Entry | null = null
     if (ring.entries.length > this.limit) {
-      const [evicted] = ring.entries.splice(0, 1)
+      ;[evicted] = ring.entries.splice(0, 1)
       ring.evictedThrough = evicted.cursor
       ring.evictedAt = Math.max(ring.evictedAt, evicted.time)
     }
 
+    for (const listener of this.listeners) listener({ entry, evicted })
     return entry
+  }
+
+  /**
+   * Hears every append as it happens, with what it evicted. The console's push channel
+   * listens here rather than on the state feed: one patch per entry would spin the
+   * snapshot's revision at the rate a page logs. Returns the unsubscribe.
+   */
+  subscribe(listener: (appended: Appended) => void): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
   }
 
   read({ since = 0, within, pane, level, errors, changes }: ReadParams = {}): LogRead {
@@ -660,7 +683,7 @@ function locationFields(location: SourceLocation): SourceLocation {
  * one budget, so a page logging a thousand arguments is bounded like one logging a
  * megabyte in one.
  */
-function entryForRead(entry: Entry): Entry {
+export function entryForRead(entry: Entry): Entry {
   const shortened: Partial<Record<TruncatedField, unknown>> = {}
   const truncated: TruncatedField[] = []
   const fields = entry as Partial<Record<TruncatedField, unknown>>

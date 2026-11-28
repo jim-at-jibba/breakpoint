@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { PATCH_CHANNEL, ROUTE_CHANNEL, type BreakpointBridge } from '../shared/ipc'
+import type { ConsoleBatch } from '../shared/console-feed'
+import { CONSOLE_CHANNEL, PATCH_CHANNEL, ROUTE_CHANNEL, type BreakpointBridge } from '../shared/ipc'
 import type { PatchBatch } from '../shared/state'
 
 // The renderer's half of the typed IPC adapter. It holds no behaviour: an envelope in,
@@ -12,6 +13,11 @@ const breakpoint: BreakpointBridge = {
     const handler = (_event: unknown, batch: PatchBatch): void => listener(batch)
     ipcRenderer.on(PATCH_CHANNEL, handler)
     return () => ipcRenderer.removeListener(PATCH_CHANNEL, handler)
+  },
+  onConsole: (listener) => {
+    const handler = (_event: unknown, batch: ConsoleBatch): void => listener(batch)
+    ipcRenderer.on(CONSOLE_CHANNEL, handler)
+    return () => ipcRenderer.removeListener(CONSOLE_CHANNEL, handler)
   }
 }
 

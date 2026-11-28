@@ -16,6 +16,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { PATCH_CHANNEL, ROUTE_CHANNEL } from '../src/shared/ipc'
 import { PROJECT_FILE_VERSION, projectFileName, type Project } from '../src/shared/project'
 import type { LogRead } from '../src/shared/event-log'
+import { DEFAULT_PANEL } from '../src/shared/panel'
 import type { PatchBatch, StateSnapshot } from '../src/shared/state'
 import {
   closeApp,
@@ -373,7 +374,9 @@ test('state with nothing open says so on both outputs', async () => {
     },
     // The switcher is the app's too, and with nothing open it is the way in. Closed:
     // a window comes up over the canvas rather than over a question ([ADR-0016]).
-    switcher: { open: false }
+    switcher: { open: false },
+    // The panel's arrangement is the app's too, and with nothing stored it is the default.
+    panel: DEFAULT_PANEL
   })
   // The cursor is printed with nothing open: that is when the log matters most.
   expect(text.stdout).toBe(
