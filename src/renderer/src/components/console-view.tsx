@@ -132,8 +132,12 @@ export function ConsoleView({
     route: N,
     params: RouteParams<N>
   ): Promise<void> {
+    const lastExchange = repl.exchanges.at(-1)?.id ?? 0
     try {
       const response = await window.breakpoint.invoke(route, params)
+      if (response.ok && route === 'app.clearConsole') {
+        repl.clearThrough(lastExchange, response.data.floor)
+      }
       setRefused(response.ok ? null : response.error.message)
     } catch (error) {
       setRefused(error instanceof Error ? error.message : String(error))

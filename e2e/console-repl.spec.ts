@@ -115,6 +115,14 @@ test('one pane answers as a row tagged with that pane', async () => {
   await page.getByTestId('console-clear').click()
   await expect(page.getByTestId('console-repl-input')).toHaveCount(0)
   await expect(results(page)).toHaveCount(0)
+
+  // Evaluating a value does not advance the log, so another Clear has the same floor.
+  await evaluate(page, '1 + 1')
+  await expect(results(page)).toHaveCount(1)
+  await expect(results(page).getByTestId('console-message')).toHaveText('2')
+  await page.getByTestId('console-clear').click()
+  await expect(page.getByTestId('console-repl-input')).toHaveCount(0)
+  await expect(results(page)).toHaveCount(0)
 })
 
 test('every pane answers, one row each, and a throw is an answer rather than a crash', async () => {

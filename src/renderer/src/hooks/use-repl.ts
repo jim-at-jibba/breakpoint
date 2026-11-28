@@ -43,11 +43,20 @@ export interface Repl extends ReplState {
   setHistory(history: ReplHistory): void
   /** The display floor as the snapshot now has it; a rise clears every exchange. */
   followFloor(floor: number): void
+  clearThrough(id: number, floor: number): void
 }
 
 export function useRepl(): Repl {
   const current = useSyncExternalStore(subscribe, () => state)
-  return { ...current, evaluate, setHistory, followFloor: follow }
+  return { ...current, evaluate, setHistory, followFloor: follow, clearThrough }
+}
+
+function clearThrough(id: number, floor: number): void {
+  floorSeen = Math.max(floorSeen ?? 0, floor)
+  update((current) => ({
+    ...current,
+    exchanges: current.exchanges.filter((exchange) => exchange.id > id)
+  }))
 }
 
 function follow(floor: number): void {
