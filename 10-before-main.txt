@@ -1,0 +1,3 @@
+main build, Phase 2a fixture loaded in 3 panes
+console rows drawn in the window: 0
+console entries in the log (breakpoint logs --json): 10

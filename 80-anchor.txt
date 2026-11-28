@@ -1,0 +1,6 @@
+--bp-row-sm = 22px
+after 300 entries, pinned to bottom: {"scrollTop":6400,"scrollHeight":6600,"firstCursorByTestFormula":300,"topRowText":"first 290","renderedRows":30}
+scrollTop set to 40 rows, read IMMEDIATELY (what the e2e test does): {"scrollTop":880,"scrollHeight":6600,"firstCursorByTestFormula":50,"topRowText":"first 40","renderedRows":50}
+same, read after two animation frames:                         {"scrollTop":880,"scrollHeight":6600,"firstCursorByTestFormula":50,"topRowText":"first 40","renderedRows":50}
+after 300 more entries arrived below:                           {"scrollTop":880,"scrollHeight":13200,"firstCursorByTestFormula":50,"topRowText":"first 40","renderedRows":50}
+held position: scrollTop 880 -> 880; top row "first 40" -> "first 40"

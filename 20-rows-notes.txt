@@ -1,0 +1,3 @@
+panes: Mobile=f867af70-923d-49a2-be1d-0b6a46f1b099 (390px), Tablet=e5b11ffe-fd59-42ad-bdec-6257ccbf5091 (820px), Desktop=1a118630-0bee-408c-b4ba-3f82f881b6f3 (1440px)
+log console entries: 11; rows drawn: 7
+log entries before filtering: 26, after filtering in the window: 26 (filters touch only the window)

@@ -1,0 +1,44 @@
+{
+  "text \"nav\"": [
+    {
+      "level": "error",
+      "panes": "f867af70-923d-49a2-be1d-0b6a46f1b099",
+      "message": "Uncaught RangeError: the nav does not fit in 390px",
+      "location": "src/nav.js:3:11"
+    }
+  ],
+  "levels: error only": [
+    {
+      "level": "error",
+      "panes": "f867af70-923d-49a2-be1d-0b6a46f1b099",
+      "message": "Uncaught RangeError: the nav does not fit in 390px",
+      "location": "src/nav.js:3:11"
+    },
+    {
+      "level": "error",
+      "panes": "f867af70-923d-49a2-be1d-0b6a46f1b099 e5b11ffe-fd59-42ad-bdec-6257ccbf5091 1a118630-0bee-408c-b4ba-3f82f881b6f3",
+      "message": "Access to fetch at 'http://localhost:39881/not-shared' from origin 'http://127.0.0.1:42687' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "location": "bundled"
+    },
+    {
+      "level": "error",
+      "panes": "f867af70-923d-49a2-be1d-0b6a46f1b099 e5b11ffe-fd59-42ad-bdec-6257ccbf5091 1a118630-0bee-408c-b4ba-3f82f881b6f3",
+      "message": "Failed to load resource: net::ERR_FAILED",
+      "location": "not-shared"
+    }
+  ],
+  "levels: error only + pane: Tablet only": [
+    {
+      "level": "error",
+      "panes": "e5b11ffe-fd59-42ad-bdec-6257ccbf5091",
+      "message": "Access to fetch at 'http://localhost:39881/not-shared' from origin 'http://127.0.0.1:42687' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.",
+      "location": "bundled"
+    },
+    {
+      "level": "error",
+      "panes": "e5b11ffe-fd59-42ad-bdec-6257ccbf5091",
+      "message": "Failed to load resource: net::ERR_FAILED",
+      "location": "not-shared"
+    }
+  ]
+}

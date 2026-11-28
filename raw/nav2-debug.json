@@ -1,0 +1,31 @@
+{
+  "nav1": {
+    "id": "aef0c8d3-7dbf-45b4-9f49-e03bb4de6249",
+    "ok": true,
+    "data": {
+      "url": "http://127.0.0.1:42687/bundled?entry=responsive",
+      "panes": [
+        "f867af70-923d-49a2-be1d-0b6a46f1b099",
+        "e5b11ffe-fd59-42ad-bdec-6257ccbf5091",
+        "1a118630-0bee-408c-b4ba-3f82f881b6f3"
+      ]
+    }
+  },
+  "nav2": {
+    "id": "78b7c133-e157-415e-aa30-13565ca7e398",
+    "ok": true,
+    "data": {
+      "url": "http://127.0.0.1:42687/bundled?entry=responsive",
+      "panes": [
+        "f867af70-923d-49a2-be1d-0b6a46f1b099",
+        "e5b11ffe-fd59-42ad-bdec-6257ccbf5091",
+        "1a118630-0bee-408c-b4ba-3f82f881b6f3"
+      ]
+    }
+  },
+  "floorBefore": 26,
+  "stateAfter": {
+    "floor": 74,
+    "preserveLog": false
+  }
+}

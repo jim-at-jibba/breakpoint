@@ -1,0 +1,19 @@
+clicked the DevTools button on Desktop (9793c007-4573-4936-b634-83cf3ca8a563)
+isDevToolsOpened per pane [Mobile, Tablet, Desktop]: [false, false, true]
+Desktop before:           {"attachment":"attached","degraded":[],"errors":0}
+Desktop with DevTools open: {"attachment":"attached","degraded":[],"errors":1}
+Desktop after it closed:  {"attachment":"attached","degraded":[],"errors":2}
+log entries from Desktop mentioning DevTools: [
+  {
+    "cursor": 17,
+    "level": "error",
+    "text": "logged while DevTools is open"
+  },
+  {
+    "cursor": 18,
+    "level": "error",
+    "text": "logged after DevTools closed"
+  }
+]
+socket panes.openDevTools {pane: Mobile} -> {"id":"test","ok":true,"data":{"opened":true}}
+socket panes.openDevTools {pane: "nope"} -> {"id":"test","ok":false,"error":{"code":"PANE_NOT_FOUND","message":"no pane nope in the open project"}}

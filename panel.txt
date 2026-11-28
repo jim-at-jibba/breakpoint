@@ -1,0 +1,23 @@
+default panel state: {"side":"bottom","visible":true,"sizes":{"bottom":278,"right":460}}
+after clicking dock-side toggle: {"side":"right","visible":true,"sizes":{"bottom":278,"right":460}}
+after clicking hide: {"side":"right","visible":false,"sizes":{"bottom":278,"right":460}}
+socket app.setPanel {visible:true,size:520} -> {"id":"test","ok":true,"data":{"side":"right","visible":true,"sizes":{"bottom":278,"right":520}}}
+settings.json on disk:
+{
+  "version": 1,
+  "theme": "system",
+  "panel": {
+    "side": "right",
+    "visible": true,
+    "sizes": {
+      "bottom": 278,
+      "right": 520
+    }
+  },
+  "console": {
+    "preserveLog": true
+  }
+}
+
+after opening a different repo (blog): {"side":"right","visible":true,"sizes":{"bottom":278,"right":520}}
+after quitting and relaunching the app: {"side":"right","visible":true,"sizes":{"bottom":278,"right":520}}

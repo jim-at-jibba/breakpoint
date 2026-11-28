@@ -1,0 +1,2 @@
+main build: panel elements in the DOM = 0
+socket app.setPanel on main -> {"id":"test","ok":false,"error":{"code":"UNKNOWN_ROUTE","message":"no route named app.setPanel"}}

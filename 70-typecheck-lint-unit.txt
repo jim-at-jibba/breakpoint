@@ -1,0 +1,25 @@
+$ git rev-parse --short HEAD
+d9e09cc
+$ npm run typecheck
+> tsc --noEmit -p tsconfig.node.json --composite false
+
+
+> breakpoint@0.1.1 typecheck:web
+> tsc --noEmit -p tsconfig.web.json --composite false
+
+[exit 0]
+$ npm run lint
+  480:23  warning  Replace `·panes:·new·Set([first.id]),·levels:·new·Set<ConsoleLevel>(['log']),·text:·'r'` with `⏎······panes:·new·Set([first.id]),⏎······levels:·new·Set<ConsoleLevel>(['log']),⏎······text:·'r'⏎···`  prettier/prettier
+
+✖ 19 problems (0 errors, 19 warnings)
+  0 errors and 19 warnings potentially fixable with the `--fix` option.
+
+[exit 0]
+$ npx vitest run
+
+ Test Files  42 passed (42)
+      Tests  1231 passed (1231)
+   Start at  07:19:29
+   Duration  3.28s (transform 1.56s, setup 0ms, collect 3.48s, tests 7.50s, environment 7ms, prepare 2.70s)
+
+[exit 0]

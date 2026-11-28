@@ -1,0 +1,15 @@
+rows drawn after Clear: 0
+state.console after Clear: {"floor":26,"preserveLog":true}
+pane error counts  before Clear: {"Mobile":3,"Tablet":2,"Desktop":2}
+pane error counts  after  Clear: {"Mobile":3,"Tablet":2,"Desktop":2}
+breakpoint logs --since 0 --json | entries.length  before Clear: 26
+breakpoint logs --since 0 --json | entries.length  after  Clear: 26
+
+reloading the window (which also reloads every pane's guest page):
+  state.console after reload: {"floor":26,"preserveLog":true}
+  console entries at/below the floor (hidden): 11; above it (the reloaded pages logging again): 10
+  rows drawn: 6 -> ["laid out at 390px","Uncaught RangeError: the nav does not fit in 390px","Access to fetch at 'http://localhost:39881/not-shared' from ","Failed to load resource: net::ERR_FAILED","laid out at 1440px","laid out at 820px"]
+  entries above the floor: [[45,"laid out at 390px"],[47,"Uncaught RangeError: the nav does not fit in 390px"],[48,"Access to fetch at 'http://localhost:39881/not-shared' from "],[49,"Failed to load resource: net::ERR_FAILED"],[50,"laid out at 1440px"],[52,"laid out at 820px"],[54,"Access to fetch at 'http://localhost:39881/not-shared' from "],[55,"Failed to load resource: net::ERR_FAILED"],[56,"Access to fetch at 'http://localhost:39881/not-shared' from "],[57,"Failed to load resource: net::ERR_FAILED"]]
+
+preserve log ON, project.navigate -> ok=true; RangeError rows (old page + new page): 2; "said before navigating" rows still drawn: 1
+preserve log OFF, project.navigate: floor 26 -> 74; "preserve off" rows still drawn: 0; still in the log: true

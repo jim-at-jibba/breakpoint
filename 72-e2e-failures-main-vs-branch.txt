@@ -1,0 +1,25 @@
+# main 30aecee, same 8 tests
+  ✘  1 e2e/cli.spec.ts:150:5 › a second launch focuses the existing window and hands over its argv (20.4s)
+  ✘  2 e2e/emulation.spec.ts:287:5 › a mobile pane is a phone to the server, with client hints that agree, and a desktop pane is not (632ms)
+  ✘  3 e2e/panes.spec.ts:408:5 › a guest that asks for a preload, node integration, no sandbox or popups gets none of them (846ms)
+  3 failed
+
+# branch d9e09cc, same 8 tests, re-run in isolation
+  ✘  1 e2e/cli.spec.ts:150:5 › a second launch focuses the existing window and hands over its argv (20.3s)
+  ✘  2 e2e/emulation.spec.ts:287:5 › a mobile pane is a phone to the server, with client hints that agree, and a desktop pane is not (633ms)
+  ✘  3 e2e/panes.spec.ts:408:5 › a guest that asks for a preload, node integration, no sandbox or popups gets none of them (811ms)
+  ✘  4 e2e/projects.spec.ts:354:5 › state with nothing open says so on both outputs (492ms)
+  ✓  5 e2e/projects.spec.ts:570:5 › the shortcut opens the switcher with a pane focused, not only with the chrome focused (1.1s)
+  ✓  6 e2e/projects.spec.ts:799:5 › the list is the project directory, not an index kept beside it (931ms)
+  ✘  7 e2e/theme.spec.ts:182:5 › an override takes the chrome away from the desktop, and the window with it (480ms)
+  ✘  8 e2e/theme.spec.ts:280:5 › going back to system hands the chrome to the desktop again (454ms)
+  6 failed
+  2 passed (27.0s)
+
+# main 30aecee, the other 5 by title
+  ✓  1 e2e/projects.spec.ts:353:5 › state with nothing open says so on both outputs (425ms)
+  ✓  2 e2e/projects.spec.ts:567:5 › the shortcut opens the switcher with a pane focused, not only with the chrome focused (991ms)
+  ✓  3 e2e/projects.spec.ts:796:5 › the list is the project directory, not an index kept beside it (924ms)
+  ✓  4 e2e/theme.spec.ts:181:5 › an override takes the chrome away from the desktop, and the window with it (425ms)
+  ✓  5 e2e/theme.spec.ts:279:5 › going back to system hands the chrome to the desktop again (463ms)
+  5 passed (3.6s)

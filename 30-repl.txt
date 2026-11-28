@@ -1,0 +1,121 @@
+panes: Mobile=bd0d18d8-a494-4da4-84f4-b3cd8de2d60e, Tablet=41011ea7-0de8-47f3-9a87-c26be1c81bb6, Desktop=b0340672-8a40-4d6d-95d5-de01d1448b6c
+
+answers drawn in the window:
+[
+  {
+    "pane": "bd0d18d8-a494-4da4-84f4-b3cd8de2d60e",
+    "outcome": "value",
+    "text": "390"
+  },
+  {
+    "pane": "41011ea7-0de8-47f3-9a87-c26be1c81bb6",
+    "outcome": "value",
+    "text": "820"
+  },
+  {
+    "pane": "b0340672-8a40-4d6d-95d5-de01d1448b6c",
+    "outcome": "value",
+    "text": "1440"
+  },
+  {
+    "pane": "bd0d18d8-a494-4da4-84f4-b3cd8de2d60e",
+    "outcome": "value",
+    "text": "'390×844 @3x'"
+  },
+  {
+    "pane": "41011ea7-0de8-47f3-9a87-c26be1c81bb6",
+    "outcome": "value",
+    "text": "'820×1180 @2x'"
+  },
+  {
+    "pane": "b0340672-8a40-4d6d-95d5-de01d1448b6c",
+    "outcome": "value",
+    "text": "'1440×900 @1x'"
+  },
+  {
+    "pane": "bd0d18d8-a494-4da4-84f4-b3cd8de2d60e",
+    "outcome": "thrown",
+    "text": "Uncaught TypeError: Cannot read properties of null (reading 'textContent')"
+  },
+  {
+    "pane": "41011ea7-0de8-47f3-9a87-c26be1c81bb6",
+    "outcome": "thrown",
+    "text": "Uncaught TypeError: Cannot read properties of null (reading 'textContent')"
+  },
+  {
+    "pane": "b0340672-8a40-4d6d-95d5-de01d1448b6c",
+    "outcome": "thrown",
+    "text": "Uncaught TypeError: Cannot read properties of null (reading 'textContent')"
+  },
+  {
+    "pane": "bd0d18d8-a494-4da4-84f4-b3cd8de2d60e",
+    "outcome": "value",
+    "text": "true"
+  }
+]
+
+history: ArrowUp -> "navigator.userAgent.includes(\"Mobile\")"; ArrowUp -> "document.querySelector(\".nope\").textContent"; ArrowDown x2 -> ""
+
+socket panes.evaluate {expression:"await Promise.resolve(innerWidth * 2)"} ->
+{
+  "id": "test",
+  "ok": true,
+  "data": {
+    "results": [
+      {
+        "pane": "bd0d18d8-a494-4da4-84f4-b3cd8de2d60e",
+        "outcome": "value",
+        "text": "780"
+      },
+      {
+        "pane": "41011ea7-0de8-47f3-9a87-c26be1c81bb6",
+        "outcome": "value",
+        "text": "1640"
+      },
+      {
+        "pane": "b0340672-8a40-4d6d-95d5-de01d1448b6c",
+        "outcome": "value",
+        "text": "2880"
+      }
+    ]
+  }
+}
+
+log entries mentioning "innerWidth" (REPL writes nothing to the log): 0
+
+breakpoint eval is deliberately NOT shipped (ADR-0025):
+$ breakpoint eval innerWidth
+breakpoint: INVALID_USAGE: unknown command eval
+
+breakpoint — a multi-viewport dev browser, driven from the terminal
+
+Usage: breakpoint <path> [flags]
+       breakpoint <command> [flags]
+
+Commands:
+  <path> [--wait]                                                                Open the project for that repo, creating it the first time
+  open <url> [--wait]                                                            Point every pane at a URL or a local port, opening a project if none is
+  logs [--since <cursor|duration>] [--pane <pane>] [--level <level>] [--errors]  Print what the event log holds after a cursor or within a window of time
+  changes [--since <cursor|duration>] [--pane <pane>]                            Print what went wrong and where the page went, after a cursor or within a window
+  state [--wait]                                                                 Print the open project: name, repo, the URL its panes are on, and the panes
+  quit                                                                           Shut the app down cleanly, releasing the single-instance lock
+
+Flags:
+  --json                                                                         Print the route payload as JSON on stdout and nothing else
+  --no-launch                                                                    Exit 3 rather than starting the app if it is not running
+  --wait                                                                         Block until every pane has loaded and is drawn at its declared size, for up to 30s
+  --background                                                                   Start or hand off without bringing the window forward
+  --verbose                                                                      Print diagnostics on stderr, where they cannot pollute stdout
+  --help, -h                                                                     Print this help and exit 0
+
+Examples:
+  breakpoint .
+  breakpoint . --wait --json
+  breakpoint open 3000
+  breakpoint open https://staging.example.com/cart --json
+  breakpoint state --json | jq .project.panes
+  breakpoint logs --since 12 --json
+  breakpoint logs --errors --since 5m --json
+  breakpoint changes --since 30s
+  breakpoint quit
+[exit 2]
